@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#F0BE1E">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head><body>
+<title>Roundnet Open</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one narrow phone-first column; sticky header + tab bar; courts as cards shaped around the yellow rim */
+:root{
+  --bg:#F2F4EE; --surface:#FFFFFF; --sunk:#E8ECE4; --ink:#17211B; --muted:#5D6A62; --line:#D9DFD4;
+  --rim:#F0BE1E; --rim-ink:#2E2300; --net:#1C2721; --win:#1E8048; --lose:#B2442D;
+  --f-display:"Bricolage Grotesque", "Figtree", system-ui, sans-serif;
+  --f-body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1411; --surface:#18201B; --sunk:#121915; --ink:#E6ECE4; --muted:#95A299; --line:#29342D;
+  --rim:#F2C230; --rim-ink:#1D1600; --net:#E6ECE4; --win:#55C485; --lose:#E5806A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1411; --surface:#18201B; --sunk:#121915; --ink:#E6ECE4; --muted:#95A299; --line:#29342D;
+  --rim:#F2C230; --rim-ink:#1D1600; --net:#E6ECE4; --win:#55C485; --lose:#E5806A; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.app{max-width:640px;margin:0 auto;padding-inline:16px;padding-block:0 48px}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:14px 0}
+.brand{display:flex;align-items:center;gap:10px}
+.ring{width:26px;height:26px;border-radius:50%;border:5px solid var(--rim);background:repeating-linear-gradient(45deg,var(--net) 0 1.5px,transparent 1.5px 5px),repeating-linear-gradient(-45deg,var(--net) 0 1.5px,transparent 1.5px 5px);flex:none;opacity:.95}
+h1{font-family:var(--f-display);font-weight:800;font-size:1.55rem;letter-spacing:-.01em;margin:0;line-height:1}
+.status{margin-left:auto;font-size:.75rem;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.live{background:var(--win)}
+nav.tabs{display:flex;gap:4px;margin-top:12px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+nav.tabs button{flex:1 0 auto;background:none;border:0;border-bottom:3px solid transparent;padding:10px 8px 9px;font:600 .9rem var(--f-body);color:var(--muted);cursor:pointer}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--rim)}
+main{display:flex;flex-direction:column;gap:16px;padding-top:16px}
+.banner{background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:.85rem;color:var(--muted)}
+.banner b{color:var(--ink)}
+h2{font-family:var(--f-display);font-weight:600;font-size:1.15rem;margin:0;text-wrap:balance}
+.sec{display:flex;flex-direction:column;gap:10px}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.hint{color:var(--muted);font-size:.85rem;margin:0;max-width:65ch}
+.label{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+button.btn{font:600 .9rem var(--f-body);border-radius:999px;padding:10px 16px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;min-height:42px}
+button.btn.primary{background:var(--rim);color:var(--rim-ink);border-color:var(--rim)}
+button.btn.ghost{background:none;border-color:transparent;color:var(--muted);padding-inline:10px}
+button.btn.danger{color:var(--lose)}
+button.btn.armed{background:var(--lose);color:var(--surface);border-color:var(--lose)}
+button.btn:disabled{opacity:.45;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--rim);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* court cards */
+.court{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.court.open{border-style:dashed;background:transparent}
+.court-head{display:flex;align-items:center;gap:8px}
+.court-head .ring{width:18px;height:18px;border-width:4px}
+.court-head h3{margin:0;font:700 .95rem var(--f-body)}
+.court-head .tag{margin-left:auto}
+.tag{font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.tag.rim{background:var(--rim);color:var(--rim-ink)}
+.matchup{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center}
+.team{display:flex;flex-direction:column;gap:2px;min-width:0}
+.team.b{text-align:right}
+.team .n{font-weight:600;overflow-wrap:anywhere}
+.team .meta{font-size:.75rem;color:var(--muted)}
+.vs{font:700 .75rem var(--f-mono);color:var(--muted)}
+.scoreline{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center}
+.stepper{display:flex;align-items:center;gap:4px;justify-content:flex-start}
+.stepper.b{justify-content:flex-end}
+.stepper button{width:34px;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--sunk);color:var(--ink);font:700 1.1rem var(--f-mono);cursor:pointer}
+.stepper input{width:52px;height:48px;text-align:center;font:700 1.5rem var(--f-mono);border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums}
+.court .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between}
+.waiting{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:.8rem;padding:4px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
+
+/* tables */
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:9px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font-size:.68rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700}
+th:nth-child(2),td:nth-child(2){text-align:left;white-space:normal;min-width:110px}
+td.rk{font:700 .85rem var(--f-mono);color:var(--muted);width:2.5em}
+td.mono{font-family:var(--f-mono);font-size:.85rem}
+tr.cut td{border-bottom:2px solid var(--rim)}
+.pos{color:var(--win)} .neg{color:var(--lose)}
+
+/* history */
+.hist{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.hrow{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.hrow:last-child{border-bottom:0}
+.hrow .t{min-width:0;font-size:.88rem;overflow-wrap:anywhere}
+.hrow .t.b{text-align:right}
+.hrow .t.w{font-weight:700}
+.hrow .sc{font:700 1rem var(--f-mono);text-align:center}
+.hrow .sub{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.75rem;color:var(--muted)}
+.hrow .sub .row{gap:2px}
+.hrow .sub button.btn{min-height:32px;padding:4px 10px;font-size:.8rem}
+
+/* setup */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.field{display:flex;flex-direction:column;gap:4px;flex:1 1 140px;min-width:0}
+.field label{font-size:.8rem;font-weight:600;color:var(--muted)}
+input[type=text],select,input.num{font:500 1rem var(--f-body);padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-height:44px;width:100%}
+.plist{display:flex;flex-direction:column}
+.prow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.prow:last-child{border-bottom:0}
+.prow .nm{flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere}
+.prow.out .nm{color:var(--muted);text-decoration:line-through}
+.prow button.btn{min-height:34px;padding:4px 12px;font-size:.8rem}
+
+/* bracket */
+.bracket{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:center}
+@media (max-width:520px){.bracket{grid-template-columns:1fr}}
+.bm{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.bm .hd{display:flex;justify-content:space-between;padding:6px 12px;background:var(--sunk);font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.bt{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 12px;border-top:1px solid var(--line)}
+.bt .sd{font:700 .75rem var(--f-mono);color:var(--muted)}
+.bt .nm{min-width:0;overflow-wrap:anywhere;font-weight:500}
+.bt.w .nm{font-weight:800}
+.bt .sc{font:700 1rem var(--f-mono)}
+.bt.tbd .nm{color:var(--muted);font-style:italic}
+.champ{background:var(--rim);color:var(--rim-ink);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:4px}
+.champ .big{font-family:var(--f-display);font-weight:800;font-size:1.6rem;line-height:1.1;text-wrap:balance}
+.empty{border:1px dashed var(--line);border-radius:14px;padding:20px;color:var(--muted);text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:.88rem;font-weight:600;z-index:9;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion:no-preference){.court{transition:border-color .2s}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <span class="ring" aria-hidden="true"></span>
+      <h1>Roundnet Open</h1>
+      <span class="status" id="status"><span class="dot"></span>Connecting…</span>
+    </div>
+    <nav class="tabs" role="tablist" id="tabs">
+      <button role="tab" data-tab="courts" aria-selected="true">Courts</button>
+      <button role="tab" data-tab="standings" aria-selected="false">Standings</button>
+      <button role="tab" data-tab="bracket" aria-selected="false">Bracket</button>
+      <button role="tab" data-tab="history" aria-selected="false">Games</button>
+      <button role="tab" data-tab="setup" aria-selected="false">Setup</button>
+    </nav>
+  </header>
+  <main id="view"></main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const S = {
+  players: [], matches: [],
+  settings: { courts: 2, target: 17, bracketTarget: 21 },
+  bracket: null,
+  mode: "connecting", canWrite: true,
+  tab: "courts", drafts: {}, editing: null, armed: null,
+};
+let store = null;
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const newId = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+const pname = id => (S.players.find(p => p.id === id) || {}).name || "(removed)";
+const teamName = ids => ids.map(pname).join(" & ");
+let toastT;
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+try { const t = localStorage.getItem("rn-tab"); if (t) S.tab = t; } catch(e){}
+
+/* ---------- storage: shared db, or this-device fallback ---------- */
+function localStore(){
+  const KEY = "roundnet-open-local";
+  let data; try { data = JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ data = {}; }
+  for (const c of ["players","matches","meta"]) data[c] = data[c] || {};
+  const subs = { players: [], matches: [], meta: [] };
+  const list = c => Object.entries(data[c]).map(([id, v]) => ({ id, ...v }));
+  const commit = c => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch(e){} subs[c].forEach(f => f(list(c))); };
+  return {
+    sub(c, f){ subs[c].push(f); f(list(c)); },
+    async set(c, id, v){ data[c][id] = v; commit(c); },
+    async update(c, id, v){ data[c][id] = { ...data[c][id], ...v }; commit(c); },
+    async del(c, id){ delete data[c][id]; commit(c); },
+  };
+}
+function dbStore(db){
+  return {
+    sub(c, f){ db.collection(c).onSnapshot(s => f(s.docs.map(d => ({ id: d.id, ...d.data() }))), e => { if (e.code === "revoked") { S.canWrite = false; render(); } }); },
+    set: (c, id, v) => db.collection(c).doc(id).set(v),
+    update: (c, id, v) => db.collection(c).doc(id).update(v),
+    del: (c, id) => db.collection(c).doc(id).delete(),
+  };
+}
+async function write(fn){
+  if (!S.canWrite) { toast("You have view-only access. Ask the organiser to log this."); return false; }
+  try { await fn(); return true; }
+  catch(e){
+    if (e && e.code === "invalid_argument") { S.canWrite = false; render(); toast("This link is view-only for you."); }
+    else if (e && e.code === "unavailable") { toast("Connection hiccup. Tap again."); }
+    else toast("Couldn't save: " + ((e && e.message) || "unknown error"));
+    return false;
+  }
+}
+function attach(st){
+  store = st;
+  store.sub("players", rows => { S.players = rows.sort((a,b) => (a.created||0) - (b.created||0)); render(); });
+  store.sub("matches", rows => { S.matches = rows; render(); });
+  store.sub("meta", rows => {
+    const s = rows.find(r => r.id === "settings"); if (s) S.settings = { ...S.settings, ...s };
+    const b = rows.find(r => r.id === "bracket"); S.bracket = b && b.teams ? b : null;
+    render();
+  });
+}
+async function boot(){
+  if (!window.claude || !window.claude.use) { S.mode = "local"; attach(localStore()); return; }
+  const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+  if (!db) { S.mode = "local"; attach(localStore()); return; }
+  S.mode = "shared";
+  if (user && user.can) { try { const c = await user.can("data.write"); if (c === false) S.canWrite = false; } catch(e){} }
+  attach(dbStore(db));
+}
+
+/* ---------- stats & rating ---------- */
+function computeStats(){
+  const st = {};
+  const ensure = id => st[id] || (st[id] = { id, games:0, w:0, l:0, pf:0, pa:0, elo:1000, last:0, partners:{}, opps:{}, onCourt:false });
+  S.players.forEach(p => ensure(p.id));
+  const pool = S.matches.filter(m => m.phase === "pool");
+  pool.filter(m => m.status === "done").sort((a,b) => (a.finished||0) - (b.finished||0)).forEach(m => {
+    const A = m.a.map(ensure), B = m.b.map(ensure);
+    const ea = (A[0].elo + A[1].elo) / 2, eb = (B[0].elo + B[1].elo) / 2;
+    const exp = 1 / (1 + Math.pow(10, (eb - ea) / 400));
+    const aWon = m.sa > m.sb;
+    const k = 24 * (1 + Math.min(Math.abs(m.sa - m.sb), 10) / 20);
+    const d = k * ((aWon ? 1 : 0) - exp);
+    A.forEach(p => { p.elo += d; p.games++; p.pf += m.sa; p.pa += m.sb; aWon ? p.w++ : p.l++; p.last = Math.max(p.last, m.finished||0); });
+    B.forEach(p => { p.elo -= d; p.games++; p.pf += m.sb; p.pa += m.sa; aWon ? p.l++ : p.w++; p.last = Math.max(p.last, m.finished||0); });
+  });
+  pool.forEach(m => {
+    const pair = (x, y, key) => { ensure(x)[key][y] = (st[x][key][y]||0) + 1; ensure(y)[key][x] = (st[y][key][x]||0) + 1; };
+    pair(m.a[0], m.a[1], "partners"); pair(m.b[0], m.b[1], "partners");
+    m.a.forEach(x => m.b.forEach(y => pair(x, y, "opps")));
+  });
+  S.matches.filter(m => m.status === "live").forEach(m => [...m.a, ...m.b].forEach(id => ensure(id).onCourt = true));
+  return st;
+}
+function ranked(st){
+  return S.players.map(p => ({ ...st[p.id], name: p.name, active: p.active !== false }))
+    .sort((x, y) => {
+      if (!x.games !== !y.games) return x.games ? -1 : 1;
+      const wx = x.games ? x.w / x.games : 0, wy = y.games ? y.w / y.games : 0;
+      if (wy !== wx) return wy - wx;
+      const dx = x.games ? (x.pf - x.pa) / x.games : 0, dy = y.games ? (y.pf - y.pa) / y.games : 0;
+      if (dy !== dx) return dy - dx;
+      return y.elo - x.elo;
+    });
+}
+
+/* ---------- matchmaking ---------- */
+// Fairness first (fewest games, longest rest), then fresh partners/opponents, then balanced ratings.
+function makeGame(avail, st){
+  const rnd = {}; avail.forEach(id => rnd[id] = Math.random());
+  const order = [...avail].sort((x, y) => st[x].games - st[y].games || st[x].last - st[y].last || rnd[x] - rnd[y]);
+  const fourth = st[order[3]].games;
+  const must = order.filter(id => st[id].games < fourth);
+  const flex = order.filter(id => st[id].games === fourth).slice(0, 7);
+  const need = 4 - must.length;
+  const rankOf = {}; order.forEach((id, i) => rankOf[id] = i);
+  const combos = [];
+  (function pick(start, acc){
+    if (acc.length === need) { combos.push([...must, ...acc]); return; }
+    for (let i = start; i < flex.length; i++) pick(i + 1, [...acc, flex[i]]);
+  })(0, []);
+  let best = null;
+  for (const four of combos) {
+    const [p, q, r, s] = four;
+    for (const [a, b] of [[[p,q],[r,s]], [[p,r],[q,s]], [[p,s],[q,r]]]) {
+      const part = (st[a[0]].partners[a[1]]||0) + (st[b[0]].partners[b[1]]||0);
+      let opp = 0; a.forEach(x => b.forEach(y => opp += st[x].opps[y]||0));
+      const gap = Math.abs((st[a[0]].elo + st[a[1]].elo) - (st[b[0]].elo + st[b[1]].elo));
+      const wait = four.reduce((t, id) => t + rankOf[id], 0);
+      const cost = part * 8 + opp * 2 + gap / 40 + wait * 0.9 + Math.random() * 0.4;
+      if (!best || cost < best.cost) best = { a, b, cost };
+    }
+  }
+  return best;
+}
+function liveOnCourt(c){ return S.matches.find(m => m.status === "live" && m.court === c); }
+function availablePlayers(st){ return S.players.filter(p => p.active !== false && !st[p.id].onCourt).map(p => p.id); }
+async function fillCourt(c, busy){
+  const st = computeStats(); const avail = availablePlayers(st).filter(id => !(busy && busy.has(id)));
+  if (avail.length < 4) { toast("Need 4 free players for a game."); return false; }
+  const g = makeGame(avail, st);
+  const id = newId();
+  const ok = await write(() => store.set("matches", id, { phase: "pool", court: c, a: g.a, b: g.b, sa: null, sb: null, status: "live", created: Date.now() }));
+  if (ok && busy) [...g.a, ...g.b].forEach(x => busy.add(x));
+  return ok;
+}
+async function fillAll(){
+  const busy = new Set();
+  for (let c = 1; c <= S.settings.courts; c++) {
+    if (!liveOnCourt(c) && !(await fillCourt(c, busy))) break;
+  }
+}
+async function reshuffle(m){
+  if (!(await write(() => store.del("matches", m.id)))) return;
+  S.matches = S.matches.filter(x => x.id !== m.id);
+  await fillCourt(m.court);
+}
+
+/* ---------- results ---------- */
+function readScores(id){
+  const d = S.drafts[id] || {};
+  return [parseInt(d.a, 10), parseInt(d.b, 10)];
+}
+async function saveResult(m){
+  const [sa, sb] = readScores(m.id);
+  if (!Number.isFinite(sa) || !Number.isFinite(sb) || sa < 0 || sb < 0) { toast("Enter both scores."); return; }
+  if (sa === sb) { toast("Roundnet has no ties. Check the scores."); return; }
+  const ok = await write(() => store.update("matches", m.id, { sa, sb, status: "done", finished: Date.now() }));
+  if (!ok) return;
+  delete S.drafts[m.id];
+  toast(`Saved: ${teamName(sa > sb ? m.a : m.b)} win ${Math.max(sa,sb)}–${Math.min(sa,sb)}`);
+  if (m.phase === "bracket") await advanceBracket({ ...m, sa, sb, status: "done" });
+}
+async function saveEdit(m){
+  const [sa, sb] = readScores("e-" + m.id);
+  if (!Number.isFinite(sa) || !Number.isFinite(sb) || sa === sb || sa < 0 || sb < 0) { toast("Enter two different scores."); return; }
+  if (await write(() => store.update("matches", m.id, { sa, sb }))) { S.editing = null; delete S.drafts["e-" + m.id]; render(); toast("Score updated"); }
+}
+
+/* ---------- bracket ---------- */
+function bMatch(slot){ return S.matches.find(m => m.phase === "bracket" && m.slot === slot); }
+const winnerOf = m => m && m.status === "done" ? (m.sa > m.sb ? m.a : m.b) : null;
+const loserOf = m => m && m.status === "done" ? (m.sa > m.sb ? m.b : m.a) : null;
+async function buildBracket(size){
+  const st = computeStats();
+  const pool = ranked(st).filter(r => r.active);
+  const n = size * 2;
+  if (pool.length < n) { toast(`Need ${n} active players.`); return; }
+  // Snake pairing: 1 with last, 2 with second-last…
+  const teams = []; for (let i = 0; i < size; i++) teams.push({ seed: i + 1, ids: [pool[i].id, pool[n - 1 - i].id] });
+  const live = S.matches.filter(m => m.status === "live" && m.phase === "pool");
+  for (const m of live) await write(() => store.del("matches", m.id));
+  const ok = await write(() => store.set("meta", "bracket", { size, teams, created: Date.now() }));
+  if (!ok) return;
+  const mk = (slot, court, t1, t2) => write(() => store.set("matches", newId(), { phase: "bracket", slot, court, a: t1.ids, b: t2.ids, sa: null, sb: null, status: "live", created: Date.now() }));
+  if (size === 4) { await mk("SF1", 1, teams[0], teams[3]); await mk("SF2", Math.min(2, S.settings.courts), teams[1], teams[2]); }
+  else await mk("F", 1, teams[0], teams[1]);
+  S.tab = "bracket"; render();
+}
+async function advanceBracket(){
+  const b = S.bracket; if (!b || b.size !== 4) return;
+  const sf1 = bMatch("SF1"), sf2 = bMatch("SF2");
+  const fresh = id => S.matches.find(x => x.id === id);
+  const s1 = sf1 && (fresh(sf1.id) || sf1), s2 = sf2 && (fresh(sf2.id) || sf2);
+  const done = m => m && m.status === "done";
+  // the just-saved match may not have echoed back yet; treat this call's data as authoritative
+  const args = arguments[0];
+  const d1 = args && args.slot === "SF1" ? args : s1, d2 = args && args.slot === "SF2" ? args : s2;
+  if (!done(d1) || !done(d2) || bMatch("F")) return;
+  await write(() => store.set("matches", newId(), { phase: "bracket", slot: "F", court: 1, a: winnerOf(d1), b: winnerOf(d2), sa: null, sb: null, status: "live", created: Date.now() }));
+  if (S.settings.courts > 1) await write(() => store.set("matches", newId(), { phase: "bracket", slot: "3P", court: 2, a: loserOf(d1), b: loserOf(d2), sa: null, sb: null, status: "live", created: Date.now() }));
+  toast("Final is set");
+}
+async function clearBracket(){
+  for (const m of S.matches.filter(m => m.phase === "bracket")) await write(() => store.del("matches", m.id));
+  await write(() => store.del("meta", "bracket"));
+}
+
+/* ---------- armed (two-tap) confirm ---------- */
+let armT;
+function armed(key){ if (S.armed === key) { S.armed = null; return true; } S.armed = key; clearTimeout(armT); armT = setTimeout(() => { S.armed = null; render(); }, 3500); render(); return false; }
+const armCls = key => S.armed === key ? " armed" : "";
+
+/* ---------- views ---------- */
+function stepper(key, side, val){
+  return `<div class="stepper ${side}">
+    <button type="button" data-step="${key}|${side}|-1" aria-label="Minus one">−</button>
+    <input id="s-${key}-${side}" data-score="${key}|${side}" inputmode="numeric" pattern="[0-9]*" value="${esc(val ?? "")}" placeholder="0" aria-label="Score">
+    <button type="button" data-step="${key}|${side}|1" aria-label="Plus one">+</button>
+  </div>`;
+}
+function teamBlock(ids, side, st){
+  return `<div class="team ${side}">${ids.map(id => `<span class="n">${esc(pname(id))}</span>`).join("")}
+    ${st ? `<span class="meta">${ids.map(id => st[id] ? `${st[id].w}–${st[id].l}` : "").join(" · ")}</span>` : ""}</div>`;
+}
+const slotName = { SF1: "Semi-final 1", SF2: "Semi-final 2", F: "Final", "3P": "3rd place" };
+
+function viewCourts(){
+  const st = computeStats();
+  const inBracket = !!S.bracket;
+  const courts = [];
+  for (let c = 1; c <= S.settings.courts; c++) {
+    const m = liveOnCourt(c);
+    if (!m) {
+      courts.push(`<div class="court open"><div class="court-head"><span class="ring"></span><h3>Court ${c}</h3><span class="tag">Open</span></div>
+        ${inBracket ? `<p class="hint">Bracket games appear here when they're ready.</p>` : `<button class="btn primary" data-act="fill" data-court="${c}" ${S.canWrite ? "" : "disabled"}>Start next game</button>`}</div>`);
+      continue;
+    }
+    const d = S.drafts[m.id] || {};
+    const target = m.phase === "bracket" ? S.settings.bracketTarget : S.settings.target;
+    courts.push(`<div class="court"><div class="court-head"><span class="ring"></span><h3>Court ${c}</h3>
+      <span class="tag ${m.phase === "bracket" ? "rim" : ""}">${m.phase === "bracket" ? esc(slotName[m.slot]) : "Game to " + target}</span></div>
+      <div class="matchup">${teamBlock(m.a, "a", m.phase === "pool" ? st : null)}<span class="vs">VS</span>${teamBlock(m.b, "b", m.phase === "pool" ? st : null)}</div>
+      ${S.canWrite ? `<div class="scoreline">${stepper(m.id, "a", d.a)}<span class="vs">–</span>${stepper(m.id, "b", d.b)}</div>
+      <div class="actions">
+        ${m.phase === "pool" ? `<button class="btn ghost" data-act="reshuffle" data-id="${m.id}">Reshuffle teams</button>` : `<span></span>`}
+        <button class="btn primary" data-act="save" data-id="${m.id}">Save result</button>
+      </div>` : `<p class="hint">In play.</p>`}
+    </div>`);
+  }
+  const waiting = S.players.filter(p => p.active !== false && !st[p.id].onCourt)
+    .sort((x, y) => st[x.id].games - st[y.id].games || st[x.id].last - st[y.id].last);
+  const openCount = [...Array(S.settings.courts)].filter((_, i) => !liveOnCourt(i + 1)).length;
+  return `
+    ${S.players.length < 4 ? `<div class="empty"><b>Add at least 4 players to start.</b><span>Everyone's name goes in under Setup. Then come back here and tap Start next game.</span><button class="btn primary" data-goto="setup">Go to Setup</button></div>` : ""}
+    ${!inBracket && openCount > 1 && S.players.length >= 4 && S.canWrite ? `<button class="btn primary" data-act="fillAll">Fill all open courts</button>` : ""}
+    <section class="sec">${courts.join("")}</section>
+    <section class="sec"><div class="sec-head"><h2>Resting</h2><span class="label">Next up first</span></div>
+      <div class="waiting">${waiting.length ? waiting.map(p => `<span class="chip">${esc(p.name)} · ${st[p.id].games}g</span>`).join("") : `<span class="hint">Nobody. Everyone's on a court.</span>`}</div>
+      <p class="hint">Next game picks whoever has played the fewest games and rested longest, then pairs them with partners and opponents they haven't had, and balances the two teams by rating.</p>
+    </section>`;
+}
+
+function viewStandings(){
+  const st = computeStats(); const rows = ranked(st);
+  if (!rows.length) return `<div class="empty"><b>No players yet.</b><span>Add names under Setup.</span><button class="btn primary" data-goto="setup">Go to Setup</button></div>`;
+  const cut = S.players.length >= 8 ? 8 : 4;
+  return `<section class="sec">
+    <div class="sec-head"><h2>Individual standings</h2><span class="label">Pool play</span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Player</th><th>GP</th><th>W–L</th><th>Win%</th><th>+/− per game</th><th>Rating</th></tr></thead>
+      <tbody>${rows.map((r, i) => {
+        const pd = r.games ? (r.pf - r.pa) / r.games : 0;
+        return `<tr class="${i === cut - 1 && rows.length > cut ? "cut" : ""}">
+          <td class="rk">${i + 1}</td><td>${esc(r.name)}${r.active ? "" : ` <span class="tag">out</span>`}</td>
+          <td>${r.games}</td><td>${r.w}–${r.l}</td><td>${r.games ? Math.round(100 * r.w / r.games) + "%" : "–"}</td>
+          <td class="mono ${pd > 0 ? "pos" : pd < 0 ? "neg" : ""}">${r.games ? (pd > 0 ? "+" : "") + pd.toFixed(1) : "–"}</td>
+          <td class="mono">${Math.round(r.elo)}</td></tr>`;
+      }).join("")}</tbody></table></div>
+    <p class="hint">Ranked by win %, then average point differential, then rating. Rating is an Elo score that moves more for upset wins and bigger margins; matchmaking uses it to balance teams. The yellow line marks the top ${cut}, who make the bracket.</p>
+  </section>`;
+}
+
+function bracketTeam(m, side, seedOf){
+  if (!m) return `<div class="bt tbd"><span class="sd"></span><span class="nm">Winner TBD</span><span class="sc"></span></div>`;
+  const ids = side === "a" ? m.a : m.b, sc = side === "a" ? m.sa : m.sb;
+  const won = m.status === "done" && ((side === "a") === (m.sa > m.sb));
+  return `<div class="bt ${won ? "w" : ""}"><span class="sd">${seedOf(ids) ?? ""}</span><span class="nm">${esc(teamName(ids))}</span><span class="sc">${m.status === "done" ? sc : ""}</span></div>`;
+}
+function viewBracket(){
+  const b = S.bracket;
+  if (!b) {
+    const n = S.players.filter(p => p.active !== false).length;
+    return `<section class="sec"><h2>Playoff bracket</h2>
+      <p class="hint">When pool play wraps up, build the bracket from the standings. Players are paired snake-style so teams come out even: 1st with 8th, 2nd with 7th, 3rd with 6th, 4th with 5th. Then the top seed plays the bottom seed. Any pool games still on court get cleared.</p>
+      <div class="row">
+        <button class="btn primary${armCls("b4")}" data-act="build4" ${n >= 8 && S.canWrite ? "" : "disabled"}>${S.armed === "b4" ? "Tap again to build" : "Build 4-team bracket (top 8)"}</button>
+        <button class="btn${armCls("b2")}" data-act="build2" ${n >= 4 && S.canWrite ? "" : "disabled"}>${S.armed === "b2" ? "Tap again to build" : "Final only (top 4)"}</button>
+      </div>
+      <p class="hint">Bracket games go to ${S.settings.bracketTarget}. Change it under Setup.</p></section>`;
+  }
+  const seedOf = ids => { const t = b.teams.find(t => t.ids[0] === ids[0] && t.ids[1] === ids[1]) || b.teams.find(t => t.ids.includes(ids[0]) && t.ids.includes(ids[1])); return t ? t.seed : null; };
+  const F = bMatch("F"), P3 = bMatch("3P"), sf1 = bMatch("SF1"), sf2 = bMatch("SF2");
+  const box = (m, title) => `<div class="bm"><div class="hd"><span>${title}</span><span>${m ? (m.status === "done" ? "Final score" : "Court " + m.court) : ""}</span></div>${bracketTeam(m, "a", seedOf)}${bracketTeam(m, "b", seedOf)}</div>`;
+  const champ = winnerOf(F);
+  return `<section class="sec">
+    ${champ ? `<div class="champ"><span class="label" style="color:inherit">Champions</span><span class="big">${esc(teamName(champ))}</span></div>` : ""}
+    <div class="sec-head"><h2>Playoff bracket</h2><span class="label">Games to ${S.settings.bracketTarget}</span></div>
+    ${b.size === 4 ? `<div class="bracket"><div class="sec">${box(sf1, "Semi 1 · 1v4")}${box(sf2, "Semi 2 · 2v3")}</div><div class="sec">${box(F, "Final")}${S.settings.courts > 1 ? box(P3, "3rd place") : ""}</div></div>` : box(F, "Final")}
+    <div class="sec"><span class="label">Seeds</span>
+      <div class="tablewrap"><table><tbody>${b.teams.map(t => `<tr><td class="rk">${t.seed}</td><td>${esc(teamName(t.ids))}</td></tr>`).join("")}</tbody></table></div></div>
+    <p class="hint">Log bracket scores from the Courts tab. The final and 3rd-place game are set up as soon as both semis are saved.</p>
+    ${S.canWrite ? `<div><button class="btn danger${armCls("cb")}" data-act="clearBracket">${S.armed === "cb" ? "Tap again to delete bracket" : "Delete bracket and go back to pool play"}</button></div>` : ""}
+  </section>`;
+}
+
+function viewHistory(){
+  const done = S.matches.filter(m => m.status === "done").sort((a, b) => (b.finished||0) - (a.finished||0));
+  if (!done.length) return `<div class="empty"><b>No games logged yet.</b><span>Finished games show up here, newest first. You can fix a score here if someone fat-fingers it.</span></div>`;
+  return `<section class="sec"><div class="sec-head"><h2>Games</h2><span class="label">${done.length} played</span></div><div class="hist">
+    ${done.map(m => {
+      const aw = m.sa > m.sb;
+      const time = new Date(m.finished || m.created).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      if (S.editing === m.id) {
+        const d = S.drafts["e-" + m.id] || { a: m.sa, b: m.sb };
+        S.drafts["e-" + m.id] = d;
+        return `<div class="hrow"><span class="t">${esc(teamName(m.a))}</span><span class="sc">vs</span><span class="t b">${esc(teamName(m.b))}</span>
+          <div class="scoreline" style="grid-column:1/-1">${stepper("e-" + m.id, "a", d.a)}<span class="vs">–</span>${stepper("e-" + m.id, "b", d.b)}</div>
+          <div class="sub"><button class="btn ghost" data-act="cancelEdit">Cancel</button><button class="btn primary" data-act="saveEdit" data-id="${m.id}">Save score</button></div></div>`;
+      }
+      return `<div class="hrow"><span class="t ${aw ? "w" : ""}">${esc(teamName(m.a))}</span><span class="sc">${m.sa}–${m.sb}</span><span class="t b ${aw ? "" : "w"}">${esc(teamName(m.b))}</span>
+        <div class="sub"><span>${m.phase === "bracket" ? esc(slotName[m.slot]) : "Court " + m.court} · ${time}</span>
+        ${S.canWrite ? `<span class="row"><button class="btn ghost" data-act="edit" data-id="${m.id}">Edit</button><button class="btn ghost danger${armCls("d" + m.id)}" data-act="del" data-id="${m.id}">${S.armed === "d" + m.id ? "Tap to delete" : "Delete"}</button></span>` : ""}</div></div>`;
+    }).join("")}</div></section>`;
+}
+
+function viewSetup(){
+  const n = S.players.filter(p => p.active !== false).length;
+  const perRound = Math.min(S.settings.courts, Math.floor(n / 4)) * 4;
+  const mins = S.settings.target <= 11 ? 7 : S.settings.target <= 15 ? 10 : S.settings.target <= 17 ? 12 : 14;
+  const games2h = perRound ? Math.round((120 / (mins + 2)) * perRound / Math.max(n, 1)) : 0;
+  const dis = S.canWrite ? "" : "disabled";
+  return `
+  <section class="card">
+    <div class="sec-head"><h2>Players</h2><span class="label">${n} playing</span></div>
+    <form id="addForm" class="row">
+      <div class="field" style="flex:1 1 200px"><label for="newName">Add a player</label><input type="text" id="newName" autocomplete="off" placeholder="Name" maxlength="40" ${dis}></div>
+      <button class="btn primary" type="submit" style="align-self:flex-end" ${dis}>Add</button>
+    </form>
+    <p class="hint">Paste a list separated by commas to add several at once.</p>
+    <div class="plist">${S.players.map(p => `<div class="prow ${p.active === false ? "out" : ""}"><span class="nm">${esc(p.name)}</span>
+      ${S.canWrite ? `<button class="btn" data-act="toggle" data-id="${p.id}">${p.active === false ? "Bring back" : "Sit out"}</button>
+      <button class="btn ghost danger${armCls("rp" + p.id)}" data-act="removeP" data-id="${p.id}">${S.armed === "rp" + p.id ? "Tap to remove" : "Remove"}</button>` : ""}</div>`).join("") || `<p class="hint">No players yet.</p>`}</div>
+    <p class="hint">“Sit out” keeps someone's record but stops them being picked, for a snack break or an early exit.</p>
+  </section>
+  <section class="card">
+    <h2>Format</h2>
+    <div class="row">
+      <div class="field"><label for="courts">Nets in use</label><select id="courts" data-setting="courts" ${dis}>${[1,2,3,4].map(v => `<option ${v === S.settings.courts ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label for="target">Pool games to</label><select id="target" data-setting="target" ${dis}>${[11,15,17,21].map(v => `<option ${v === S.settings.target ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label for="btarget">Bracket games to</label><select id="btarget" data-setting="bracketTarget" ${dis}>${[15,17,21].map(v => `<option ${v === S.settings.bracketTarget ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+    </div>
+    <p class="hint">${n >= 4 ? `With ${n} players, ${perRound} play at once and ${n - perRound} rest. A game to ${S.settings.target} runs about ${mins} minutes, so two hours of pool play gives each player around ${games2h} games.${S.settings.courts * 4 > n ? ` You only have enough people for ${Math.floor(n/4)} net${Math.floor(n/4) === 1 ? "" : "s"} at a time.` : ""}` : "Add players to see how the day will run."}</p>
+  </section>
+  <section class="card">
+    <h2>How the day runs</h2>
+    <p class="hint"><b>1. Pool play (about 2 hours).</b> Individual competition with rotating partners. When a net is free, tap Start next game and the app picks the four players and the teams. Play, enter the score, save.</p>
+    <p class="hint"><b>2. Playoffs (about 45 minutes).</b> On the Bracket tab, build a bracket from the standings. The top 8 pair up 1+8, 2+7, 3+6, 4+5 for semis, a final, and a 3rd-place game.</p>
+    <p class="hint">${S.mode === "shared" ? "Scores sync live for everyone who opens this page. People you've given edit access can log games from their own phones." : "This copy saves on this device only. Open the shared link to sync across phones."}</p>
+  </section>
+  ${S.canWrite ? `<section class="card"><h2>Start over</h2><p class="hint">Deletes every game and the bracket. Players stay.</p>
+    <div><button class="btn danger${armCls("reset")}" data-act="reset">${S.armed === "reset" ? "Tap again to delete all games" : "Delete all games"}</button></div></section>` : ""}`;
+}
+
+/* ---------- render ---------- */
+function render(){
+  const s = $("#status");
+  s.innerHTML = S.mode === "shared" ? `<span class="dot live"></span>${S.canWrite ? "Live" : "Live · view only"}` : S.mode === "local" ? `<span class="dot"></span>This device only` : `<span class="dot"></span>Connecting…`;
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === S.tab)));
+  const active = document.activeElement, aid = active && active.id, sel = active && active.selectionStart;
+  const v = { courts: viewCourts, standings: viewStandings, bracket: viewBracket, history: viewHistory, setup: viewSetup }[S.tab] || viewCourts;
+  const banner = S.mode === "shared" && !S.canWrite ? `<div class="banner"><b>You're watching live.</b> Ask the organiser for edit access if you want to log scores.</div>` : "";
+  $("#view").innerHTML = banner + v();
+  if (aid) { const el = document.getElementById(aid); if (el) { el.focus(); try { if (sel != null) el.setSelectionRange(sel, sel); } catch(e){} } }
+}
+
+/* ---------- events ---------- */
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-tab]"); if (!b) return;
+  S.tab = b.dataset.tab; S.armed = null; S.editing = null; try { localStorage.setItem("rn-tab", S.tab); } catch(e){} render();
+});
+$("#view").addEventListener("input", e => {
+  const k = e.target.dataset.score; if (!k) return;
+  const [key, side] = k.split("|"); e.target.value = e.target.value.replace(/\D/g, "").slice(0, 2);
+  (S.drafts[key] = S.drafts[key] || {})[side] = e.target.value;
+});
+$("#view").addEventListener("change", async e => {
+  const k = e.target.dataset.setting; if (!k) return;
+  const next = { ...S.settings, [k]: parseInt(e.target.value, 10) };
+  const body = { courts: next.courts, target: next.target, bracketTarget: next.bracketTarget };
+  if (await write(() => store.set("meta", "settings", body))) { S.settings = next; render(); }
+});
+$("#view").addEventListener("submit", async e => {
+  if (e.target.id !== "addForm") return; e.preventDefault();
+  const inp = $("#newName"); const names = inp.value.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  if (!names.length) return;
+  const have = new Set(S.players.map(p => p.name.toLowerCase()));
+  let t = Date.now(), added = 0;
+  for (const name of names) {
+    if (have.has(name.toLowerCase())) { toast(`${name} is already in.`); continue; }
+    have.add(name.toLowerCase());
+    if (await write(() => store.set("players", newId(), { name: name.slice(0, 40), active: true, created: t++ }))) added++;
+  }
+  inp.value = ""; inp.focus(); if (added > 1) toast(`Added ${added} players`);
+});
+$("#view").addEventListener("click", async e => {
+  const g = e.target.closest("[data-goto]"); if (g) { S.tab = g.dataset.goto; render(); return; }
+  const st = e.target.closest("[data-step]");
+  if (st) {
+    const [key, side, dv] = st.dataset.step.split("|");
+    const d = (S.drafts[key] = S.drafts[key] || {});
+    d[side] = String(Math.max(0, Math.min(99, (parseInt(d[side], 10) || 0) + parseInt(dv, 10))));
+    const inp = document.getElementById(`s-${key}-${side}`); if (inp) inp.value = d[side];
+    return;
+  }
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  const id = b.dataset.id, m = id && S.matches.find(x => x.id === id);
+  b.disabled = true;
+  try {
+    switch (b.dataset.act) {
+      case "fill": await fillCourt(parseInt(b.dataset.court, 10)); break;
+      case "fillAll": await fillAll(); break;
+      case "reshuffle": if (m) await reshuffle(m); break;
+      case "save": if (m) await saveResult(m); break;
+      case "edit": S.editing = id; delete S.drafts["e-" + id]; render(); break;
+      case "cancelEdit": S.editing = null; render(); break;
+      case "saveEdit": if (m) await saveEdit(m); break;
+      case "del": if (armed("d" + id)) await write(() => store.del("matches", id)); break;
+      case "toggle": { const p = S.players.find(x => x.id === id); if (p) await write(() => store.update("players", id, { active: p.active === false })); break; }
+      case "removeP": if (armed("rp" + id)) await write(() => store.del("players", id)); break;
+      case "build4": if (armed("b4")) await buildBracket(4); break;
+      case "build2": if (armed("b2")) await buildBracket(2); break;
+      case "clearBracket": if (armed("cb")) await clearBracket(); break;
+      case "reset": if (armed("reset")) { await clearBracket(); for (const x of [...S.matches]) await write(() => store.del("matches", x.id)); toast("All games deleted"); } break;
+    }
+  } finally { b.disabled = false; }
+});
+
+render();
+boot();
+})();
+</script>
+
+</body></html>
