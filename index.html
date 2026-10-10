@@ -142,7 +142,7 @@ input[type=text],select,input.num{font:500 1rem var(--f-body);padding:10px 12px;
       <button role="tab" data-tab="courts" aria-selected="true">Courts</button>
       <button role="tab" data-tab="standings" aria-selected="false">Standings</button>
       <button role="tab" data-tab="bracket" aria-selected="false">Bracket</button>
-      <button role="tab" data-tab="history" aria-selected="false">Games</button>
+      <button role="tab" data-tab="history" aria-selected="false">Fixtures</button>
       <button role="tab" data-tab="setup" aria-selected="false">Setup</button>
     </nav>
   </header>
@@ -312,6 +312,135 @@ async function reshuffle(m){
   await fillCourt(m.court);
 }
 
+/* ---------- fixtures ---------- */
+// Fixed fixture search: rests rotate to whoever has played most, partners never repeat
+// (where the numbers allow), and opponent meetings are spread as evenly as possible.
+function searchFixtures(ids, m, rounds, history, budgetMs){
+  const N = ids.length, idx = {}; ids.forEach((id, i) => idx[id] = i);
+  const P0 = new Int16Array(N * N), O0 = new Int16Array(N * N), played = new Array(N).fill(0);
+  let hist = 0;
+  (history || []).forEach(g => {
+    const a = g.a.map(x => idx[x]), b = g.b.map(x => idx[x]);
+    const both = [...a, ...b];
+    both.forEach(x => { if (x !== undefined) played[x]++; });
+    if (both.some(x => x === undefined)) return;
+    hist++;
+    P0[a[0] * N + a[1]]++; P0[a[1] * N + a[0]]++; P0[b[0] * N + b[1]]++; P0[b[1] * N + b[0]]++;
+    a.forEach(x => b.forEach(y => { O0[x * N + y]++; O0[y * N + x]++; }));
+  });
+  const pairs = N * (N - 1) / 2, total = hist + rounds * m;
+  const oppT = total * 4 / pairs, partCap = Math.max(1, Math.ceil(total * 2 / pairs));
+  const P = new Int16Array(N * N), O = new Int16Array(N * N);
+  function cost(R){
+    P.set(P0); O.set(O0);
+    for (const rd of R) for (const g of rd) {
+      P[g[0] * N + g[1]]++; P[g[2] * N + g[3]]++;
+      for (let i = 0; i < 2; i++) for (let j = 2; j < 4; j++) O[g[i] * N + g[j]]++;
+    }
+    let c = 0;
+    for (let x = 0; x < N; x++) for (let y = x + 1; y < N; y++) {
+      const p = P[x * N + y] + P[y * N + x], o = O[x * N + y] + O[y * N + x];
+      c += 10 * Math.max(0, p - partCap) + (o - oppT) * (o - oppT) + (p + o === 0 ? 3 : 0);
+    }
+    return c;
+  }
+  function participation(){
+    const games = played.slice(), lastRest = new Array(N).fill(-99), R = [];
+    for (let r = 0; r < rounds; r++) {
+      const rnd = games.map(() => Math.random());
+      const order = [...Array(N).keys()].sort((x, y) => games[y] - games[x] || lastRest[x] - lastRest[y] || rnd[x] - rnd[y]);
+      const resting = new Set(order.slice(0, N - 4 * m));
+      resting.forEach(x => lastRest[x] = r);
+      const play = [...Array(N).keys()].filter(x => !resting.has(x)).sort(() => Math.random() - 0.5);
+      play.forEach(x => games[x]++);
+      const rd = []; for (let g = 0; g < m; g++) rd.push(play.slice(g * 4, g * 4 + 4)); R.push(rd);
+    }
+    return R;
+  }
+  const floor = (() => { // the best a schedule could possibly score, so we can stop early
+    const frac = oppT - Math.floor(oppT); return pairs * frac * (1 - frac) - 1e-6;
+  })();
+  const deadline = Date.now() + (budgetMs || 700);
+  let best = null, bestC = Infinity;
+  do {
+    const R = participation();
+    let c = cost(R), T = 0.6;
+    for (let it = 0; it < 3000 && c > floor; it++) {
+      const r = (Math.random() * rounds) | 0, flat = R[r].length * 4;
+      const i = (Math.random() * flat) | 0, j = (Math.random() * flat) | 0;
+      if ((i >> 1) === (j >> 1)) continue;
+      const gi = R[r][i >> 2], gj = R[r][j >> 2], si = i & 3, sj = j & 3;
+      [gi[si], gj[sj]] = [gj[sj], gi[si]];
+      const c2 = cost(R);
+      if (c2 <= c || Math.random() < Math.exp((c - c2) / T)) c = c2; else [gi[si], gj[sj]] = [gj[sj], gi[si]];
+      T = Math.max(0.03, T * 0.998);
+      if ((it & 1023) === 0 && Date.now() > deadline) break;
+    }
+    if (c < bestC) { bestC = c; best = R.map(rd => rd.map(g => g.slice())); }
+  } while (bestC > floor && Date.now() < deadline);
+  return best.map(rd => rd.map(g => ({ a: [ids[g[0]], ids[g[1]]], b: [ids[g[2]], ids[g[3]]] })));
+}
+
+const gameMins = t => t <= 11 ? 7 : t <= 15 ? 10 : t <= 17 ? 12 : 14;
+const activeIds = () => S.players.filter(p => p.active !== false).map(p => p.id);
+const netsFor = n => Math.min(S.settings.courts, Math.floor(n / 4));
+const fixtures = () => S.matches.filter(m => m.fixture).sort((a, b) => a.round - b.round || a.slot - b.slot);
+function autoRounds(n){
+  const m = netsFor(n); if (m < 1) return 0;
+  if (n === 4 * m) return Math.min(n - 1, 9);
+  for (let r = 5; r <= 10; r++) if ((4 * m * r) % n === 0) return r;
+  return 6;
+}
+const plannedRounds = n => S.settings.fixtureRounds || fixtures().reduce((r, f) => Math.max(r, f.round), 0) || autoRounds(n);
+function planText(n, rounds){
+  const m = netsFor(n); if (m < 1) return "Add at least 4 players to plan fixtures.";
+  const slots = 4 * m * rounds, lo = Math.floor(slots / n), hi = Math.ceil(slots / n);
+  const mins = rounds * (gameMins(S.settings.target) + 3), h = Math.floor(mins / 60);
+  return `${n} players on ${m} net${m > 1 ? "s" : ""}: ${rounds} rounds, ${m * rounds} games, about ${h ? h + " h " : ""}${mins % 60} min. Everyone plays ${lo === hi ? lo : lo + "–" + hi} games${n > 4 * m ? ` and ${n - 4 * m} ${n - 4 * m === 1 ? "person rests" : "people rest"} each round` : ""}.`;
+}
+function roundsSelect(n){
+  const cur = plannedRounds(n);
+  return `<div class="field"><label for="fxRounds">Rounds</label><select id="fxRounds" data-setting="fixtureRounds" ${S.canWrite ? "" : "disabled"}>${[3,4,5,6,7,8,9,10,11,12].map(v => `<option value="${v}" ${v === cur ? "selected" : ""}>${v}${v === autoRounds(n) ? " (even games)" : ""}</option>`).join("")}</select></div>`;
+}
+async function createFixtures(rebuild){
+  const ids = activeIds(), m = netsFor(ids.length);
+  if (m < 1) { toast("Need at least 4 players."); return; }
+  const fx = fixtures();
+  const fromRound = fx.filter(f => f.status !== "scheduled").reduce((r, f) => Math.max(r, f.round), 0);
+  const rounds = Math.max(1, plannedRounds(ids.length) - fromRound);
+  const history = S.matches.filter(x => x.phase === "pool" && x.status !== "scheduled");
+  toast("Building fixtures…");
+  await new Promise(r => setTimeout(r, 40));
+  const plan = searchFixtures(ids, m, rounds, history, 700);
+  for (const f of fx.filter(f => f.status === "scheduled")) if (!(await write(() => store.del("matches", f.id)))) return;
+  let t = Date.now();
+  for (let r = 0; r < plan.length; r++) for (let g = 0; g < plan[r].length; g++) {
+    const ok = await write(() => store.set("matches", newId(), { phase: "pool", fixture: true, round: fromRound + r + 1, slot: g, a: plan[r][g].a, b: plan[r][g].b, sa: null, sb: null, status: "scheduled", court: null, created: t++ }));
+    if (!ok) return;
+  }
+  toast(rebuild ? "Remaining fixtures rebuilt" : "Fixtures ready");
+}
+function busyPlayers(){ const s = new Set(); S.matches.filter(m => m.status === "live").forEach(m => [...m.a, ...m.b].forEach(id => s.add(id))); return s; }
+// Fixtures run strictly in round order; within a round, game N goes to court N when it can.
+function nextFixture(court, busy, taken){
+  const pending = fixtures().filter(f => f.status === "scheduled" && !taken.has(f.id));
+  if (!pending.length) return null;
+  const cands = pending.filter(f => f.round === pending[0].round && ![...f.a, ...f.b].some(id => busy.has(id)));
+  return cands.find(f => f.slot === court - 1) || cands[0] || null;
+}
+async function startFixtures(finished){
+  if (S.bracket) return;
+  const busy = busyPlayers(), taken = new Set();
+  if (finished) [...finished.a, ...finished.b].forEach(id => busy.delete(id));
+  for (let c = 1; c <= S.settings.courts; c++) {
+    const live = liveOnCourt(c);
+    if (live && !(finished && live.id === finished.id)) continue;
+    const f = nextFixture(c, busy, taken); if (!f) continue;
+    if (!(await write(() => store.update("matches", f.id, { status: "live", court: c, started: Date.now() })))) return;
+    taken.add(f.id); [...f.a, ...f.b].forEach(id => busy.add(id));
+  }
+}
+
 /* ---------- results ---------- */
 function readScores(id){
   const d = S.drafts[id] || {};
@@ -326,6 +455,7 @@ async function saveResult(m){
   delete S.drafts[m.id];
   toast(`Saved: ${teamName(sa > sb ? m.a : m.b)} win ${Math.max(sa,sb)}–${Math.min(sa,sb)}`);
   if (m.phase === "bracket") await advanceBracket({ ...m, sa, sb, status: "done" });
+  else await startFixtures(m);
 }
 async function saveEdit(m){
   const [sa, sb] = readScores("e-" + m.id);
@@ -345,7 +475,7 @@ async function buildBracket(size){
   // Snake pairing: 1 with last, 2 with second-last…
   const teams = []; for (let i = 0; i < size; i++) teams.push({ seed: i + 1, ids: [pool[i].id, pool[n - 1 - i].id] });
   const live = S.matches.filter(m => m.status === "live" && m.phase === "pool");
-  for (const m of live) await write(() => store.del("matches", m.id));
+  for (const m of live) await write(() => m.fixture ? store.update("matches", m.id, { status: "scheduled", court: null }) : store.del("matches", m.id));
   const ok = await write(() => store.set("meta", "bracket", { size, teams, created: Date.now() }));
   if (!ok) return;
   const mk = (slot, court, t1, t2) => write(() => store.set("matches", newId(), { phase: "bracket", slot, court, a: t1.ids, b: t2.ids, sa: null, sb: null, status: "live", created: Date.now() }));
@@ -394,36 +524,49 @@ const slotName = { SF1: "Semi-final 1", SF2: "Semi-final 2", F: "Final", "3P": "
 function viewCourts(){
   const st = computeStats();
   const inBracket = !!S.bracket;
+  const fxAll = fixtures(), pending = fxAll.some(f => f.status === "scheduled");
+  const previewBusy = busyPlayers(), previewTaken = new Set();
   const courts = [];
   for (let c = 1; c <= S.settings.courts; c++) {
     const m = liveOnCourt(c);
     if (!m) {
-      courts.push(`<div class="court open"><div class="court-head"><span class="ring"></span><h3>Court ${c}</h3><span class="tag">Open</span></div>
-        ${inBracket ? `<p class="hint">Bracket games appear here when they're ready.</p>` : `<button class="btn primary" data-act="fill" data-court="${c}" ${S.canWrite ? "" : "disabled"}>Start next game</button>`}</div>`);
+      let body;
+      if (inBracket) body = `<p class="hint">Bracket games appear here when they're ready.</p>`;
+      else if (pending) {
+        const f = nextFixture(c, previewBusy, previewTaken);
+        if (f) {
+          previewTaken.add(f.id); [...f.a, ...f.b].forEach(id => previewBusy.add(id));
+          body = `<span class="label">Up next · Round ${f.round}</span><div class="matchup">${teamBlock(f.a, "a", st)}<span class="vs">VS</span>${teamBlock(f.b, "b", st)}</div>
+            ${S.canWrite ? `<button class="btn primary" data-act="startFx">Start game</button>` : ""}`;
+        } else body = `<p class="hint">The next fixture starts here when its players come off the other court.</p>`;
+      } else if (!fxAll.length) body = `<p class="hint">No fixtures yet. Create the fixture list on the Fixtures tab, or start a one-off game.</p>
+          <div class="row"><button class="btn primary" data-goto="history">Create fixtures</button>${S.canWrite ? `<button class="btn" data-act="fill" data-court="${c}">One-off game</button>` : ""}</div>`;
+      else body = `<p class="hint">All fixtures played. Start an extra game, or head to the Bracket tab.</p>${S.canWrite ? `<button class="btn primary" data-act="fill" data-court="${c}">Start extra game</button>` : ""}`;
+      courts.push(`<div class="court open"><div class="court-head"><span class="ring"></span><h3>Court ${c}</h3><span class="tag">Open</span></div>${body}</div>`);
       continue;
     }
     const d = S.drafts[m.id] || {};
     const target = m.phase === "bracket" ? S.settings.bracketTarget : S.settings.target;
     courts.push(`<div class="court"><div class="court-head"><span class="ring"></span><h3>Court ${c}</h3>
-      <span class="tag ${m.phase === "bracket" ? "rim" : ""}">${m.phase === "bracket" ? esc(slotName[m.slot]) : "Game to " + target}</span></div>
+      <span class="tag ${m.phase === "bracket" ? "rim" : ""}">${m.phase === "bracket" ? esc(slotName[m.slot]) : (m.fixture ? "Round " + m.round + " · " : "") + "To " + target}</span></div>
       <div class="matchup">${teamBlock(m.a, "a", m.phase === "pool" ? st : null)}<span class="vs">VS</span>${teamBlock(m.b, "b", m.phase === "pool" ? st : null)}</div>
       ${S.canWrite ? `<div class="scoreline">${stepper(m.id, "a", d.a)}<span class="vs">–</span>${stepper(m.id, "b", d.b)}</div>
       <div class="actions">
-        ${m.phase === "pool" ? `<button class="btn ghost" data-act="reshuffle" data-id="${m.id}">Reshuffle teams</button>` : `<span></span>`}
+        ${m.phase === "pool" && !m.fixture ? `<button class="btn ghost" data-act="reshuffle" data-id="${m.id}">Reshuffle teams</button>` : `<span></span>`}
         <button class="btn primary" data-act="save" data-id="${m.id}">Save result</button>
       </div>` : `<p class="hint">In play.</p>`}
     </div>`);
   }
-  const waiting = S.players.filter(p => p.active !== false && !st[p.id].onCourt)
+  const waiting = S.players.filter(p => p.active !== false && !st[p.id].onCourt && !(pending && previewBusy.has(p.id)))
     .sort((x, y) => st[x.id].games - st[y.id].games || st[x.id].last - st[y.id].last);
   const openCount = [...Array(S.settings.courts)].filter((_, i) => !liveOnCourt(i + 1)).length;
   return `
-    ${S.players.length < 4 ? `<div class="empty"><b>Add at least 4 players to start.</b><span>Everyone's name goes in under Setup. Then come back here and tap Start next game.</span><button class="btn primary" data-goto="setup">Go to Setup</button></div>` : ""}
-    ${!inBracket && openCount > 1 && S.players.length >= 4 && S.canWrite ? `<button class="btn primary" data-act="fillAll">Fill all open courts</button>` : ""}
+    ${S.players.length < 4 ? `<div class="empty"><b>Add at least 4 players to start.</b><span>Everyone's name goes in under Setup. Then create the fixture list on the Fixtures tab.</span><button class="btn primary" data-goto="setup">Go to Setup</button></div>` : ""}
+    ${!inBracket && !pending && fxAll.length && openCount > 1 && S.canWrite ? `<button class="btn" data-act="fillAll">Start extra games on all open courts</button>` : ""}
     <section class="sec">${courts.join("")}</section>
-    <section class="sec"><div class="sec-head"><h2>Resting</h2><span class="label">Next up first</span></div>
+    <section class="sec"><div class="sec-head"><h2>Resting</h2>${pending ? "" : `<span class="label">Next up first</span>`}</div>
       <div class="waiting">${waiting.length ? waiting.map(p => `<span class="chip">${esc(p.name)} · ${st[p.id].games}g</span>`).join("") : `<span class="hint">Nobody. Everyone's on a court.</span>`}</div>
-      <p class="hint">Next game picks whoever has played the fewest games and rested longest, then pairs them with partners and opponents they haven't had, and balances the two teams by rating.</p>
+      <p class="hint">${pending ? "Fixtures run in round order. Save a score and the next fixture goes on that court as soon as its players are free. The full list is on the Fixtures tab." : "Extra games pick whoever has played the fewest games and rested longest, pair them with partners they haven't had, and balance the teams by rating."}</p>
     </section>`;
 }
 
@@ -480,37 +623,70 @@ function viewBracket(){
   </section>`;
 }
 
+function gameRow(m, sub){
+  if (S.editing === m.id) {
+    const d = S.drafts["e-" + m.id] || { a: m.sa, b: m.sb };
+    S.drafts["e-" + m.id] = d;
+    return `<div class="hrow"><span class="t">${esc(teamName(m.a))}</span><span class="sc">vs</span><span class="t b">${esc(teamName(m.b))}</span>
+      <div class="scoreline" style="grid-column:1/-1">${stepper("e-" + m.id, "a", d.a)}<span class="vs">–</span>${stepper("e-" + m.id, "b", d.b)}</div>
+      <div class="sub"><button class="btn ghost" data-act="cancelEdit">Cancel</button><button class="btn primary" data-act="saveEdit" data-id="${m.id}">Save score</button></div></div>`;
+  }
+  if (m.status !== "done") return `<div class="hrow"><span class="t">${esc(teamName(m.a))}</span><span class="sc">vs</span><span class="t b">${esc(teamName(m.b))}</span>
+    <div class="sub"><span>${sub}</span><span class="tag ${m.status === "live" ? "rim" : ""}">${m.status === "live" ? "On court " + m.court : "Upcoming"}</span></div></div>`;
+  const aw = m.sa > m.sb;
+  const time = new Date(m.finished || m.created).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `<div class="hrow"><span class="t ${aw ? "w" : ""}">${esc(teamName(m.a))}</span><span class="sc">${m.sa}–${m.sb}</span><span class="t b ${aw ? "" : "w"}">${esc(teamName(m.b))}</span>
+    <div class="sub"><span>${sub} · ${time}</span>
+    ${S.canWrite ? `<span class="row"><button class="btn ghost" data-act="edit" data-id="${m.id}">Edit</button>${m.fixture ? "" : `<button class="btn ghost danger${armCls("d" + m.id)}" data-act="del" data-id="${m.id}">${S.armed === "d" + m.id ? "Tap to delete" : "Delete"}</button>`}</span>` : ""}</div></div>`;
+}
 function viewHistory(){
-  const done = S.matches.filter(m => m.status === "done").sort((a, b) => (b.finished||0) - (a.finished||0));
-  if (!done.length) return `<div class="empty"><b>No games logged yet.</b><span>Finished games show up here, newest first. You can fix a score here if someone fat-fingers it.</span></div>`;
-  return `<section class="sec"><div class="sec-head"><h2>Games</h2><span class="label">${done.length} played</span></div><div class="hist">
-    ${done.map(m => {
-      const aw = m.sa > m.sb;
-      const time = new Date(m.finished || m.created).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-      if (S.editing === m.id) {
-        const d = S.drafts["e-" + m.id] || { a: m.sa, b: m.sb };
-        S.drafts["e-" + m.id] = d;
-        return `<div class="hrow"><span class="t">${esc(teamName(m.a))}</span><span class="sc">vs</span><span class="t b">${esc(teamName(m.b))}</span>
-          <div class="scoreline" style="grid-column:1/-1">${stepper("e-" + m.id, "a", d.a)}<span class="vs">–</span>${stepper("e-" + m.id, "b", d.b)}</div>
-          <div class="sub"><button class="btn ghost" data-act="cancelEdit">Cancel</button><button class="btn primary" data-act="saveEdit" data-id="${m.id}">Save score</button></div></div>`;
-      }
-      return `<div class="hrow"><span class="t ${aw ? "w" : ""}">${esc(teamName(m.a))}</span><span class="sc">${m.sa}–${m.sb}</span><span class="t b ${aw ? "" : "w"}">${esc(teamName(m.b))}</span>
-        <div class="sub"><span>${m.phase === "bracket" ? esc(slotName[m.slot]) : "Court " + m.court} · ${time}</span>
-        ${S.canWrite ? `<span class="row"><button class="btn ghost" data-act="edit" data-id="${m.id}">Edit</button><button class="btn ghost danger${armCls("d" + m.id)}" data-act="del" data-id="${m.id}">${S.armed === "d" + m.id ? "Tap to delete" : "Delete"}</button></span>` : ""}</div></div>`;
-    }).join("")}</div></section>`;
+  const ids = activeIds(), n = ids.length, fx = fixtures();
+  const started = fx.some(f => f.status !== "scheduled");
+  const lastStarted = fx.filter(f => f.status !== "scheduled").reduce((r, f) => Math.max(r, f.round), 0);
+  const left = Math.max(1, plannedRounds(n) - lastStarted);
+  const plan = `<div class="row">${roundsSelect(n)}</div><p class="hint">${started ? `Rounds ${lastStarted + 1}–${lastStarted + left} will be redrawn for the ${n} players checked in now.` : planText(n, plannedRounds(n))}</p>`;
+  let html = "";
+  if (!fx.length) {
+    html += `<section class="card"><h2>Fixture list</h2>
+      <p class="hint">Build a fixed schedule from everyone who's checked in under Setup. Partners never repeat, opponents are spread as evenly as possible, and rests rotate so nobody sits out twice in a row.</p>
+      ${plan}
+      ${S.canWrite ? `<div><button class="btn primary" data-act="createFx" ${netsFor(n) ? "" : "disabled"}>Create fixtures</button></div>` : ""}</section>`;
+  } else {
+    const byRound = {}; fx.forEach(f => (byRound[f.round] = byRound[f.round] || []).push(f));
+    const doneCount = fx.filter(f => f.status === "done").length;
+    html += `<section class="sec"><div class="sec-head"><h2>Fixtures</h2><span class="label">${doneCount} of ${fx.length} played</span></div>
+      ${Object.keys(byRound).map(Number).sort((x, y) => x - y).map(r => {
+        const games = byRound[r], inRound = new Set(games.flatMap(g => [...g.a, ...g.b]));
+        const since = Math.min(...games.map(g => g.started || Infinity));
+        const resting = S.players.filter(p => p.active !== false && !inRound.has(p.id) && !(since < Infinity && (p.created || 0) > since));
+        const state = games.every(g => g.status === "done") ? "Done" : games.some(g => g.status !== "scheduled") ? "In play" : "";
+        return `<div class="sec"><div class="sec-head"><span class="label">Round ${r}</span>${state ? `<span class="tag ${state === "In play" ? "rim" : ""}">${state}</span>` : ""}</div>
+          <div class="hist">${games.map(g => gameRow(g, "Court " + (g.court || g.slot + 1))).join("")}
+          ${resting.length ? `<div class="hrow"><span class="t" style="grid-column:1/-1;color:var(--muted)">Resting: ${resting.map(p => esc(p.name)).join(", ")}</span></div>` : ""}</div></div>`;
+      }).join("")}</section>`;
+    if (S.canWrite) html += `<section class="card"><h2>${started ? "Someone arrived or left?" : "Change the plan"}</h2>
+      <p class="hint">${started ? "Update the player list under Setup, then rebuild. Played and in-progress games stay as they are; every game not yet started is redrawn for whoever's checked in now." : "Nothing's been played yet, so you can redraw the whole list. Do this after adding late arrivals."}</p>
+      ${plan}
+      <div>${started ? `<button class="btn${armCls("rb")}" data-act="rebuildFx">${S.armed === "rb" ? "Tap again to rebuild" : "Rebuild remaining fixtures"}</button>` : `<button class="btn${armCls("rf")}" data-act="redoFx">${S.armed === "rf" ? "Tap again to redraw" : "Redraw fixtures"}</button>`}</div></section>`;
+  }
+  const extra = S.matches.filter(m => m.phase === "pool" && !m.fixture && m.status === "done").sort((a, b) => (b.finished||0) - (a.finished||0));
+  if (extra.length) html += `<section class="sec"><div class="sec-head"><h2>Extra games</h2><span class="label">${extra.length} played</span></div><div class="hist">${extra.map(m => gameRow(m, "Court " + m.court)).join("")}</div></section>`;
+  const po = S.matches.filter(m => m.phase === "bracket" && m.status === "done").sort((a, b) => (a.finished||0) - (b.finished||0));
+  if (po.length) html += `<section class="sec"><div class="sec-head"><h2>Playoffs</h2></div><div class="hist">${po.map(m => gameRow(m, esc(slotName[m.slot]))).join("")}</div></section>`;
+  return html;
 }
 
 function viewSetup(){
   const n = S.players.filter(p => p.active !== false).length;
   const perRound = Math.min(S.settings.courts, Math.floor(n / 4)) * 4;
-  const mins = S.settings.target <= 11 ? 7 : S.settings.target <= 15 ? 10 : S.settings.target <= 17 ? 12 : 14;
+  const mins = gameMins(S.settings.target);
   const games2h = perRound ? Math.round((120 / (mins + 2)) * perRound / Math.max(n, 1)) : 0;
   const dis = S.canWrite ? "" : "disabled";
   return `
   <section class="card">
     <div class="sec-head"><h2>Players</h2><span class="label">${n} playing</span></div>
     <form id="addForm" class="row">
-      <div class="field" style="flex:1 1 200px"><label for="newName">Add a player</label><input type="text" id="newName" autocomplete="off" placeholder="Name" maxlength="40" ${dis}></div>
+      <div class="field" style="flex:1 1 200px"><label for="newName">Add a player</label><input type="text" id="newName" autocomplete="off" placeholder="Name, or several separated by commas" maxlength="600" ${dis}></div>
       <button class="btn primary" type="submit" style="align-self:flex-end" ${dis}>Add</button>
     </form>
     <p class="hint">Paste a list separated by commas to add several at once.</p>
@@ -530,8 +706,9 @@ function viewSetup(){
   </section>
   <section class="card">
     <h2>How the day runs</h2>
-    <p class="hint"><b>1. Pool play (about 2 hours).</b> Individual competition with rotating partners. When a net is free, tap Start next game and the app picks the four players and the teams. Play, enter the score, save.</p>
-    <p class="hint"><b>2. Playoffs (about 45 minutes).</b> On the Bracket tab, build a bracket from the standings. The top 8 pair up 1+8, 2+7, 3+6, 4+5 for semis, a final, and a 3rd-place game.</p>
+    <p class="hint"><b>1. Fixtures.</b> On the Fixtures tab, create the fixture list. It's a fixed schedule where everyone plays for themselves with a different partner each game. The Courts tab shows who's on each net. Save the score and the next fixture goes on.</p>
+    <p class="hint"><b>2. Extra games (optional).</b> If there's time left, the app keeps making fair games from the standings.</p>
+    <p class="hint"><b>3. Playoffs (about 45 minutes).</b> On the Bracket tab, build a bracket from the standings. The top 8 pair up 1+8, 2+7, 3+6, 4+5 for semis, a final, and a 3rd-place game.</p>
     <p class="hint">${S.mode === "shared" ? "Scores sync live for everyone who opens this page. People you've given edit access can log games from their own phones." : "This copy saves on this device only. Open the shared link to sync across phones."}</p>
   </section>
   ${S.canWrite ? `<section class="card"><h2>Start over</h2><p class="hint">Deletes every game and the bracket. Players stay.</p>
@@ -563,7 +740,7 @@ $("#view").addEventListener("input", e => {
 $("#view").addEventListener("change", async e => {
   const k = e.target.dataset.setting; if (!k) return;
   const next = { ...S.settings, [k]: parseInt(e.target.value, 10) };
-  const body = { courts: next.courts, target: next.target, bracketTarget: next.bracketTarget };
+  const body = { courts: next.courts, target: next.target, bracketTarget: next.bracketTarget, fixtureRounds: next.fixtureRounds || 0 };
   if (await write(() => store.set("meta", "settings", body))) { S.settings = next; render(); }
 });
 $("#view").addEventListener("submit", async e => {
@@ -596,6 +773,10 @@ $("#view").addEventListener("click", async e => {
     switch (b.dataset.act) {
       case "fill": await fillCourt(parseInt(b.dataset.court, 10)); break;
       case "fillAll": await fillAll(); break;
+      case "startFx": await startFixtures(); break;
+      case "createFx": await createFixtures(false); break;
+      case "redoFx": if (armed("rf")) await createFixtures(false); break;
+      case "rebuildFx": if (armed("rb")) await createFixtures(true); break;
       case "reshuffle": if (m) await reshuffle(m); break;
       case "save": if (m) await saveResult(m); break;
       case "edit": S.editing = id; delete S.drafts["e-" + id]; render(); break;
