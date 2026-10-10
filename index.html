@@ -540,6 +540,20 @@ async function addToGroup(name, gi){
   S.lateName = "";
   toast(`${p.name} added to ${fxLabel(g0)}: ${plan.length} games left`);
 }
+// Manually log a game into a group (e.g. one played but lost from the schedule).
+async function addManualGame(){
+  const cur = stagesList().pop(), f = S.addForm || {};
+  if (!cur) return;
+  const gi = parseInt(f.group ?? cur.games[0].group, 10);
+  const ids = [f.a1, f.a2, f.b1, f.b2];
+  if (ids.some(x => !x) || new Set(ids).size !== 4) { toast("Pick four different players."); return; }
+  const sa = parseInt(f.sa, 10), sb = parseInt(f.sb, 10);
+  if (!Number.isFinite(sa) || !Number.isFinite(sb) || sa === sb) { toast("Enter two different scores."); return; }
+  const games = cur.games.filter(g => g.group === gi), g0 = games[0];
+  const G = new Set(cur.games.map(g => g.group)).size, seq = Math.max(...games.map(g => g.seq)) + 1;
+  const ok = await write(() => store.set("matches", newId(), { phase: g0.phase, fixture: true, added: true, stage: cur.stage, kind: cur.kind, group: gi, gname: g0.gname, round: (seq - 1) * G + gi, slot: gi, seq, preCourt: g0.preCourt, a: [f.a1, f.a2], b: [f.b1, f.b2], sa, sb, status: "done", court: g0.preCourt, created: Date.now(), finished: Date.now() }));
+  if (ok) { S.addForm = { group: f.group }; toast(`Game added to ${fxLabel(g0)}`); render(); }
+}
 async function redrawStage(){
   const cur = stagesList().pop(); if (!cur || cur.games.some(g => g.status !== "scheduled")) return;
   for (const g of cur.games) if (!(await write(() => store.del("matches", g.id)))) return;
@@ -797,7 +811,7 @@ function viewGroups(){
           <div class="tablewrap"><table><thead><tr><th>#</th><th>Player</th><th>Pts</th><th>W–L</th><th>+/−</th></tr></thead><tbody>
           ${rows.map((r, i) => `<tr><td class="rk">${i + 1}</td><td>${esc(pname(r.id))}</td><td><b>${r.w}</b></td><td>${r.w}–${r.l}</td><td class="mono ${r.pd > 0 ? "pos" : r.pd < 0 ? "neg" : ""}">${r.gp ? (r.pd > 0 ? "+" : "") + r.pd : "–"}</td></tr>`).join("")}
           </tbody></table></div>
-          <div class="hist">${games.map(g => gameRow(g, "Game " + g.seq + (g.court ? " · Court " + g.court : ""))).join("")}</div></div>`;
+          <div class="hist">${games.map(g => gameRow(g, (g.added ? "Added game" : "Game " + g.seq) + (g.court ? " · Court " + g.court : ""))).join("")}</div></div>`;
       }).join("")}</section>`;
   }
   const cur = stages[stages.length - 1], left = cur.games.filter(g => g.status === "scheduled").length;
@@ -811,6 +825,19 @@ function viewGroups(){
         <div class="field"><label for="lateGroup">Group</label><select id="lateGroup">${gs.map(g => `<option value="${g.group}" ${g.group === (gs[1] || gs[0]).group ? "selected" : ""}>${esc(fxLabel(g))}</option>`).join("")}</select></div>
       </div>
       <div><button class="btn primary" data-act="addLate">Add to group</button></div></section>`;
+  }
+  if (S.canWrite) {
+    const f = S.addForm || {}, gsAll = [...new Map(cur.games.map(g => [g.group, g])).values()].sort((a, b) => a.group - b.group);
+    const gi = parseInt(f.group ?? gsAll[0].group, 10);
+    const members = [...new Set(cur.games.filter(g => g.group === gi).flatMap(g => [...g.a, ...g.b]))];
+    const pool = [...members, ...activeIds().filter(id => !members.includes(id))];
+    const pick = (key, label) => `<div class="field"><label for="add-${key}">${label}</label><select id="add-${key}" data-add="${key}"><option value="">Choose…</option>${pool.map(id => `<option value="${id}" ${f[key] === id ? "selected" : ""}>${esc(pname(id))}</option>`).join("")}</select></div>`;
+    html += `<section class="card"><h2>Add a game</h2>
+      <p class="hint">Log a game that isn't on the list, for example one that was played but went missing. It counts for the group table and the standings.</p>
+      <div class="row"><div class="field"><label for="add-group">Group</label><select id="add-group" data-add="group">${gsAll.map(g => `<option value="${g.group}" ${g.group === gi ? "selected" : ""}>${esc(fxLabel(g))}</option>`).join("")}</select></div></div>
+      <div class="row">${pick("a1", "Team 1")}${pick("a2", "&nbsp;")}<div class="field" style="flex:0 0 84px"><label for="add-sa">Score</label><input class="num" id="add-sa" data-add="sa" inputmode="numeric" value="${esc(f.sa ?? "")}"></div></div>
+      <div class="row">${pick("b1", "Team 2")}${pick("b2", "&nbsp;")}<div class="field" style="flex:0 0 84px"><label for="add-sb">Score</label><input class="num" id="add-sb" data-add="sb" inputmode="numeric" value="${esc(f.sb ?? "")}"></div></div>
+      <div><button class="btn primary" data-act="addGame">Add game</button></div></section>`;
   }
   if (S.canWrite) {
     if (cur.kind === "final") html += `<section class="card"><h2>Finals are on</h2><p class="hint">Results and the champion are on the Finals tab.</p><div><button class="btn" data-goto="bracket">Go to Finals</button></div></section>`;
@@ -928,11 +955,13 @@ $("#tabs").addEventListener("click", e => {
 });
 $("#view").addEventListener("input", e => {
   if (e.target.id === "lateName") { S.lateName = e.target.value; return; }
+  if (e.target.dataset.add) { (S.addForm = S.addForm || {})[e.target.dataset.add] = e.target.value.replace(e.target.tagName === "INPUT" ? /\D/g : /$^/, ""); return; }
   const k = e.target.dataset.score; if (!k) return;
   const [key, side] = k.split("|"); e.target.value = e.target.value.replace(/\D/g, "").slice(0, 2);
   (S.drafts[key] = S.drafts[key] || {})[side] = e.target.value;
 });
 $("#view").addEventListener("change", async e => {
+  if (e.target.dataset.add) { (S.addForm = S.addForm || {})[e.target.dataset.add] = e.target.value; if (e.target.dataset.add === "group") render(); return; }
   const k = e.target.dataset.setting; if (!k) return;
   const next = { ...S.settings, [k]: k === "format" ? e.target.value : parseInt(e.target.value, 10) };
   const body = { courts: next.courts, target: next.target, bracketTarget: next.bracketTarget, fixtureRounds: next.fixtureRounds || 0, format: next.format };
@@ -970,6 +999,7 @@ $("#view").addEventListener("click", async e => {
       case "fillAll": await fillAll(); break;
       case "startFx": await startFixtures(); break;
       case "drawRandom": await drawStage("random"); break;
+      case "addGame": await addManualGame(); break;
       case "addLate": await addToGroup($("#lateName").value, parseInt($("#lateGroup").value, 10)); break;
       case "nextStage": if (armed("ns")) await drawStage("seeded"); break;
       case "startFinals": if (armed("sf")) await drawStage("final"); break;
