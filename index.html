@@ -566,7 +566,12 @@ async function saveResult(m){
 async function saveEdit(m){
   const [sa, sb] = readScores("e-" + m.id);
   if (!Number.isFinite(sa) || !Number.isFinite(sb) || sa === sb || sa < 0 || sb < 0) { toast("Enter two different scores."); return; }
-  if (await write(() => store.update("matches", m.id, { sa, sb }))) { S.editing = null; delete S.drafts["e-" + m.id]; render(); toast("Score updated"); }
+  const wasLive = m.status === "live", fresh = m.status !== "done";
+  const body = fresh ? { sa, sb, status: "done", finished: Date.now(), court: m.court || m.preCourt || (m.slot != null ? m.slot + 1 : 1) } : { sa, sb };
+  if (!(await write(() => store.update("matches", m.id, body)))) return;
+  S.editing = null; delete S.drafts["e-" + m.id]; render(); toast(fresh ? "Result logged" : "Score updated");
+  if (wasLive && m.phase === "bracket") await advanceBracket({ ...m, ...body });
+  else if (wasLive) await startFixtures({ ...m, ...body });
 }
 
 /* ---------- bracket ---------- */
@@ -758,14 +763,14 @@ function viewBracket(){
 
 function gameRow(m, sub){
   if (S.editing === m.id) {
-    const d = S.drafts["e-" + m.id] || { a: m.sa, b: m.sb };
+    const d = S.drafts["e-" + m.id] || { a: m.sa ?? "", b: m.sb ?? "" };
     S.drafts["e-" + m.id] = d;
     return `<div class="hrow"><span class="t">${esc(teamName(m.a))}</span><span class="sc">vs</span><span class="t b">${esc(teamName(m.b))}</span>
       <div class="scoreline" style="grid-column:1/-1">${stepper("e-" + m.id, "a", d.a)}<span class="vs">–</span>${stepper("e-" + m.id, "b", d.b)}</div>
       <div class="sub"><button class="btn ghost" data-act="cancelEdit">Cancel</button><button class="btn primary" data-act="saveEdit" data-id="${m.id}">Save score</button></div></div>`;
   }
   if (m.status !== "done") return `<div class="hrow"><span class="t">${esc(teamName(m.a))}</span><span class="sc">vs</span><span class="t b">${esc(teamName(m.b))}</span>
-    <div class="sub"><span>${sub}</span><span class="tag ${m.status === "live" ? "rim" : ""}">${m.status === "live" ? "On court " + m.court : "Upcoming"}</span></div></div>`;
+    <div class="sub"><span>${sub}</span><span class="row"><span class="tag ${m.status === "live" ? "rim" : ""}">${m.status === "live" ? "On court " + m.court : "Upcoming"}</span>${S.canWrite ? `<button class="btn ghost" data-act="edit" data-id="${m.id}">Log score</button>` : ""}</span></div></div>`;
   const aw = m.sa > m.sb;
   const time = new Date(m.finished || m.created).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return `<div class="hrow"><span class="t ${aw ? "w" : ""}">${esc(teamName(m.a))}</span><span class="sc">${m.sa}–${m.sb}</span><span class="t b ${aw ? "" : "w"}">${esc(teamName(m.b))}</span>
