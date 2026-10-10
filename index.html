@@ -514,6 +514,32 @@ async function drawStage(kind){
   }
   toast(kind === "final" ? "Finals drawn" : kind === "random" ? "Groups drawn" : "Seeded groups drawn");
 }
+// Late arrival: keep the group's played/live games, redraw the rest with the newcomer in.
+async function addToGroup(name, gi){
+  const cur = stagesList().pop(); if (!cur) return;
+  name = name.trim().slice(0, 40); if (!name) { toast("Type the new player's name."); return; }
+  let p = S.players.find(x => x.name.toLowerCase() === name.toLowerCase());
+  if (p && cur.games.some(g => [...g.a, ...g.b].includes(p.id))) { toast(`${p.name} is already in this stage.`); return; }
+  if (!p) {
+    const id = newId(); p = { id, name, active: true, created: Date.now() };
+    if (!(await write(() => store.set("players", id, { name, active: true, created: p.created })))) return;
+    S.players = [...S.players, p];
+  } else if (p.active === false) await write(() => store.update("players", p.id, { active: true }));
+  const games = cur.games.filter(g => g.group === gi);
+  const kept = games.filter(g => g.status !== "scheduled");
+  const members = [...new Set(games.flatMap(g => [...g.a, ...g.b])), p.id];
+  const G = new Set(cur.games.map(g => g.group)).size, g0 = games[0];
+  const left = Math.max(3, gamesInGroup(members.length) - kept.length);
+  const plan = searchFixtures(members, 1, left, kept, 500).flat();
+  for (const g of games.filter(g => g.status === "scheduled")) if (!(await write(() => store.del("matches", g.id)))) return;
+  let t = Date.now();
+  for (let i = 0; i < plan.length; i++) {
+    const seq = kept.length + i + 1;
+    if (!(await write(() => store.set("matches", newId(), { phase: g0.phase, fixture: true, stage: cur.stage, kind: cur.kind, group: gi, gname: g0.gname, round: (seq - 1) * G + gi, slot: gi, seq, preCourt: g0.preCourt, a: plan[i].a, b: plan[i].b, sa: null, sb: null, status: "scheduled", court: null, created: t++ })))) return;
+  }
+  S.lateName = "";
+  toast(`${p.name} added to ${fxLabel(g0)}: ${plan.length} games left`);
+}
 async function redrawStage(){
   const cur = stagesList().pop(); if (!cur || cur.games.some(g => g.status !== "scheduled")) return;
   for (const g of cur.games) if (!(await write(() => store.del("matches", g.id)))) return;
@@ -771,6 +797,16 @@ function viewGroups(){
   }
   const cur = stages[stages.length - 1], left = cur.games.filter(g => g.status === "scheduled").length;
   const untouched = cur.games.every(g => g.status === "scheduled");
+  if (S.canWrite && cur.games.some(g => g.status === "scheduled")) {
+    const gs = [...new Map(cur.games.map(g => [g.group, g])).values()].sort((a, b) => a.group - b.group);
+    html += `<section class="card"><h2>Late arrival</h2>
+      <p class="hint">Add someone to a group mid-stage. Games already played or in progress stay as they are; the group's remaining games are redrawn so the new player is in every one and nobody repeats a partner.</p>
+      <div class="row">
+        <div class="field" style="flex:2 1 160px"><label for="lateName">Name</label><input type="text" id="lateName" autocomplete="off" maxlength="40" placeholder="e.g. Luca" value="${esc(S.lateName || "")}"></div>
+        <div class="field"><label for="lateGroup">Group</label><select id="lateGroup">${gs.map(g => `<option value="${g.group}" ${g.group === (gs[1] || gs[0]).group ? "selected" : ""}>${esc(fxLabel(g))}</option>`).join("")}</select></div>
+      </div>
+      <div><button class="btn primary" data-act="addLate">Add to group</button></div></section>`;
+  }
   if (S.canWrite) {
     if (cur.kind === "final") html += `<section class="card"><h2>Finals are on</h2><p class="hint">Results and the champion are on the Finals tab.</p><div><button class="btn" data-goto="bracket">Go to Finals</button></div></section>`;
     else html += `<section class="card"><h2>What's next</h2>
@@ -886,6 +922,7 @@ $("#tabs").addEventListener("click", e => {
   S.tab = b.dataset.tab; S.armed = null; S.editing = null; try { localStorage.setItem("rn-tab", S.tab); } catch(e){} render();
 });
 $("#view").addEventListener("input", e => {
+  if (e.target.id === "lateName") { S.lateName = e.target.value; return; }
   const k = e.target.dataset.score; if (!k) return;
   const [key, side] = k.split("|"); e.target.value = e.target.value.replace(/\D/g, "").slice(0, 2);
   (S.drafts[key] = S.drafts[key] || {})[side] = e.target.value;
@@ -928,6 +965,7 @@ $("#view").addEventListener("click", async e => {
       case "fillAll": await fillAll(); break;
       case "startFx": await startFixtures(); break;
       case "drawRandom": await drawStage("random"); break;
+      case "addLate": await addToGroup($("#lateName").value, parseInt($("#lateGroup").value, 10)); break;
       case "nextStage": if (armed("ns")) await drawStage("seeded"); break;
       case "startFinals": if (armed("sf")) await drawStage("final"); break;
       case "redrawStage": if (armed("rg")) await redrawStage(); break;
