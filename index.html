@@ -141,7 +141,7 @@ input[type=text],select,input.num{font:500 1rem var(--f-body);padding:10px 12px;
     <nav class="tabs" role="tablist" id="tabs">
       <button role="tab" data-tab="courts" aria-selected="true">Courts</button>
       <button role="tab" data-tab="standings" aria-selected="false">Standings</button>
-      <button role="tab" data-tab="bracket" aria-selected="false">Bracket</button>
+      <button role="tab" data-tab="bracket" aria-selected="false">Finals</button>
       <button role="tab" data-tab="history" aria-selected="false">Fixtures</button>
       <button role="tab" data-tab="setup" aria-selected="false">Setup</button>
     </nav>
@@ -155,7 +155,7 @@ input[type=text],select,input.num{font:500 1rem var(--f-body);padding:10px 12px;
 "use strict";
 const S = {
   players: [], matches: [],
-  settings: { courts: 2, target: 17, bracketTarget: 21 },
+  settings: { courts: 2, target: 17, bracketTarget: 21, format: "groups" },
   bracket: null,
   mode: "connecting", canWrite: true,
   tab: "courts", drafts: {}, editing: null, armed: null,
@@ -384,7 +384,7 @@ function searchFixtures(ids, m, rounds, history, budgetMs){
 const gameMins = t => t <= 11 ? 7 : t <= 15 ? 10 : t <= 17 ? 12 : 14;
 const activeIds = () => S.players.filter(p => p.active !== false).map(p => p.id);
 const netsFor = n => Math.min(S.settings.courts, Math.floor(n / 4));
-const fixtures = () => S.matches.filter(m => m.fixture).sort((a, b) => a.round - b.round || a.slot - b.slot);
+const fixtures = () => S.matches.filter(m => m.fixture).sort((a, b) => (a.stage || 0) - (b.stage || 0) || a.round - b.round || a.slot - b.slot);
 function autoRounds(n){
   const m = netsFor(n); if (m < 1) return 0;
   if (n === 4 * m) return Math.min(n - 1, 9);
@@ -425,20 +425,100 @@ function busyPlayers(){ const s = new Set(); S.matches.filter(m => m.status === 
 function nextFixture(court, busy, taken){
   const pending = fixtures().filter(f => f.status === "scheduled" && !taken.has(f.id));
   if (!pending.length) return null;
-  const cands = pending.filter(f => f.round === pending[0].round && ![...f.a, ...f.b].some(id => busy.has(id)));
+  const free = f => ![...f.a, ...f.b].some(id => busy.has(id));
+  if (pending[0].stage != null) {
+    const pool = pending.filter(f => f.stage === pending[0].stage && free(f));
+    return pool.find(f => f.preCourt === court) || pool[0] || null;
+  }
+  const cands = pending.filter(f => f.round === pending[0].round && free(f));
   return cands.find(f => f.slot === court - 1) || cands[0] || null;
 }
 async function startFixtures(finished){
   if (S.bracket) return;
   const busy = busyPlayers(), taken = new Set();
   if (finished) [...finished.a, ...finished.b].forEach(id => busy.delete(id));
-  for (let c = 1; c <= S.settings.courts; c++) {
+  // The court that just freed up picks first, so a group keeps its own net.
+  const courts = [...Array(S.settings.courts)].map((_, i) => i + 1);
+  if (finished && finished.court) courts.sort((x, y) => (y === finished.court) - (x === finished.court));
+  for (const c of courts) {
     const live = liveOnCourt(c);
     if (live && !(finished && live.id === finished.id)) continue;
     const f = nextFixture(c, busy, taken); if (!f) continue;
     if (!(await write(() => store.update("matches", f.id, { status: "live", court: c, started: Date.now() })))) return;
     taken.add(f.id); [...f.a, ...f.b].forEach(id => busy.add(id));
   }
+}
+
+/* ---------- groups format ---------- */
+// Split n players into groups of 4–5 (6–7 only when the numbers force it).
+function splitSizes(n){
+  const g = Math.max(1, Math.floor(n / 4)), base = Math.floor(n / g), extra = n % g;
+  return [...Array(g)].map((_, i) => base + (i < extra ? 1 : 0));
+}
+const gamesInGroup = k => k === 4 ? 3 : k;
+// Every partner pairing once: 4 → 3 games; 5 → 5 games, one person sits each game.
+function groupGames(ids){
+  const k = ids.length;
+  if (k === 4) return [[0,1,2,3],[0,2,1,3],[0,3,1,2]].map(([p,q,r,t]) => ({ a: [ids[p], ids[q]], b: [ids[r], ids[t]] }));
+  if (k === 5) return [0,1,2,3,4].map(i => ({ a: [ids[(i+1)%5], ids[(i+4)%5]], b: [ids[(i+2)%5], ids[(i+3)%5]] }));
+  return searchFixtures(ids, 1, k, [], 300).flat();
+}
+function stagesList(){
+  const by = {};
+  fixtures().forEach(f => { if (f.stage != null) (by[f.stage] = by[f.stage] || []).push(f); });
+  return Object.keys(by).map(Number).sort((a, b) => a - b).map(st => ({ stage: st, kind: by[st][0].kind, games: by[st] }));
+}
+const tierNames = ["Gold", "Silver", "Bronze", "Copper"];
+const stageTitle = (kind, st) => kind === "final" ? "Finals" : `Stage ${st} · ${kind === "random" ? "Random groups" : "Seeded groups"}`;
+function fxLabel(f){
+  if (f.stage == null) return "Round " + f.round;
+  return f.kind === "final" ? f.gname + " final" : "Group " + f.gname;
+}
+function groupsPlanText(n){
+  if (n < 4) return "Add at least 4 players.";
+  const sizes = splitSizes(n), nets = Math.max(1, S.settings.courts);
+  const perCourt = new Array(nets).fill(0); sizes.forEach((k, i) => perCourt[i % nets] += gamesInGroup(k));
+  const mins = Math.max(...perCourt) * (gameMins(S.settings.target) + 3);
+  const desc = [...new Set(sizes)].map(k => k === 4 ? "groups of 4 play 3 games (3 each)" : `groups of ${k} play ${gamesInGroup(k)} games (${Math.round(gamesInGroup(k) * 4 / k)} each)`).join("; ");
+  return `${n} players → ${sizes.length} group${sizes.length > 1 ? "s" : ""} of ${sizes.join(" + ")}. ${desc[0].toUpperCase() + desc.slice(1)}. About ${mins} min per stage${sizes.length > nets ? ` (${sizes.length} groups share ${nets} net${nets > 1 ? "s" : ""}, so some wait)` : ""}.`;
+}
+function groupTable(games){
+  const t = {};
+  games.forEach(g => [...g.a, ...g.b].forEach(id => t[id] = t[id] || { id, w: 0, l: 0, pd: 0, gp: 0 }));
+  games.filter(g => g.status === "done").forEach(g => {
+    const aw = g.sa > g.sb;
+    g.a.forEach(id => { const r = t[id]; r.gp++; aw ? r.w++ : r.l++; r.pd += g.sa - g.sb; });
+    g.b.forEach(id => { const r = t[id]; r.gp++; aw ? r.l++ : r.w++; r.pd += g.sb - g.sa; });
+  });
+  return Object.values(t).sort((x, y) => y.w - x.w || y.pd - x.pd);
+}
+async function drawStage(kind){
+  const st = computeStats();
+  let ids = activeIds();
+  if (ids.length < 4) { toast("Need at least 4 players."); return; }
+  if (kind === "random") ids = ids.map(id => [Math.random(), id]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+  else { const order = ranked(st).map(r => r.id); ids = order.filter(id => ids.includes(id)); }
+  const leftovers = fixtures().filter(f => f.status === "scheduled");
+  for (const f of leftovers) if (!(await write(() => store.del("matches", f.id)))) return;
+  const stage = fixtures().filter(f => f.status !== "scheduled").reduce((m, f) => Math.max(m, f.stage || 0), 0) + 1;
+  const sizes = splitSizes(ids.length), groups = []; let at = 0;
+  sizes.forEach(k => { groups.push(ids.slice(at, at + k)); at += k; });
+  const G = groups.length; let t = Date.now();
+  for (let gi = 0; gi < G; gi++) {
+    const games = groupGames(groups[gi]);
+    const gname = kind === "final" ? (tierNames[gi] || "Tier " + (gi + 1)) : String.fromCharCode(65 + gi);
+    for (let i = 0; i < games.length; i++) {
+      const ok = await write(() => store.set("matches", newId(), { phase: kind === "final" ? "final" : "pool", fixture: true, stage, kind, group: gi, gname, round: i * G + gi, slot: gi, seq: i + 1, preCourt: gi % Math.max(1, S.settings.courts) + 1, a: games[i].a, b: games[i].b, sa: null, sb: null, status: "scheduled", court: null, created: t++ }));
+      if (!ok) return;
+    }
+  }
+  toast(kind === "final" ? "Finals drawn" : kind === "random" ? "Groups drawn" : "Seeded groups drawn");
+}
+async function redrawStage(){
+  const cur = stagesList().pop(); if (!cur || cur.games.some(g => g.status !== "scheduled")) return;
+  for (const g of cur.games) if (!(await write(() => store.del("matches", g.id)))) return;
+  S.matches = S.matches.filter(m => !cur.games.includes(m));
+  await drawStage(cur.kind);
 }
 
 /* ---------- results ---------- */
@@ -536,19 +616,19 @@ function viewCourts(){
         const f = nextFixture(c, previewBusy, previewTaken);
         if (f) {
           previewTaken.add(f.id); [...f.a, ...f.b].forEach(id => previewBusy.add(id));
-          body = `<span class="label">Up next · Round ${f.round}</span><div class="matchup">${teamBlock(f.a, "a", st)}<span class="vs">VS</span>${teamBlock(f.b, "b", st)}</div>
+          body = `<span class="label">Up next · ${esc(fxLabel(f))}</span><div class="matchup">${teamBlock(f.a, "a", st)}<span class="vs">VS</span>${teamBlock(f.b, "b", st)}</div>
             ${S.canWrite ? `<button class="btn primary" data-act="startFx">Start game</button>` : ""}`;
         } else body = `<p class="hint">The next fixture starts here when its players come off the other court.</p>`;
-      } else if (!fxAll.length) body = `<p class="hint">No fixtures yet. Create the fixture list on the Fixtures tab, or start a one-off game.</p>
-          <div class="row"><button class="btn primary" data-goto="history">Create fixtures</button>${S.canWrite ? `<button class="btn" data-act="fill" data-court="${c}">One-off game</button>` : ""}</div>`;
-      else body = `<p class="hint">All fixtures played. Start an extra game, or head to the Bracket tab.</p>${S.canWrite ? `<button class="btn primary" data-act="fill" data-court="${c}">Start extra game</button>` : ""}`;
+      } else if (!fxAll.length) body = `<p class="hint">Nothing scheduled yet. ${S.settings.format === "fixtures" ? "Create the fixture list" : "Draw the groups"} on the Fixtures tab, or start a one-off game.</p>
+          <div class="row"><button class="btn primary" data-goto="history">${S.settings.format === "fixtures" ? "Create fixtures" : "Draw groups"}</button>${S.canWrite ? `<button class="btn" data-act="fill" data-court="${c}">One-off game</button>` : ""}</div>`;
+      else body = `<p class="hint">Everything scheduled has been played. ${S.settings.format === "fixtures" ? "Head to the Finals tab, or start an extra game." : "Start the next stage or the finals on the Fixtures tab, or play an extra game."}</p>${S.canWrite ? `<button class="btn primary" data-act="fill" data-court="${c}">Start extra game</button>` : ""}`;
       courts.push(`<div class="court open"><div class="court-head"><span class="ring"></span><h3>Court ${c}</h3><span class="tag">Open</span></div>${body}</div>`);
       continue;
     }
     const d = S.drafts[m.id] || {};
-    const target = m.phase === "bracket" ? S.settings.bracketTarget : S.settings.target;
+    const target = m.phase === "bracket" || m.phase === "final" ? S.settings.bracketTarget : S.settings.target;
     courts.push(`<div class="court"><div class="court-head"><span class="ring"></span><h3>Court ${c}</h3>
-      <span class="tag ${m.phase === "bracket" ? "rim" : ""}">${m.phase === "bracket" ? esc(slotName[m.slot]) : (m.fixture ? "Round " + m.round + " · " : "") + "To " + target}</span></div>
+      <span class="tag ${m.phase === "bracket" || m.phase === "final" ? "rim" : ""}">${m.phase === "bracket" ? esc(slotName[m.slot]) : (m.fixture ? fxLabel(m) + " · " : "") + "To " + target}</span></div>
       <div class="matchup">${teamBlock(m.a, "a", m.phase === "pool" ? st : null)}<span class="vs">VS</span>${teamBlock(m.b, "b", m.phase === "pool" ? st : null)}</div>
       ${S.canWrite ? `<div class="scoreline">${stepper(m.id, "a", d.a)}<span class="vs">–</span>${stepper(m.id, "b", d.b)}</div>
       <div class="actions">
@@ -573,20 +653,20 @@ function viewCourts(){
 function viewStandings(){
   const st = computeStats(); const rows = ranked(st);
   if (!rows.length) return `<div class="empty"><b>No players yet.</b><span>Add names under Setup.</span><button class="btn primary" data-goto="setup">Go to Setup</button></div>`;
-  const cut = S.players.length >= 8 ? 8 : 4;
+  const cut = S.settings.format === "fixtures" ? (S.players.length >= 8 ? 8 : 4) : 0;
   return `<section class="sec">
     <div class="sec-head"><h2>Individual standings</h2><span class="label">Pool play</span></div>
     <div class="tablewrap"><table>
-      <thead><tr><th>#</th><th>Player</th><th>GP</th><th>W–L</th><th>Win%</th><th>+/− per game</th><th>Rating</th></tr></thead>
+      <thead><tr><th>#</th><th>Player</th><th>Pts</th><th>GP</th><th>W–L</th><th>Win%</th><th>+/− per game</th><th>Rating</th></tr></thead>
       <tbody>${rows.map((r, i) => {
         const pd = r.games ? (r.pf - r.pa) / r.games : 0;
         return `<tr class="${i === cut - 1 && rows.length > cut ? "cut" : ""}">
           <td class="rk">${i + 1}</td><td>${esc(r.name)}${r.active ? "" : ` <span class="tag">out</span>`}</td>
-          <td>${r.games}</td><td>${r.w}–${r.l}</td><td>${r.games ? Math.round(100 * r.w / r.games) + "%" : "–"}</td>
+          <td><b>${r.w}</b></td><td>${r.games}</td><td>${r.w}–${r.l}</td><td>${r.games ? Math.round(100 * r.w / r.games) + "%" : "–"}</td>
           <td class="mono ${pd > 0 ? "pos" : pd < 0 ? "neg" : ""}">${r.games ? (pd > 0 ? "+" : "") + pd.toFixed(1) : "–"}</td>
           <td class="mono">${Math.round(r.elo)}</td></tr>`;
       }).join("")}</tbody></table></div>
-    <p class="hint">Ranked by win %, then average point differential, then rating. Rating is an Elo score that moves more for upset wins and bigger margins; matchmaking uses it to balance teams. The yellow line marks the top ${cut}, who make the bracket.</p>
+    <p class="hint">1 point per win, across every group stage (finals not included). Ranked by win %, so groups of 4 and 5 compare fairly, then point difference per game, then rating. ${S.settings.format === "fixtures" ? `The yellow line marks the top ${cut}, who make the bracket.` : "This ranking seeds the next stage and the finals."}</p>
   </section>`;
 }
 
@@ -596,7 +676,34 @@ function bracketTeam(m, side, seedOf){
   const won = m.status === "done" && ((side === "a") === (m.sa > m.sb));
   return `<div class="bt ${won ? "w" : ""}"><span class="sd">${seedOf(ids) ?? ""}</span><span class="nm">${esc(teamName(ids))}</span><span class="sc">${m.status === "done" ? sc : ""}</span></div>`;
 }
+function viewFinals(){
+  const fin = stagesList().filter(x => x.kind === "final").pop();
+  if (!fin) {
+    if (S.settings.format === "fixtures") return "";
+    const n = activeIds().length, sizes = splitSizes(n);
+    return `<section class="card"><h2>Gold & Silver finals</h2>
+      <p class="hint">Ranked by the overall standings, the top players form the Gold group, the next the Silver group${sizes.length > 2 ? ", and so on" : ""}. Each group plays every partner combination, so you play with and against the people at your level. Best record in Gold is champion; point difference breaks ties.</p>
+      <p class="hint">${n >= 4 ? sizes.map((k, i) => `${tierNames[i] || "Tier " + (i + 1)}: ${k} players`).join(" · ") + `. Finals games go to ${S.settings.bracketTarget}.` : "Add players first."}</p>
+      ${S.canWrite ? `<div><button class="btn primary${armCls("sf")}" data-act="startFinals" ${n >= 4 ? "" : "disabled"}>${S.armed === "sf" ? "Tap again to start finals" : "Start finals"}</button></div>` : ""}</section>`;
+  }
+  const byG = {}; fin.games.forEach(g => (byG[g.group] = byG[g.group] || []).push(g));
+  return Object.keys(byG).map(Number).sort((a, b) => a - b).map(gi => {
+    const games = byG[gi].sort((a, b) => a.seq - b.seq), rows = groupTable(games), name = games[0].gname;
+    const complete = games.every(g => g.status === "done");
+    const tied = complete && rows.length > 1 && rows[0].w === rows[1].w && rows[0].pd === rows[1].pd;
+    const banner = complete ? (tied
+      ? `<div class="banner"><b>${esc(name)} is tied</b> between ${esc(pname(rows[0].id))} and ${esc(pname(rows[1].id))}. Play one decider: those two partner up against the next two.</div>`
+      : `<div class="${gi === 0 ? "champ" : "banner"}" style="display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline"><span class="label" style="color:inherit">${esc(name)} ${gi === 0 ? "champion" : "winner"}</span><span class="${gi === 0 ? "big" : ""}"><b>${esc(pname(rows[0].id))}</b></span></div>`) : "";
+    return `<section class="sec">${banner}<div class="sec-head"><h2>${esc(name)} final</h2><span class="label">Court ${games[0].preCourt} · to ${S.settings.bracketTarget}</span></div>
+      <div class="tablewrap"><table><thead><tr><th>#</th><th>Player</th><th>Pts</th><th>W–L</th><th>+/−</th></tr></thead><tbody>
+      ${rows.map((r, i) => `<tr><td class="rk">${i + 1}</td><td>${esc(pname(r.id))}</td><td><b>${r.w}</b></td><td>${r.w}–${r.l}</td><td class="mono ${r.pd > 0 ? "pos" : r.pd < 0 ? "neg" : ""}">${r.gp ? (r.pd > 0 ? "+" : "") + r.pd : "–"}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="hist">${games.map(g => gameRow(g, "Game " + g.seq + (g.court ? " · Court " + g.court : ""))).join("")}</div></section>`;
+  }).join("");
+}
 function viewBracket(){
+  const fin = viewFinals();
+  if (S.settings.format !== "fixtures" && !S.bracket) return fin;
   const b = S.bracket;
   if (!b) {
     const n = S.players.filter(p => p.active !== false).length;
@@ -639,7 +746,49 @@ function gameRow(m, sub){
     <div class="sub"><span>${sub} · ${time}</span>
     ${S.canWrite ? `<span class="row"><button class="btn ghost" data-act="edit" data-id="${m.id}">Edit</button>${m.fixture ? "" : `<button class="btn ghost danger${armCls("d" + m.id)}" data-act="del" data-id="${m.id}">${S.armed === "d" + m.id ? "Tap to delete" : "Delete"}</button>`}</span>` : ""}</div></div>`;
 }
+function viewGroups(){
+  const n = activeIds().length, stages = stagesList();
+  let html = "";
+  if (!stages.length) {
+    return html + `<section class="card"><h2>Group stage</h2>
+      <p class="hint">Players are split at random into groups of 4 or 5. Inside a group everyone partners everyone once, so each group plays every combination. 1 point per win. After that you can run seeded groups (top players together, then the next, and so on) and finish with Gold and Silver finals.</p>
+      <p class="hint">${groupsPlanText(n)}</p>
+      ${S.canWrite ? `<div><button class="btn primary" data-act="drawRandom" ${n >= 4 ? "" : "disabled"}>Draw random groups</button></div>` : ""}</section>`;
+  }
+  for (const stg of stages) {
+    const byG = {}; stg.games.forEach(g => (byG[g.group] = byG[g.group] || []).push(g));
+    const done = stg.games.filter(g => g.status === "done").length;
+    html += `<section class="sec"><div class="sec-head"><h2>${stageTitle(stg.kind, stg.stage)}</h2><span class="label">${done} of ${stg.games.length} played</span></div>
+      ${Object.keys(byG).map(Number).sort((a, b) => a - b).map(gi => {
+        const games = byG[gi].sort((a, b) => a.seq - b.seq), rows = groupTable(games), g0 = games[0];
+        const complete = games.every(g => g.status === "done");
+        return `<div class="sec"><div class="sec-head"><span class="label">${esc(fxLabel(g0))} · Court ${g0.preCourt}</span>${complete ? `<span class="tag">Done</span>` : games.some(g => g.status === "live") ? `<span class="tag rim">In play</span>` : ""}</div>
+          <div class="tablewrap"><table><thead><tr><th>#</th><th>Player</th><th>Pts</th><th>W–L</th><th>+/−</th></tr></thead><tbody>
+          ${rows.map((r, i) => `<tr><td class="rk">${i + 1}</td><td>${esc(pname(r.id))}</td><td><b>${r.w}</b></td><td>${r.w}–${r.l}</td><td class="mono ${r.pd > 0 ? "pos" : r.pd < 0 ? "neg" : ""}">${r.gp ? (r.pd > 0 ? "+" : "") + r.pd : "–"}</td></tr>`).join("")}
+          </tbody></table></div>
+          <div class="hist">${games.map(g => gameRow(g, "Game " + g.seq + (g.court ? " · Court " + g.court : ""))).join("")}</div></div>`;
+      }).join("")}</section>`;
+  }
+  const cur = stages[stages.length - 1], left = cur.games.filter(g => g.status === "scheduled").length;
+  const untouched = cur.games.every(g => g.status === "scheduled");
+  if (S.canWrite) {
+    if (cur.kind === "final") html += `<section class="card"><h2>Finals are on</h2><p class="hint">Results and the champion are on the Finals tab.</p><div><button class="btn" data-goto="bracket">Go to Finals</button></div></section>`;
+    else html += `<section class="card"><h2>What's next</h2>
+      <p class="hint">${left ? `${left} game${left > 1 ? "s" : ""} in this stage still to play. Starting the next stage drops them.` : "This stage is finished."} The next stage groups players by the overall standings: best players together, then the next group, and so on. Anyone added under Setup joins from the next stage.</p>
+      <p class="hint">${groupsPlanText(n)}</p>
+      <div class="row">
+        <button class="btn ${left ? "" : "primary"}${armCls("ns")}" data-act="nextStage">${S.armed === "ns" ? "Tap again to draw" : "Next stage: seeded groups"}</button>
+        <button class="btn${armCls("sf")}" data-act="startFinals">${S.armed === "sf" ? "Tap again to start finals" : "Start Gold & Silver finals"}</button>
+        ${untouched ? `<button class="btn ghost${armCls("rg")}" data-act="redrawStage">${S.armed === "rg" ? "Tap again to redraw" : "Redraw this stage"}</button>` : ""}
+      </div></section>`;
+  }
+  return html;
+}
 function viewHistory(){
+  if (S.settings.format !== "fixtures") {
+    const extra = S.matches.filter(m => m.phase === "pool" && !m.fixture && m.status === "done").sort((a, b) => (b.finished||0) - (a.finished||0));
+    return viewGroups() + (extra.length ? `<section class="sec"><div class="sec-head"><h2>Extra games</h2><span class="label">${extra.length} played</span></div><div class="hist">${extra.map(m => gameRow(m, "Court " + m.court)).join("")}</div></section>` : "");
+  }
   const ids = activeIds(), n = ids.length, fx = fixtures();
   const started = fx.some(f => f.status !== "scheduled");
   const lastStarted = fx.filter(f => f.status !== "scheduled").reduce((r, f) => Math.max(r, f.round), 0);
@@ -698,17 +847,21 @@ function viewSetup(){
   <section class="card">
     <h2>Format</h2>
     <div class="row">
+      <div class="field" style="flex-basis:100%"><label for="format">Schedule</label><select id="format" data-setting="format" ${dis}>
+        <option value="groups" ${S.settings.format !== "fixtures" ? "selected" : ""}>Groups of 4–5, then seeded groups, then finals</option>
+        <option value="fixtures" ${S.settings.format === "fixtures" ? "selected" : ""}>One rotating fixture list, then a bracket</option></select></div>
       <div class="field"><label for="courts">Nets in use</label><select id="courts" data-setting="courts" ${dis}>${[1,2,3,4].map(v => `<option ${v === S.settings.courts ? "selected" : ""}>${v}</option>`).join("")}</select></div>
-      <div class="field"><label for="target">Pool games to</label><select id="target" data-setting="target" ${dis}>${[11,15,17,21].map(v => `<option ${v === S.settings.target ? "selected" : ""}>${v}</option>`).join("")}</select></div>
-      <div class="field"><label for="btarget">Bracket games to</label><select id="btarget" data-setting="bracketTarget" ${dis}>${[15,17,21].map(v => `<option ${v === S.settings.bracketTarget ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label for="target">Group games to</label><select id="target" data-setting="target" ${dis}>${[11,15,17,21].map(v => `<option ${v === S.settings.target ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+      <div class="field"><label for="btarget">Finals games to</label><select id="btarget" data-setting="bracketTarget" ${dis}>${[15,17,21].map(v => `<option ${v === S.settings.bracketTarget ? "selected" : ""}>${v}</option>`).join("")}</select></div>
     </div>
     <p class="hint">${n >= 4 ? `With ${n} players, ${perRound} play at once and ${n - perRound} rest. A game to ${S.settings.target} runs about ${mins} minutes, so two hours of pool play gives each player around ${games2h} games.${S.settings.courts * 4 > n ? ` You only have enough people for ${Math.floor(n/4)} net${Math.floor(n/4) === 1 ? "" : "s"} at a time.` : ""}` : "Add players to see how the day will run."}</p>
   </section>
   <section class="card">
     <h2>How the day runs</h2>
-    <p class="hint"><b>1. Fixtures.</b> On the Fixtures tab, create the fixture list. It's a fixed schedule where everyone plays for themselves with a different partner each game. The Courts tab shows who's on each net. Save the score and the next fixture goes on.</p>
-    <p class="hint"><b>2. Extra games (optional).</b> If there's time left, the app keeps making fair games from the standings.</p>
-    <p class="hint"><b>3. Playoffs (about 45 minutes).</b> On the Bracket tab, build a bracket from the standings. The top 8 pair up 1+8, 2+7, 3+6, 4+5 for semis, a final, and a 3rd-place game.</p>
+    ${S.settings.format === "fixtures" ? `<p class="hint"><b>1. Fixtures.</b> On the Fixtures tab, create the fixture list: a fixed schedule where everyone plays for themselves with a different partner each game. Save a score and the next fixture goes on.</p>
+    <p class="hint"><b>2. Playoffs.</b> On the Finals tab, build a bracket from the standings.</p>` : `<p class="hint"><b>1. Random groups.</b> On the Fixtures tab, draw groups of 4 or 5. Each group stays on its own net and plays every partner combination. 1 point per win.</p>
+    <p class="hint"><b>2. Seeded groups.</b> Re-group by the standings: top players together, then the next, and so on. Points carry over. Repeat if there's time.</p>
+    <p class="hint"><b>3. Finals.</b> Gold (top players) and Silver groups play the same rotation. Best record in Gold wins.</p>`}
     <p class="hint">${S.mode === "shared" ? "Scores sync live for everyone who opens this page. People you've given edit access can log games from their own phones." : "This copy saves on this device only. Open the shared link to sync across phones."}</p>
   </section>
   ${S.canWrite ? `<section class="card"><h2>Start over</h2><p class="hint">Deletes every game and the bracket. Players stay.</p>
@@ -739,8 +892,8 @@ $("#view").addEventListener("input", e => {
 });
 $("#view").addEventListener("change", async e => {
   const k = e.target.dataset.setting; if (!k) return;
-  const next = { ...S.settings, [k]: parseInt(e.target.value, 10) };
-  const body = { courts: next.courts, target: next.target, bracketTarget: next.bracketTarget, fixtureRounds: next.fixtureRounds || 0 };
+  const next = { ...S.settings, [k]: k === "format" ? e.target.value : parseInt(e.target.value, 10) };
+  const body = { courts: next.courts, target: next.target, bracketTarget: next.bracketTarget, fixtureRounds: next.fixtureRounds || 0, format: next.format };
   if (await write(() => store.set("meta", "settings", body))) { S.settings = next; render(); }
 });
 $("#view").addEventListener("submit", async e => {
@@ -774,6 +927,10 @@ $("#view").addEventListener("click", async e => {
       case "fill": await fillCourt(parseInt(b.dataset.court, 10)); break;
       case "fillAll": await fillAll(); break;
       case "startFx": await startFixtures(); break;
+      case "drawRandom": await drawStage("random"); break;
+      case "nextStage": if (armed("ns")) await drawStage("seeded"); break;
+      case "startFinals": if (armed("sf")) await drawStage("final"); break;
+      case "redrawStage": if (armed("rg")) await redrawStage(); break;
       case "createFx": await createFixtures(false); break;
       case "redoFx": if (armed("rf")) await createFixtures(false); break;
       case "rebuildFx": if (armed("rb")) await createFixtures(true); break;
