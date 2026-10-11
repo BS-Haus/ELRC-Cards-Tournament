@@ -62,7 +62,7 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
           <div className="grid gap-5">
             <div className="text-[13px] font-bold uppercase tracking-[.2em] text-white/50">Game by game</div>
             <div className="text-[24px] font-extrabold leading-tight">
-              {me.timeline.filter((g) => g.won).length > me.timeline.length / 2 ? "Mostly up." : me.timeline.filter((g) => g.won).length === me.timeline.length / 2 ? "Even all day." : "A tough one."}{" "}
+              {(() => { const w = me.timeline.filter((g) => g.won).length, n = me.timeline.length; return w === n ? "Perfect day." : w === 0 ? "A tough one." : w > n / 2 ? "Mostly up." : w === n / 2 ? "Even all day." : "Up and down."; })()}{" "}
               <span className="text-white/60">Biggest swing {Math.max(...me.timeline.map((g) => Math.abs(g.mine - g.theirs)))} points.</span>
             </div>
             <GameBars games={me.timeline} names={names} />
