@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { StoryReel, CountUp, type Slide } from "@/components/StoryReel";
+import { finalWinTitle } from "@/lib/cards";
 import { Avatar, tierColor, fmtDate, LevelPill, RankBadge } from "@/components/ui";
 import { levelFor } from "@/lib/levels";
 import type { Recap, Moment, Finish } from "@/lib/recap";
@@ -19,7 +20,7 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
   const your = mine ? "Your" : me ? `${n(me.id)}'s` : "";
   const pair = (ids: string[]) => ids.map(n).join(" & ");
   const momentLine = (m: Moment) => <><b>{pair(m.winners)}</b> beat {pair(m.losers)} <span className="tnum font-mono font-black text-accent">{m.score[0]}–{m.score[1]}</span><span className="block text-[13px] text-white/50">{m.label}</span></>;
-  const finishText = (f: Finish) => (f.won ? `${f.tier} champion` : `${ordinal(f.position)} of ${f.of} in ${f.tier}`);
+  const finishText = (f: Finish) => (f.won ? finalWinTitle(f.tier) : `${ordinal(f.position)} of ${f.of} in the ${f.tier} final`);
 
   const slides: Slide[] = [];
   slides.push({
@@ -231,7 +232,7 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
               <div key={w.name} className="flex items-center gap-3 rounded-2xl p-4" style={{ background: `${c}${isMine ? "30" : "18"}`, border: `1px solid ${c}${isMine ? "90" : "40"}` }}>
                 {w.winner ? <Avatar p={names[w.winner]} size={44} /> : <span className="text-[28px]">🤝</span>}
                 <div className="min-w-0">
-                  <div className="text-[12px] font-bold uppercase tracking-[.14em]" style={{ color: c }}>{w.name}{isMine ? ` · ${mine ? "your" : "their"} final` : ""}</div>
+                  <div className="text-[12px] font-bold uppercase tracking-[.14em]" style={{ color: c }}>{w.name} final{isMine ? ` · ${mine ? "your" : "their"} final` : ""}</div>
                   <div className="truncate text-[22px] font-black">{w.winner ? n(w.winner) : w.tied.length ? `Tie: ${w.tied.map(n).join(" / ")}` : "Still playing"}</div>
                 </div>
               </div>

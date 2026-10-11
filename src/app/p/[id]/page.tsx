@@ -60,7 +60,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
       {(Object.keys(pr.tierWins).length > 0 || pr.bestPartner) && (
         <Section title="Highlights">
           <div className="grid gap-2">
-            {Object.entries(pr.tierWins).map(([t, n]) => (
+            {Object.entries(pr.tierWins).sort(([x], [y]) => x.localeCompare(y)).map(([t, n]) => (
               <div key={t} className="flex items-center gap-3 rounded-2xl p-4" style={{ background: `${tierColor(t)}18`, border: `1px solid ${tierColor(t)}40` }}>
                 <span className="text-xl" aria-hidden="true">★</span>
                 <span className="text-[15px] font-bold">{t} final winner{n > 1 ? ` ×${n}` : ""}</span>

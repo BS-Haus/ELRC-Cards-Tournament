@@ -2,7 +2,7 @@ import "server-only";
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
-import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line } from "@/lib/cards";
+import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle } from "@/lib/cards";
 
 /** `photo` is the profile picture's URL (versioned, so it can be cached for good), or null. */
 export type PlayerLite = { id: string; name: string; color: string; claimed: boolean; photo: string | null };
@@ -36,7 +36,7 @@ const lite = (p: typeof players.$inferSelect): PlayerLite => ({ id: p.id, name: 
 function toGame(g: typeof games.$inferSelect, st: Map<string, StageRow>): Game {
   const s = st.get(g.stageId)!;
   return {
-    id: g.id, stageNo: s.no, kind: s.kind, groupNo: g.groupNo, groupName: g.groupName, seq: g.seq, ord: g.ord, net: g.net,
+    id: g.id, stageNo: s.no, kind: s.kind, groupNo: g.groupNo, groupName: s.kind === "final" ? finalName(g.groupName) : g.groupName, seq: g.seq, ord: g.ord, net: g.net,
     a: [g.a1, g.a2], b: [g.b1, g.b2], subs: g.subs ?? [], scoreA: g.scoreA, scoreB: g.scoreB, status: g.status as Game["status"], decider: g.decider,
   };
 }
@@ -208,7 +208,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
         const pos = table.findIndex((r) => r.id === id) + 1;
         const { winner } = groupWinner(gg);
         if (winner === id) tierWins[gg[0].groupName] = (tierWins[gg[0].groupName] ?? 0) + 1;
-        finish = winner === id ? `${gg[0].groupName} winner` : `${gg[0].groupName} final · ${ordinal(pos)}`;
+        finish = winner === id ? finalWinTitle(gg[0].groupName) : `${gg[0].groupName} final · ${ordinal(pos)}`;
       }
     }
     return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), w: line.w, l: line.l, finish, points: eventPoints(eg, id).total };

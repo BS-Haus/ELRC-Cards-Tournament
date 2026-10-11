@@ -101,7 +101,7 @@ export function finishOf(games: Game[], id: string): Finish | null {
   return null;
 }
 
-/** Lower is better: Gold 1st beats Gold 2nd beats Silver 1st. */
+/** Lower is better: A final 1st beats A final 2nd beats B final 1st. */
 const finishScore = (f: Finish) => f.tierIndex * 100 + f.position;
 
 function myDay(ev: DayEvent, id: string, history: DayEvent[]): MyDay | null {

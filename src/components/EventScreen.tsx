@@ -8,7 +8,7 @@ import { useAction } from "@/components/useAction";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind } from "@/lib/cards";
+import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 
@@ -100,7 +100,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
           <span className="text-[34px]" aria-hidden="true">🏆</span>
           <span className="min-w-0">
             <span className="block text-[12px] font-black uppercase tracking-[.16em] opacity-70">{crown.tier} final</span>
-            <span className="block truncate text-[20px] font-black">{crown.id === me ? `You win ${crown.tier}!` : `${p(crown.id)?.name ?? "Someone"} wins ${crown.tier}!`}</span>
+            <span className="block truncate text-[20px] font-black">{crown.id === me ? `You win the ${crown.tier} final!` : `${p(crown.id)?.name ?? "Someone"} wins the ${crown.tier} final!`}</span>
           </span>
         </button>
       )}
@@ -328,7 +328,7 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: {
       {(g.winner || g.tied.length > 0) && (
         <div className="mx-3 mb-2 rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: `${tint}22`, color: tint }}>
           {g.winner
-            ? `★ ${name(g.winner)} ${final ? `wins ${g.name}` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)} on points` : ""}`
+            ? `★ ${name(g.winner)} ${final ? `wins the ${g.name} final` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)} on points` : ""}`
             : g.decider === "playing"
               ? `Decider: ${tiedNames} play two games to ${DECIDER_TO}, swapping partners. Most points across both wins.`
               : g.decider === "level"
@@ -421,7 +421,7 @@ function Podium({ groups, people }: { groups: GroupView[]; people: Record<string
             <div key={g.groupNo} className="spk-up flex items-center gap-3 rounded-2xl p-4" style={{ background: `${c}18`, border: `1px solid ${c}40` }}>
               <span className="text-[26px]" aria-hidden="true">{g.groupNo === 0 ? "🏆" : "★"}</span>
               <div className="min-w-0">
-                <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: c }}>{g.name} {g.groupNo === 0 ? "champion" : "winner"}</div>
+                <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: c }}>{finalWinTitle(g.name)}</div>
                 <div className="truncate text-[20px] font-black">{g.winner ? people[g.winner]?.name : g.tied.length ? `Tie: ${g.tied.map((id) => people[id]?.name).join(" / ")}` : "Not finished"}</div>
               </div>
             </div>
@@ -464,7 +464,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
           <p className="mt-1 text-[13px] text-dim">{plan}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {!current && <button disabled={pending || here < 4} onClick={() => run(() => drawStage(ev.id, "random"), "Groups drawn")} className={btnPrimary}>Draw random groups</button>}
-            {/* Two stages is the format: random groups, then Gold / Silver finals. A middle
+            {/* Two stages is the format: random groups, then A / B finals. A middle
                 "regroup by level" stage only earns its place in a big field (16+). */}
             {current && current.kind !== "final" && (
               <>

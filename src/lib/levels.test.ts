@@ -14,13 +14,13 @@ const day = [...stage(1, "random"), ...stage(2, "final")];
 describe("points and levels", () => {
   it("pays for turning up, games, wins and the finish", () => {
     const e = eventPoints(day, "p0");
-    expect(e.parts.map((p) => p.label)).toContain("Gold champion");
+    expect(e.parts.map((p) => p.label)).toContain("Champion");
     expect(e.total).toBe(e.parts.reduce((n, p) => n + p.points, 0));
     expect(e.total).toBeGreaterThan(POINTS.showedUp + POINTS.champion[0]);
   });
-  it("gives the Gold champion more than the Silver champion, and nothing to someone who didn't play", () => {
+  it("gives the champion more than the B final winner, and nothing to someone who didn't play", () => {
     expect(eventPoints(day, "p0").total).toBeGreaterThan(eventPoints(day, "p4").total);
-    expect(eventPoints(day, "p4").parts.map((p) => p.label)).toContain("Silver champion");
+    expect(eventPoints(day, "p4").parts.map((p) => p.label)).toContain("B final winner");
     expect(eventPoints(day, "nobody")).toEqual({ total: 0, parts: [] });
   });
   it("turns points into five ranks of three divisions", () => {

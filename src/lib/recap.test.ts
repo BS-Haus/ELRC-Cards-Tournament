@@ -28,7 +28,7 @@ describe("recap", () => {
 
   it("names the winner of every final", () => {
     const r = buildRecap(week2, null, [week1, week2]);
-    expect(r.winners.map((w) => w.name)).toEqual(["Gold", "Silver"]);
+    expect(r.winners.map((w) => w.name)).toEqual(["A", "B"]);
     expect(r.winners[0].winner).toBe("p0");
     expect(r.me).toBeNull();
   });
@@ -36,17 +36,17 @@ describe("recap", () => {
   it("gives each player their own numbers, finish and partners", () => {
     const r = buildRecap(week2, "p0", [week1, week2]);
     expect(r.me?.line.l).toBe(0);
-    expect(r.me?.finish).toMatchObject({ tier: "Gold", position: 1, won: true });
+    expect(r.me?.finish).toMatchObject({ tier: "A", position: 1, won: true });
     expect(r.me?.streak).toBe(r.me?.line.w);
     expect(r.me?.bestPartner).not.toBeNull();
     expect(r.me?.toughest).toBeNull(); // never lost
     const bottom = buildRecap(week2, "p7", [week1, week2]).me!;
-    expect(bottom.finish?.tier).toBe("Silver");
+    expect(bottom.finish?.tier).toBe("B");
     expect(bottom.toughest).not.toBeNull();
   });
 
   it("finds the player's finish in the finals", () => {
-    expect(finishOf(week2.games, "p4")).toMatchObject({ tier: "Silver", position: 1, won: true });
+    expect(finishOf(week2.games, "p4")).toMatchObject({ tier: "B", position: 1, won: true });
     expect(finishOf(week2.games, "nobody")).toBeNull();
   });
 

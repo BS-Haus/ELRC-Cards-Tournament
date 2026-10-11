@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { players, eventPhotos } from "@/db/schema";
 import { getRecap, getStory } from "@/lib/data";
+import { finalWinTitle } from "@/lib/cards";
 import { tierColor } from "@/components/ui";
 
 // A story-sized (1080×1920) card of someone's day, to save or post. Same numbers as the reel:
@@ -65,7 +66,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             {f && (
               <div style={{ display: "flex", flexDirection: "column", marginTop: 90, padding: 48, borderRadius: 40, background: `${c}22`, border: `3px solid ${c}66` }}>
                 <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: 4, color: c, textTransform: "uppercase" }}>{`${f.tier} final`}</div>
-                <div style={{ fontSize: 80, fontWeight: 900, marginTop: 8, color: f.won ? c : "#F4F5F6" }}>{f.won ? `🏆 ${f.tier} champion` : `${ordinal(f.position)} of ${f.of}`}</div>
+                <div style={{ fontSize: 80, fontWeight: 900, marginTop: 8, color: f.won ? c : "#F4F5F6" }}>{f.won ? `🏆 ${finalWinTitle(f.tier)}` : `${ordinal(f.position)} of ${f.of}`}</div>
               </div>
             )}
             {me.bestPartner && <div style={{ fontSize: 40, color: "#C9CED2", marginTop: 56 }}>{`Best partner: ${name(me.bestPartner.id)} (${me.bestPartner.w}/${me.bestPartner.gp})`}</div>}
@@ -80,7 +81,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         <div style={{ display: "flex", flexDirection: "column", marginTop: "auto", gap: 18 }}>
           {recap.winners.map((w) => (
             <div key={w.name} style={{ display: "flex", fontSize: 40 }}>
-              <span style={{ color: tierColor(w.name), fontWeight: 800, width: 240 }}>{w.name}</span>
+              <span style={{ color: tierColor(w.name), fontWeight: 800, width: 240 }}>{`${w.name} final`}</span>
               <span style={{ fontWeight: 700 }}>{w.winner ? name(w.winner) : w.tied.length ? `Tie: ${w.tied.map(name).join(" / ")}` : "Still playing"}</span>
             </div>
           ))}
@@ -118,7 +119,7 @@ async function storyCard(id: string) {
               : <div style={{ width: 360, height: 360, borderRadius: 180, border: "14px solid #FFCF5C", background: names[champ.id]?.color ?? "#CBFB4F", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 170, color: "#0c0e10" }}>{name(champ.id)[0]}</div>}
             <div style={{ fontSize: 40, letterSpacing: 14, color: "#FFCF5C", marginTop: 56 }}>CHAMPION</div>
             <div style={{ fontSize: 120, marginTop: 8 }}>{name(champ.id)}</div>
-            <div style={{ fontSize: 42, color: "#C9CED2", marginTop: 12 }}>{`${champ.line.w}–${champ.line.l} on the day · ${champ.titles === 1 ? "first Gold title" : `${ordinal(champ.titles)} Gold title`}`}</div>
+            <div style={{ fontSize: 42, color: "#C9CED2", marginTop: 12 }}>{`${champ.line.w}–${champ.line.l} on the day · ${champ.titles === 1 ? "first title" : `${ordinal(champ.titles)} title`}`}</div>
           </div>
         ) : <div style={{ fontSize: 96, marginTop: 200 }}>{story.event.title}</div>}
         <div style={{ display: "flex", flexDirection: "column", width: "100%", gap: 18, marginTop: "auto" }}>
@@ -130,7 +131,7 @@ async function storyCard(id: string) {
           ))}
           {story.podium.slice(1).map((pd) => (
             <div key={pd.name} style={{ display: "flex", fontSize: 40 }}>
-              <span style={{ color: tierColor(pd.name), width: 240 }}>{pd.name}</span>
+              <span style={{ color: tierColor(pd.name), width: 240 }}>{`${pd.name} final`}</span>
               <span>{pd.winner ? name(pd.winner) : "—"}</span>
             </div>
           ))}

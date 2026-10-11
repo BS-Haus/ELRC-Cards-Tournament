@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, type Game } from "./cards";
+import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, finalName, finalWinTitle, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -41,10 +41,10 @@ describe("groupGames", () => {
 });
 
 describe("planStage", () => {
-  it("puts the top of the order in group A / Gold and gives each group its own net", () => {
+  it("puts the top of the order in group A / the A final and gives each group its own net", () => {
     const order = ids(10);
     const g = planStage("final", order, 2);
-    expect(g.map((x) => x.name)).toEqual(["Gold", "Silver"]);
+    expect(g.map((x) => x.name)).toEqual(["A", "B"]);
     expect(g[0].ids).toEqual(order.slice(0, 5));
     expect(g.map((x) => x.net)).toEqual([1, 2]);
   });
@@ -155,7 +155,7 @@ describe("seedOrder", () => {
     expect(seedOrder(g, pool, "seeded").indexOf("late")).toBe(4);
   });
 
-  it("after a seeded stage, ranks by group finish, so the weaker group's winner can't jump into Gold", () => {
+  it("after a seeded stage, ranks by group finish, so the weaker group's winner can't jump into the A final", () => {
     // Stage 2, seeded: group A = p0..p3 (the strong four), group B = p4..p7.
     const stage2 = score(asGames(planStage("seeded", ids(8), 2), 2)).map((g) => ({ ...g, kind: "seeded" as const }));
     // Group B's winner went unbeaten, so on win % alone they'd top the table.
@@ -213,5 +213,13 @@ describe("decider", () => {
     const one = d(base[0], 0, plan[0], 11, 9);
     expect(groupWinner([...tiedGroup, one, { ...d(base[0], 1, plan[1], 0, 0), status: "todo", scoreA: null, scoreB: null }]).decider).toBe("playing");
     expect(groupWinner([...tiedGroup, one, d(base[0], 1, plan[1], 9, 11)]).decider).toBe("level");
+  });
+});
+
+describe("final names", () => {
+  it("reads finals stored under the old metal names as letters, so they never clash with the ranks", () => {
+    expect(["Gold", "Silver", "Bronze", "Copper", "A", "B"].map(finalName)).toEqual(["A", "B", "C", "D", "A", "B"]);
+    expect(finalWinTitle("A")).toBe("Champion");
+    expect(finalWinTitle("B")).toBe("B final winner");
   });
 });

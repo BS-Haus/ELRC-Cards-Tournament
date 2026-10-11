@@ -51,7 +51,7 @@ export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: 
         <div className="mt-6 text-[14px] font-black uppercase tracking-[.3em] text-gold">Champion</div>
         <div className="mt-1 text-[46px] font-black leading-[1.02] tracking-[-.02em]">{n(champ.id)}</div>
         <div className="tnum mt-3 text-[17px] text-white/70">
-          {champ.line.w}–{champ.line.l} on the day · {champ.titles === 1 ? "first Gold title" : `${ordinal(champ.titles)} Gold title`}
+          {champ.line.w}–{champ.line.l} on the day · {champ.titles === 1 ? "first title" : `${ordinal(champ.titles)} title`}
         </div>
       </div>
     ),
@@ -77,7 +77,7 @@ export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: 
             const c = tierColor(p.name);
             return (
               <div key={p.name} className="rounded-2xl p-4" style={{ background: `${c}18`, border: `1px solid ${c}45` }}>
-                <div className="text-[12px] font-black uppercase tracking-[.16em]" style={{ color: c }}>{p.name}</div>
+                <div className="text-[12px] font-black uppercase tracking-[.16em]" style={{ color: c }}>{p.name} final</div>
                 {p.winner ? (
                   <div className="mt-2 grid gap-2">
                     <div className="flex items-center gap-3"><span className="w-6 text-center text-[20px]">🏆</span><Avatar p={names[p.winner]} size={38} /><span className="text-[21px] font-black">{n(p.winner)}</span></div>

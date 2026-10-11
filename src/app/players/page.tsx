@@ -24,8 +24,8 @@ export default async function PlayersPage() {
                   <div className="text-[12.5px] text-dim">{levelFor(p.points).level.name} · {p.points} pts · {p.events} {p.events === 1 ? "weekend" : "weekends"}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  {Object.entries(p.tierWins).map(([t, n]) => (
-                    <span key={t} className="rounded-full px-2 py-0.5 text-[11.5px] font-bold" style={{ background: `${tierColor(t)}22`, color: tierColor(t) }}>★{n > 1 ? `×${n}` : ""} {t}</span>
+                  {Object.entries(p.tierWins).sort(([x], [y]) => x.localeCompare(y)).map(([t, n]) => (
+                    <span key={t} className="rounded-full px-2 py-0.5 text-[11.5px] font-bold" style={{ background: `${tierColor(t)}22`, color: tierColor(t) }}>★{n > 1 ? `×${n}` : ""} {t} final</span>
                   ))}
                   <span className="tnum w-12 text-right font-mono text-[13px] text-num">{p.w}–{p.l}</span>
                 </div>

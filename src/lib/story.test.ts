@@ -20,11 +20,11 @@ describe("tournament story", () => {
   const w1 = day("w1", 1);
   const w2 = day("w2", 2, (k) => (k === 0 ? 0 : k === 1 ? 18 : 10));
 
-  it("crowns the Gold champion and counts their titles", () => {
+  it("crowns the champion and counts their titles", () => {
     const s = buildStory(w2, [w1, w2]);
     expect(s.champion?.id).toBe("p0");
     expect(s.champion?.titles).toBe(2);
-    expect(s.podium.map((p) => p.name)).toEqual(["Gold", "Silver"]);
+    expect(s.podium.map((p) => p.name)).toEqual(["A", "B"]);
     expect(s.podium[0].runnerUp).not.toBeNull();
   });
 
@@ -41,7 +41,7 @@ describe("tournament story", () => {
     const kinds = s.records.map((r) => r.kind);
     expect(kinds).toContain("margin"); // 15–0 beats w1's 15–10
     expect(kinds).toContain("deuce"); // w1 had none
-    expect(kinds).toContain("titles"); // p0's second Gold, more than anyone before
+    expect(kinds).toContain("titles"); // p0's second title, more than anyone before
     expect(buildStory(w1, [w1, w2]).records).toEqual([]); // nothing before week 1 to beat
   });
 

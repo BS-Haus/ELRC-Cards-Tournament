@@ -41,7 +41,7 @@ export const entries = pgTable(
   (t) => [primaryKey({ columns: [t.eventId, t.playerId] })],
 );
 
-// One round of groups: random, seeded, or the Gold/Silver/Bronze finals.
+// One round of groups: random, seeded, or the A/B/C/D finals (older events stored Gold/Silver/…).
 export const stages = pgTable("stages", {
   id: uuid("id").primaryKey().defaultRandom(),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),

@@ -2,14 +2,14 @@
 // your wins and for where you finish; points add up over time into Rocket League-style ranks:
 // Bronze, Silver, Gold, Diamond and Champion, three divisions each (Gold I, Gold II, Gold III).
 // Nothing here affects who plays whom. Pure: games in, points out.
-import { tally, isDone, type Game } from "@/lib/cards";
+import { tally, isDone, finalWinTitle, type Game } from "@/lib/cards";
 import { finishOf } from "@/lib/recap";
 
 export const POINTS = {
   showedUp: 10, // played at least one counted game
   perWin: 3,
   perGame: 1,
-  // Finish in the finals, by tier (Gold, Silver, Bronze, Copper) and place.
+  // Finish in the finals, by final (A, B, C, D) and place.
   champion: [30, 15, 10, 8],
   runnerUp: [15, 8, 5, 4],
   finalist: [6, 3, 2, 2],
@@ -44,7 +44,7 @@ export function eventPoints(games: Game[], id: string): Earned {
   if (f) {
     const t = Math.min(f.tierIndex, 3);
     const pts = f.won ? POINTS.champion[t] : f.position === 2 ? POINTS.runnerUp[t] : POINTS.finalist[t];
-    parts.push({ label: f.won ? `${f.tier} champion` : f.position === 2 ? `${f.tier} runner-up` : `${f.tier} final`, points: pts });
+    parts.push({ label: f.won ? finalWinTitle(f.tier) : f.position === 2 ? `${f.tier} final runner-up` : `${f.tier} final`, points: pts });
   }
   return { total: parts.reduce((n, p) => n + p.points, 0), parts: parts.filter((p) => p.points > 0) };
 }

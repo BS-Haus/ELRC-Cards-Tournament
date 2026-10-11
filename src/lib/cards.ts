@@ -26,7 +26,13 @@ export type Game = {
 export type Planned = { a: [string, string]; b: [string, string] };
 export type PlannedGroup = { groupNo: number; name: string; net: number; ids: string[]; games: (Planned & { seq: number; ord: number })[] };
 
-export const TIERS = ["Gold", "Silver", "Bronze", "Copper"];
+// Finals are lettered, best first. They were Gold / Silver / Bronze / Copper until the ranks
+// (levels.ts) took those names, so older events still have them stored: read them as letters.
+export const TIERS = ["A", "B", "C", "D"];
+const LEGACY_TIERS: Record<string, string> = { Gold: "A", Silver: "B", Bronze: "C", Copper: "D" };
+export const finalName = (name: string) => LEGACY_TIERS[name] ?? name;
+/** What winning a final is called: the A final's winner is the day's champion. */
+export const finalWinTitle = (name: string) => (name === TIERS[0] ? "Champion" : `${name} final winner`);
 
 /** Split n players into groups of 4–5 (6–7 only when the numbers force it, e.g. 6 or 7 people). */
 export function splitSizes(n: number): number[] {
@@ -107,7 +113,7 @@ export function shuffle<T>(xs: T[], rnd: () => number = Math.random): T[] {
 
 /**
  * Lay out a stage. `ordered` is the player order: shuffled for a random stage, best first for
- * seeded and finals, so group A / Gold gets the top of the table. Groups share nets in turn,
+ * seeded and finals, so group A / the A final gets the top of the table. Groups share nets in turn,
  * and `ord` interleaves their games so two groups on one net alternate.
  */
 export function planStage(kind: StageKind, ordered: string[], nets: number, rnd: () => number = Math.random): PlannedGroup[] {
@@ -190,12 +196,12 @@ export function drawPool(entries: { playerId: string; state: string }[], games: 
 }
 
 /**
- * The order a seeded stage or the finals draws from: best first, so group A / Gold gets the top.
+ * The order a seeded stage or the finals draws from: best first, so group A / the A final gets the top.
  * After a seeded stage it's by group finish (everyone in group A above everyone in group B), so a
- * 4–0 in the weaker group can't jump into Gold over someone who went 2–2 among the best. After a
+ * 4–0 in the weaker group can't jump into the A final over someone who went 2–2 among the best. After a
  * random stage it's the group-stage table (win %, then +/− per game). Someone with no games yet (a
  * late arrival) goes mid-table for a seeded stage, where they'll be sorted out, but to the bottom
- * for the finals: Gold is for people who've shown they belong there.
+ * for the finals: the A final is for people who've shown they belong there.
  */
 export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final"): string[] {
   const inPool = new Set(pool);
@@ -257,7 +263,7 @@ export function decideTie(table: Line[], tied: [string, string]): Planned[] {
   return [{ a: [x, c], b: [y, d] }, { a: [x, d], b: [y, c] }];
 }
 
-/** "Group A", "Gold final" or "Group A decider": what a game is, for headings. */
+/** "Group A", "A final" or "Group A decider": what a game is, for headings. */
 export const gameLabel = (g: Pick<Game, "kind" | "groupName" | "decider">) =>
   `${g.kind === "final" ? `${g.groupName} final` : `Group ${g.groupName}`}${g.decider ? " decider" : ""}`;
 
