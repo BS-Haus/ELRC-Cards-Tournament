@@ -78,11 +78,16 @@ export function fmtDate(ms: number | Date, withTime = true) {
   return `${DAYS[t.wd]} ${t.d} ${MONTHS[t.mo - 1]}${withTime ? `, ${fmtTime(ms)}` : ""}`;
 }
 
-/** A player's level (src/lib/levels.ts) as a small coloured pill. */
-export function LevelPill({ level, size = "sm" }: { level: { name: string; color: string; emoji: string }; size?: "sm" | "md" }) {
+/** A rank's icon (src/lib/levels.ts), the way the ladder app shows its tiers. */
+export function RankBadge({ level, size = 16 }: { level: { icon: string; name: string }; size?: number }) {
+  return <span aria-label={level.name} className="shrink-0 leading-none" style={{ fontSize: size }}>{level.icon}</span>;
+}
+
+/** A player's rank as a small coloured pill: icon, name, division. */
+export function LevelPill({ level, size = "sm" }: { level: { name: string; icon: string; color: string }; size?: "sm" | "md" }) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full font-bold ${size === "md" ? "px-3 py-1 text-[13px]" : "px-2 py-0.5 text-[11.5px]"}`} style={{ background: `${level.color}22`, color: level.color }}>
-      <span aria-hidden="true">{level.emoji}</span>{level.name}
+    <span className={`inline-flex items-center gap-1.5 rounded-md border font-bold ${size === "md" ? "px-2 py-1 text-[12.5px]" : "px-1.5 py-0.5 text-[11px]"}`} style={{ color: level.color, background: `${level.color}1F`, borderColor: `${level.color}59` }}>
+      <RankBadge level={level} size={size === "md" ? 14 : 11} />{level.name}
     </span>
   );
 }

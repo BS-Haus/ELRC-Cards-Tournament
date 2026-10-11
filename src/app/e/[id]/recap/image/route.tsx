@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { players } from "@/db/schema";
-import { getRecap } from "@/lib/data";
+import { getRecap, getStory } from "@/lib/data";
 import { tierColor } from "@/components/ui";
 
 // A story-sized (1080×1920) card of someone's day, to save or post. Same numbers as the reel:
@@ -14,7 +14,9 @@ const when = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { weekday:
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const p = new URL(req.url).searchParams.get("p");
-  const r = UUID_RE.test(id) ? await getRecap(id, p && UUID_RE.test(p) ? p : null) : null;
+  if (!UUID_RE.test(id)) return new Response("Not found", { status: 404 });
+  if (!p || !UUID_RE.test(p)) return storyCard(id);
+  const r = await getRecap(id, p);
   if (!r) return new Response("Not found", { status: 404 });
   const { recap, names } = r;
   const me = recap.me;
@@ -80,6 +82,50 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             <div key={w.name} style={{ display: "flex", fontSize: 40 }}>
               <span style={{ color: tierColor(w.name), fontWeight: 800, width: 240 }}>{w.name}</span>
               <span style={{ fontWeight: 700 }}>{w.winner ? name(w.winner) : w.tied.length ? `Tie: ${w.tied.map(name).join(" / ")}` : "Still playing"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+    { width: 1080, height: 1920 },
+  );
+}
+
+/** The tournament's card: the champion big, then every final's winner and the records broken. */
+async function storyCard(id: string) {
+  const r = await getStory(id);
+  if (!r) return new Response("Not found", { status: 404 });
+  const { story, names } = r;
+  const name = (pid: string) => names[pid]?.name ?? "Someone";
+  const champ = story.champion;
+  const [row] = champ ? await db.select({ avatar: players.avatar }).from(players).where(eq(players.id, champ.id)) : [];
+  return new ImageResponse(
+    (
+      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", padding: 96, background: "linear-gradient(180deg, #3a2c06 0%, #120f05 45%, #0c0e10 100%)", color: "#F4F5F6", fontFamily: "sans-serif" }}>
+        <div style={{ fontSize: 34, letterSpacing: 6, color: "#FFCF5C", textTransform: "uppercase" }}>{`${story.event.title} · ${when(story.event.startsAt)}`}</div>
+        {champ ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 110 }}>
+            <div style={{ fontSize: 110 }}>👑</div>
+            {row?.avatar
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={row.avatar} width={360} height={360} style={{ borderRadius: 180, border: "14px solid #FFCF5C", objectFit: "cover" }} alt="" />
+              : <div style={{ width: 360, height: 360, borderRadius: 180, border: "14px solid #FFCF5C", background: names[champ.id]?.color ?? "#CBFB4F", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 170, color: "#0c0e10" }}>{name(champ.id)[0]}</div>}
+            <div style={{ fontSize: 40, letterSpacing: 14, color: "#FFCF5C", marginTop: 56 }}>CHAMPION</div>
+            <div style={{ fontSize: 120, marginTop: 8 }}>{name(champ.id)}</div>
+            <div style={{ fontSize: 42, color: "#C9CED2", marginTop: 12 }}>{`${champ.line.w}–${champ.line.l} on the day · ${champ.titles === 1 ? "first Gold title" : `${ordinal(champ.titles)} Gold title`}`}</div>
+          </div>
+        ) : <div style={{ fontSize: 96, marginTop: 200 }}>{story.event.title}</div>}
+        <div style={{ display: "flex", flexDirection: "column", width: "100%", gap: 18, marginTop: "auto" }}>
+          {story.records.slice(0, 3).map((rec) => (
+            <div key={rec.kind} style={{ display: "flex", justifyContent: "space-between", fontSize: 36, padding: "20px 32px", borderRadius: 28, background: "rgba(192,132,252,.14)", border: "2px solid rgba(192,132,252,.4)" }}>
+              <span style={{ color: "#E9D5FF" }}>{`Record · ${rec.label}`}</span>
+              <span>{rec.value}</span>
+            </div>
+          ))}
+          {story.podium.slice(1).map((pd) => (
+            <div key={pd.name} style={{ display: "flex", fontSize: 40 }}>
+              <span style={{ color: tierColor(pd.name), width: 240 }}>{pd.name}</span>
+              <span>{pd.winner ? name(pd.winner) : "—"}</span>
             </div>
           ))}
         </div>

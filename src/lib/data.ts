@@ -90,6 +90,7 @@ export { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views"
 import { finalsOf } from "@/lib/views";
 import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
 import { careerPoints, eventPoints } from "@/lib/levels";
+import { buildStory, type Story } from "@/lib/story";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
@@ -145,7 +146,7 @@ export async function getPlayerStats(): Promise<PlayerStats[]> {
 }
 
 export type ProfileGame = { id: string; eventId: string; eventTitle: string; at: number; won: boolean; mine: number; theirs: number; partner: string; opponents: string[]; sub: boolean; label: string };
-export type ProfileEvent = { id: string; title: string; startsAt: number; w: number; l: number; finish: string | null };
+export type ProfileEvent = { id: string; title: string; startsAt: number; w: number; l: number; finish: string | null; points: number };
 export type Profile = {
   player: PlayerLite;
   stats: Line & { events: number };
@@ -197,7 +198,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
         finish = winner === id ? `${gg[0].groupName} winner` : `${gg[0].groupName} final · ${ordinal(pos)}`;
       }
     }
-    return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), w: line.w, l: line.l, finish };
+    return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), w: line.w, l: line.l, finish, points: eventPoints(eg, id).total };
   }).sort((a, b) => b.startsAt - a.startsAt);
 
   const recent: ProfileGame[] = mine
@@ -238,4 +239,13 @@ export async function getRecap(eventId: string, playerId: string | null): Promis
     recap.progress = { earned, before: after - earned.total, after };
   }
   return { recap, names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])) };
+}
+
+/** One event's tournament story (src/lib/story.ts), with everyone's names. */
+export async function getStory(eventId: string): Promise<{ story: Story; names: Record<string, PlayerLite> } | null> {
+  const { ps, evs, gs } = await everything();
+  const days: DayEvent[] = evs.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.getTime(), status: e.status, games: gs.filter((g) => g.eventId === e.id) }));
+  const ev = days.find((d) => d.id === eventId);
+  if (!ev) return null;
+  return { story: buildStory(ev, days), names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])) };
 }

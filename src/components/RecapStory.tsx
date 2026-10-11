@@ -1,50 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Avatar, tierColor, fmtDate, LevelPill } from "@/components/ui";
+import { useEffect, useState } from "react";
+import { StoryReel, CountUp, type Slide } from "@/components/StoryReel";
+import { Avatar, tierColor, fmtDate, LevelPill, RankBadge } from "@/components/ui";
 import { levelFor } from "@/lib/levels";
 import type { Recap, Moment, Finish } from "@/lib/recap";
 import type { PlayerLite } from "@/lib/data";
 
-const SLIDE_MS = 6000;
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 const signed = (n: number, digits = 0) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(digits)}`;
 
-/** Counts a number up from 0 when its slide appears. */
-function CountUp({ to, digits = 0, prefix = "" }: { to: number; digits?: number; prefix?: string }) {
-  const [v, setV] = useState(0);
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setV(to); return; }
-    let raf = 0;
-    const t0 = performance.now();
-    const step = (t: number) => {
-      const k = Math.min(1, (t - t0) / 900);
-      setV(to * (1 - Math.pow(1 - k, 3)));
-      if (k < 1) raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [to]);
-  return <>{prefix}{v.toFixed(digits)}</>;
-}
-
-function Confetti() {
-  const colors = ["#CBFB4F", "#FFCF5C", "#5EEAD4", "#F9A8D4", "#93C5FD"];
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      {Array.from({ length: 36 }, (_, i) => (
-        <span key={i} className="spk-confetti absolute top-[-12px] h-3 w-1.5 rounded-sm"
-          style={{ left: `${(i * 37) % 100}%`, background: colors[i % colors.length], animationDelay: `${(i % 9) * 0.12}s`, animationDuration: `${2.2 + (i % 5) * 0.3}s` }} />
-      ))}
-    </div>
-  );
-}
-
-type Slide = { key: string; bg: string; body: React.ReactNode; confetti?: boolean };
 
 export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; names: Record<string, PlayerLite>; viewer: string | null; backHref: string }) {
-  const router = useRouter();
   const n = (id: string) => names[id]?.name ?? "Someone";
   const me = recap.me;
   const mine = me && me.id === viewer;
@@ -126,6 +93,7 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
       const pr = recap.progress;
       const from = levelFor(pr.before), to = levelFor(pr.after);
       const levelledUp = to.level.name !== from.level.name;
+      const newTier = to.level.tier !== from.level.tier;
       slides.push({
         key: "points", bg: levelledUp ? "from-[#2a2208] to-[#0c0e10]" : "from-[#14201a] to-[#0c0e10]", confetti: levelledUp,
         body: (
@@ -139,7 +107,12 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
                 </div>
               ))}
             </div>
-            {levelledUp && <div className="spk-crown text-[26px] font-black" style={{ color: to.level.color }}>Level up! {to.level.emoji} {to.level.name}</div>}
+            {levelledUp && (
+              <div className="spk-crown flex items-center gap-3 text-[26px] font-black" style={{ color: to.level.color }}>
+                <RankBadge level={to.level} size={44} />
+                <span>{newTier ? "Promoted!" : "Rank up!"} {to.level.name}</span>
+              </div>
+            )}
             <LevelBar before={pr.before} after={pr.after} />
           </div>
         ),
@@ -269,102 +242,17 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
     });
   }
 
-  const [at, setAt] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const done = at >= slides.length;
-  const go = useCallback((i: number) => { setAt(Math.max(0, Math.min(slides.length, i))); setElapsed(0); }, [slides.length]);
-
-  // Advance on a timer, paused while held.
-  useEffect(() => {
-    if (paused || done) return;
-    const t0 = performance.now() - elapsed;
-    let raf = 0;
-    const tick = (t: number) => {
-      const e = t - t0;
-      if (e >= SLIDE_MS) { go(at + 1); return; }
-      setElapsed(e);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [at, paused, done]);
-
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === " ") go(at + 1);
-      if (e.key === "ArrowLeft") go(at - 1);
-      if (e.key === "Escape") router.push(backHref);
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [at, go, router, backHref]);
-
-  const down = useRef(0);
-  const onDown = () => { down.current = performance.now(); setPaused(true); };
-  const onUp = (e: React.PointerEvent) => {
-    setPaused(false);
-    if (performance.now() - down.current > 300) return; // a hold, not a tap
-    const x = e.clientX / (e.currentTarget as HTMLElement).clientWidth;
-    go(x < 0.33 ? at - 1 : at + 1);
-  };
-
-  const imageUrl = `/e/${recap.event.id}/recap/image${me ? `?p=${me.id}` : ""}`;
-  const save = async () => {
-    try {
-      const blob = await (await fetch(imageUrl)).blob();
-      const file = new File([blob], `${recap.event.title.replace(/[^\w]+/g, "-").toLowerCase()}-recap.png`, { type: "image/png" });
-      if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: recap.event.title }); return; }
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    } catch { window.open(imageUrl, "_blank"); }
-  };
-  const share = async () => {
-    const url = `${location.origin}/e/${recap.event.id}/recap${me ? `?p=${me.id}` : ""}`;
-    try {
-      if (navigator.share) await navigator.share({ title: `${recap.event.title} recap`, url });
-      else await navigator.clipboard.writeText(url);
-    } catch {}
-  };
-
-  const s = slides[Math.min(at, slides.length - 1)];
   return (
-    <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col bg-[#0c0e10] text-fg">
-      <div className={`absolute inset-0 bg-gradient-to-b ${done ? "from-[#1b2410] to-[#0c0e10]" : s.bg}`} />
-      {!done && s.confetti && <Confetti key={s.key} />}
-      <div className="relative z-10 flex gap-1 px-3 pt-[calc(10px+env(safe-area-inset-top))]">
-        {slides.map((x, i) => (
-          <div key={x.key} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/20">
-            <div className="h-full bg-white" style={{ width: i < at ? "100%" : i === at ? `${(elapsed / SLIDE_MS) * 100}%` : "0%" }} />
-          </div>
-        ))}
-      </div>
-      <div className="relative z-10 flex items-center justify-between px-4 pt-3">
-        <span className="text-[12px] font-bold uppercase tracking-[.16em] text-white/50">Recap</span>
-        <button onClick={() => router.push(backHref)} className="spk-press -mr-2 p-2 text-white/70" aria-label="Close recap">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-        </button>
-      </div>
-
-      {done ? (
-        <div className="relative z-10 flex flex-1 flex-col justify-center gap-3 px-7 pb-[calc(32px+env(safe-area-inset-bottom))]">
-          <div className="text-[34px] font-black leading-tight">That&apos;s {mine ? "your" : "the"} day.</div>
-          <p className="mb-4 text-[16px] text-white/60">{mine ? "It stays on your profile. Save the card or send it to the group." : "Save the card or send it to the group."}</p>
-          <button onClick={save} className="spk-press h-14 rounded-2xl bg-accent text-[16px] font-black text-ink">Save as image</button>
-          <button onClick={share} className="spk-press h-14 rounded-2xl border border-white/15 bg-white/5 text-[16px] font-bold">Share link</button>
-          <button onClick={() => go(0)} className="spk-press h-12 text-[15px] font-bold text-white/60">Watch again</button>
-        </div>
-      ) : (
-        <div
-          className="spk-noselect relative z-10 flex flex-1 touch-manipulation select-none items-center px-7 pb-[calc(40px+env(safe-area-inset-bottom))]"
-          onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => setPaused(false)} onContextMenu={(e) => e.preventDefault()}
-        >
-          <div key={s.key} className="spk-up w-full">{s.body}</div>
-        </div>
-      )}
-    </div>
+    <StoryReel
+      slides={slides}
+      label={mine ? "Your review" : me ? `${n(me.id)}'s review` : "Recap"}
+      backHref={backHref}
+      imageUrl={`/e/${recap.event.id}/recap/image${me ? `?p=${me.id}` : ""}`}
+      shareUrl={`/e/${recap.event.id}/recap${me ? `?p=${me.id}` : ""}`}
+      title={`${recap.event.title} review`}
+      endTitle={`That's ${mine ? "your" : "the"} day.`}
+      endNote={mine ? "It stays on your profile. Save the card or send it to the group." : "Save the card or send it to the group."}
+    />
   );
 }
 
@@ -491,7 +379,7 @@ function LevelBar({ before, after }: { before: number; after: number }) {
     <div className="mt-2">
       <div className="mb-2 flex items-center justify-between">
         <LevelPill level={end.level} size="md" />
-        <span className="tnum text-[13px] text-white/60">{after} pts{end.next ? ` · ${end.next.min - after} to ${end.next.emoji} ${end.next.name}` : " · top level"}</span>
+        <span className="tnum text-[13px] text-white/60">{after} pts{end.next ? ` · ${end.next.min - after} to ${end.next.name}` : " · top rank"}</span>
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-white/10">
         <div className="h-full rounded-full" style={{ width: `${pct * 100}%`, background: end.level.color, transition: "width 1.1s cubic-bezier(.2,.8,.2,1)" }} />

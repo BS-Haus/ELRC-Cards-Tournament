@@ -44,7 +44,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
               <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/10">
                 <div className="h-full rounded-full" style={{ width: `${lv.progress * 100}%`, background: lv.level.color }} />
               </div>
-              <div className="mt-2 text-[12.5px] text-dim">{lv.next ? `${lv.next.min - pr.points} points to ${lv.next.emoji} ${lv.next.name}. Every weekend earns points for playing, winning and your finish.` : "Top level. Legend."}</div>
+              <div className="mt-2 text-[12.5px] text-dim">{lv.next ? `${lv.next.min - pr.points} points to ${lv.next.name}. Every weekend earns points for playing, winning and your finish.` : "Net Royalty III: as high as it goes."}</div>
             </div>
           </div>
         );
@@ -100,11 +100,11 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
               <div key={e.id} className="flex items-center gap-3 px-4 py-3">
                 <Link href={`/e/${e.id}`} className="spk-press min-w-0 flex-1">
                   <div className="truncate text-[14.5px] font-bold">{e.title}</div>
-                  <div className="text-[12.5px] text-dim">{fmtDate(e.startsAt, false)}{e.finish ? ` · ${e.finish}` : ""} · <span className="tnum font-mono">{e.w}–{e.l}</span></div>
+                  <div className="text-[12.5px] text-dim">{fmtDate(e.startsAt, false)}{e.finish ? ` · ${e.finish}` : ""} · <span className="tnum font-mono">{e.w}–{e.l}</span>{e.points > 0 && <span className="tnum font-bold text-accent"> · +{e.points} pts</span>}</div>
                 </Link>
                 {e.w + e.l > 0 && (
                   <Link href={`/e/${e.id}/recap?p=${player.id}`} className="spk-press flex shrink-0 items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[12.5px] font-black text-ink">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>Recap
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>Review
                   </Link>
                 )}
               </div>

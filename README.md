@@ -35,11 +35,15 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 - **Profile photos:** add one on the Me tab. The phone crops and shrinks it before upload.
 - **Points:** every weekend earns points for turning up (10), each game (1), each win (3), and
   your finish (Gold champion 30, runner-up 15, finalist 6; Silver 15 / 8 / 3; and so on). They add
-  up into levels: 🌱 Rookie, 🏐 Regular (40), ⚡ Contender (100), 🔥 Pro (200), 👑 Elite (350),
-  🌟 Legend (550). Cosmetic only: they never affect the draw. (`src/lib/levels.ts`)
-- **Recap reel:** after a tournament, tap **Watch your recap**. It covers your record, game by
-  game, your finish, points and level, partners, you vs the field, your moments, the trend since
-  last time, and every final's winner. It can be saved as an image or shared. (`src/lib/recap.ts`)
+  up into five ranks in roundnet slang, each in divisions I, II and III: 🐀 Rim Rat (0),
+  🐕 Dig Dog (60), 🦸 Hinge Hero (150), 🔮 Spike Sorcerer (300) and 👑 Net Royalty (500). Cosmetic only: they never affect the draw. (`src/lib/levels.ts`)
+- **Tournament story (the main event):** after a tournament, tap **Watch the tournament story**.
+  The champion is the hero, then every final's podium, the day's stories (perfect days, streaks,
+  dream teams, the climb from the bottom into Gold, the epic deuce), records broken against every
+  earlier weekend, and the day in numbers. (`src/lib/story.ts`)
+- **Your review (second):** each player's own reel, under the story on the event page and on every
+  weekend in their profile: record, game by game, finish, points and rank, partners, you vs the
+  field, and the trend since last time. (`src/lib/recap.ts`)
 - **Live winners:** everyone on the event page gets a pop-up the moment a final is decided.
 
 ## Accounts

@@ -111,10 +111,16 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
             </span>
             <span className="min-w-0">
-              <span className="block text-[17px] font-black">{iPlayed ? "Watch your recap" : "Watch the recap"}</span>
-              <span className="block text-[13px] font-semibold opacity-70">{iPlayed ? "Your day, your numbers, and who won" : "Winners and the moments of the day"}</span>
+              <span className="block text-[17px] font-black">{done ? "Watch the tournament story" : "The story so far"}</span>
+              <span className="block text-[13px] font-semibold opacity-70">Who won, the stories of the day, records broken</span>
             </span>
           </Link>
+          {iPlayed && (
+            <Link href={`/e/${ev.id}/recap?p=${me}`} className="spk-press mt-2 flex items-center justify-between rounded-2xl border border-white/[.08] bg-surface px-4 py-3">
+              <span className="text-[14.5px] font-bold">Your review of the day</span>
+              <span className="text-[13px] font-bold text-accent">▶ Watch</span>
+            </Link>
+          )}
         </div>
       )}
 
