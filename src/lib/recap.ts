@@ -1,6 +1,7 @@
 // A player's day, as a story: the numbers, the finish, the moments, and how it compares with
 // last time. Pure: games in, recap out. Everything the recap reel and its saveable image show is
 // worked out here, so the two can't disagree.
+import type { Earned } from "@/lib/levels";
 import { tally, groupRank, groupMembers, groupWinner, isDone, rank, TIERS, type Game, type Line } from "@/lib/cards";
 
 export type DayGame = Game & { eventId: string };
@@ -17,6 +18,8 @@ export type Recap = {
   /** The day's headline games, for everyone. */
   moments: { biggestWin: Moment | null; longestGame: Moment | null; unbeaten: string[] };
   me: MyDay | null;
+  /** Points earned today and the career total either side (src/lib/levels.ts; added by the loader). */
+  progress?: { earned: Earned; before: number; after: number } | null;
 };
 
 export type MyDay = {
@@ -34,7 +37,16 @@ export type MyDay = {
   vsLast: { title: string; startsAt: number; winPct: number; diffPerGame: number; finish: Finish | null; winPctDelta: number; diffDelta: number; finishMove: "up" | "down" | "same" | null } | null;
   /** Win % per weekend, oldest first, ending with this one (up to 8). */
   trend: { title: string; startsAt: number; winPct: number }[];
+  /** Every counted game in the order played. */
+  timeline: { label: string; mine: number; theirs: number; won: boolean; partner: string }[];
+  /** Everyone you partnered, best +/− first. */
+  partners: { id: string; w: number; gp: number; diff: number }[];
+  /** You against everyone who played today: win rate and +/− per game, with the day's range. */
+  field: { players: number; win: Spread; diffPerGame: Spread; aheadOf: number } | null;
 };
+
+/** Where one value sits in the day's spread. */
+export type Spread = { you: number; min: number; max: number; avg: number };
 
 const counted = (g: Game, id: string) => isDone(g) && !g.decider && [...g.a, ...g.b].includes(id) && !g.subs.includes(id);
 const onA = (g: Game, id: string) => g.a.includes(id);
@@ -142,8 +154,28 @@ function myDay(ev: DayEvent, id: string, history: DayEvent[]): MyDay | null {
     };
   }
 
+  // The field: everyone with a counted game today, on the same measures.
+  const everyone = [...tally(ev.games.filter((g) => isDone(g) && !g.decider)).values()].filter((r) => r.gp > 0);
+  const spread = (f: (l: Line) => number): Spread => {
+    const vs = everyone.map(f);
+    return { you: f(line), min: Math.min(...vs), max: Math.max(...vs), avg: vs.reduce((a, b) => a + b, 0) / vs.length };
+  };
+  const field = everyone.length > 1 ? {
+    players: everyone.length,
+    win: spread(pct),
+    diffPerGame: spread(dpg),
+    // Share of the others you finished ahead of, on win rate then +/- per game.
+    aheadOf: everyone.filter((r) => r.id !== id && (pct(r) < pct(line) || (pct(r) === pct(line) && dpg(r) < dpg(line)))).length / (everyone.length - 1),
+  } : null;
+
   return {
     id, line,
+    timeline: mineGames.map((g) => {
+      const side = onA(g, id) ? g.a : g.b;
+      return { label: label(g), mine: mine(g, id), theirs: theirs(g, id), won: won(g, id), partner: side[0] === id ? side[1] : side[0] };
+    }),
+    partners: [...partners].map(([pid, p]) => ({ id: pid, ...p })).sort((x, y) => y.diff - x.diff || y.w - x.w),
+    field,
     dayRank: at >= 0 ? { position: at + 1, of: table.length } : null,
     finish,
     bestPartner: bp ? { id: bp[0], ...bp[1] } : null,

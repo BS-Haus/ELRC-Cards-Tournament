@@ -76,6 +76,18 @@ export async function signIn(nameIn: string, pin: string): Promise<Result> {
   return { ok: true, id: p.id };
 }
 
+/** Set (or, with null, remove) your profile picture: a small square JPEG the phone has already
+ *  resized (AvatarPicker), as a data URL. Anything else, or anything big, is refused. */
+const AVATAR_RE = /^data:image\/(?:jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+const AVATAR_MAX = 120_000; // characters of base64: ~90 KB, far above a 320px JPEG
+export async function setAvatar(dataUrl: string | null): Promise<Result> {
+  const s = await me(); if (!s) return fail("Sign in first.");
+  if (dataUrl !== null && (typeof dataUrl !== "string" || dataUrl.length > AVATAR_MAX || !AVATAR_RE.test(dataUrl))) return fail("That photo couldn't be used. Try another.");
+  await db.update(players).set({ avatar: dataUrl, avatarAt: dataUrl ? new Date() : null }).where(eq(players.id, s.playerId!));
+  refresh();
+  return { ok: true };
+}
+
 export async function signOut(): Promise<Result> {
   await clearSession();
   refresh();

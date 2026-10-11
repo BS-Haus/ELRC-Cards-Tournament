@@ -3,7 +3,11 @@ import type { PlayerLite } from "@/lib/data";
 
 export const initial = (name: string) => (name.trim()[0] ?? "?").toUpperCase();
 
-export function Avatar({ p, size = 32, dim = false }: { p?: Pick<PlayerLite, "name" | "color">; size?: number; dim?: boolean }) {
+export function Avatar({ p, size = 32, dim = false }: { p?: Pick<PlayerLite, "name" | "color"> & { photo?: string | null }; size?: number; dim?: boolean }) {
+  if (p?.photo) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={p.photo} alt="" aria-hidden="true" width={size} height={size} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size, opacity: dim ? 0.45 : 1, background: p.color }} />;
+  }
   return (
     <span
       aria-hidden="true"
@@ -72,4 +76,13 @@ export function fmtTime(ms: number | Date) {
 export function fmtDate(ms: number | Date, withTime = true) {
   const t = london(ms);
   return `${DAYS[t.wd]} ${t.d} ${MONTHS[t.mo - 1]}${withTime ? `, ${fmtTime(ms)}` : ""}`;
+}
+
+/** A player's level (src/lib/levels.ts) as a small coloured pill. */
+export function LevelPill({ level, size = "sm" }: { level: { name: string; color: string; emoji: string }; size?: "sm" | "md" }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full font-bold ${size === "md" ? "px-3 py-1 text-[13px]" : "px-2 py-0.5 text-[11.5px]"}`} style={{ background: `${level.color}22`, color: level.color }}>
+      <span aria-hidden="true">{level.emoji}</span>{level.name}
+    </span>
+  );
 }

@@ -72,6 +72,19 @@ describe("recap", () => {
     expect(r.moments.longestGame?.score).toEqual([19, 17]);
   });
 
+  it("lays out the day game by game, every partner, and where you sit in the field", () => {
+    const r = buildRecap(week2, "p0", [week1, week2]).me!;
+    expect(r.timeline).toHaveLength(r.line.gp);
+    expect(r.timeline.every((g) => g.won)).toBe(true);
+    expect(r.partners.reduce((n, p) => n + p.gp, 0)).toBe(r.line.gp);
+    expect(r.partners.map((p) => p.diff)).toEqual([...r.partners.map((p) => p.diff)].sort((a, b) => b - a));
+    expect(r.field!.aheadOf).toBeGreaterThan(0.8); // unbeaten: ahead of all but anyone else unbeaten
+    expect(r.field?.win.you).toBe(r.field?.win.max);
+    const last = buildRecap(week2, "p7", [week1, week2]).me!;
+    expect(last.field!.aheadOf).toBeLessThan(0.5);
+    expect(last.field!.win.min).toBeLessThanOrEqual(last.field!.win.you);
+  });
+
   it("leaves decider games out of everyone's numbers", () => {
     const ev = day("w4", 4);
     const d = { ...ev.games[0], id: "dec", seq: 99, decider: true };

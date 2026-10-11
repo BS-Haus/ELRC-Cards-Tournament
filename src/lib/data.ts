@@ -4,7 +4,8 @@ import { db } from "@/db";
 import { players, events, entries, stages, games } from "@/db/schema";
 import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line } from "@/lib/cards";
 
-export type PlayerLite = { id: string; name: string; color: string; claimed: boolean };
+/** `photo` is the profile picture's URL (versioned, so it can be cached for good), or null. */
+export type PlayerLite = { id: string; name: string; color: string; claimed: boolean; photo: string | null };
 export type EventRow = typeof events.$inferSelect;
 export type EntryState = "going" | "here" | "out";
 export type Entry = { playerId: string; state: EntryState; at: number };
@@ -18,7 +19,8 @@ export type EventView = {
   people: Record<string, PlayerLite>;
 };
 
-const lite = (p: typeof players.$inferSelect): PlayerLite => ({ id: p.id, name: p.name, color: p.color, claimed: !!p.pinHash });
+export const photoUrl = (p: { id: string; avatarAt: Date | null }) => (p.avatarAt ? `/a/${p.id}?v=${p.avatarAt.getTime()}` : null);
+const lite = (p: typeof players.$inferSelect): PlayerLite => ({ id: p.id, name: p.name, color: p.color, claimed: !!p.pinHash, photo: photoUrl(p) });
 
 function toGame(g: typeof games.$inferSelect, st: Map<string, StageRow>): Game {
   const s = st.get(g.stageId)!;
@@ -87,11 +89,16 @@ export async function getEventCards(me: string | null): Promise<{ upcoming: Even
 export { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
 import { finalsOf } from "@/lib/views";
 import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
+import { careerPoints, eventPoints } from "@/lib/levels";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
 
-export type PlayerStats = PlayerLite & Line & { events: number; tierWins: Record<string, number> };
+export type PlayerStats = PlayerLite & Line & { events: number; tierWins: Record<string, number>; points: number };
+
+/** Each event's games, for points (src/lib/levels.ts). */
+const byEvent = (evs: { id: string; startsAt: Date }[], gs: (Game & { eventId: string })[]) =>
+  evs.map((e) => ({ id: e.id, startsAt: e.startsAt.getTime(), games: gs.filter((g) => g.eventId === e.id) }));
 
 async function everything() {
   const [ps, evs, ens, sts, gs] = await Promise.all([
@@ -121,8 +128,9 @@ function tierWinners(evGames: Game[]): { tier: string; winner: string }[] {
 }
 
 export async function getPlayerStats(): Promise<PlayerStats[]> {
-  const { ps, ens, gs } = await everything();
+  const { ps, evs, ens, gs } = await everything();
   const t = tally(gs.filter((g) => g.status === "done"), ps.map((p) => p.id));
+  const days = byEvent(evs, gs);
   const evByPlayer = new Map<string, Set<string>>();
   for (const e of ens) if (e.state === "here") (evByPlayer.get(e.playerId) ?? evByPlayer.set(e.playerId, new Set()).get(e.playerId)!).add(e.eventId);
   for (const g of gs) if (isDone(g)) for (const id of [...g.a, ...g.b]) if (!g.subs.includes(id)) (evByPlayer.get(id) ?? evByPlayer.set(id, new Set()).get(id)!).add(g.eventId);
@@ -133,7 +141,7 @@ export async function getPlayerStats(): Promise<PlayerStats[]> {
       r[tier] = (r[tier] ?? 0) + 1;
     }
   }
-  return ps.map((p) => ({ ...lite(p), ...t.get(p.id)!, events: evByPlayer.get(p.id)?.size ?? 0, tierWins: tiers.get(p.id) ?? {} }));
+  return ps.map((p) => ({ ...lite(p), ...t.get(p.id)!, events: evByPlayer.get(p.id)?.size ?? 0, tierWins: tiers.get(p.id) ?? {}, points: careerPoints(days, p.id) }));
 }
 
 export type ProfileGame = { id: string; eventId: string; eventTitle: string; at: number; won: boolean; mine: number; theirs: number; partner: string; opponents: string[]; sub: boolean; label: string };
@@ -146,6 +154,7 @@ export type Profile = {
   events: ProfileEvent[];
   recent: ProfileGame[];
   names: Record<string, PlayerLite>;
+  points: number;
 };
 
 export async function getProfile(id: string): Promise<Profile | null> {
@@ -207,7 +216,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
       };
     });
 
-  return { player: lite(me), stats: { ...stats, events: evIds.size }, tierWins, bestPartner: bp ? { id: bp[0], ...bp[1] } : null, events, recent, names };
+  return { player: lite(me), stats: { ...stats, events: evIds.size }, tierWins, bestPartner: bp ? { id: bp[0], ...bp[1] } : null, events, recent, names, points: careerPoints(byEvent(evs, gs), id) };
 }
 
 export const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
@@ -222,5 +231,11 @@ export async function getRecap(eventId: string, playerId: string | null): Promis
   const ev = days.find((d) => d.id === eventId);
   if (!ev) return null;
   const who = playerId && ps.some((p) => p.id === playerId) ? playerId : null;
-  return { recap: buildRecap(ev, who, days), names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])) };
+  const recap = buildRecap(ev, who, days);
+  if (recap.me) {
+    const earned = eventPoints(ev.games, recap.me.id);
+    const after = careerPoints(days, recap.me.id, ev.startsAt);
+    recap.progress = { earned, before: after - earned.total, after };
+  }
+  return { recap, names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])) };
 }

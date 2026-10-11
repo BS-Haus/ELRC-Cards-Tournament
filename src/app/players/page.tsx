@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPlayerStats } from "@/lib/data";
 import { Header, Section, Avatar, card, tierColor } from "@/components/ui";
+import { levelFor } from "@/lib/levels";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,8 @@ export default async function PlayersPage() {
               <Link key={p.id} href={`/p/${p.id}`} className="spk-press flex items-center gap-3 px-4 py-3">
                 <Avatar p={p} size={34} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-bold">{p.name}</div>
-                  <div className="text-[12.5px] text-dim">{p.events} {p.events === 1 ? "weekend" : "weekends"} · {p.gp} games</div>
+                  <div className="flex items-center gap-1.5 truncate text-[15px] font-bold">{p.name}<span className="text-[13px]" aria-label={levelFor(p.points).level.name}>{levelFor(p.points).level.emoji}</span></div>
+                  <div className="text-[12.5px] text-dim">{levelFor(p.points).level.name} · {p.points} pts · {p.events} {p.events === 1 ? "weekend" : "weekends"}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {Object.entries(p.tierWins).map(([t, n]) => (

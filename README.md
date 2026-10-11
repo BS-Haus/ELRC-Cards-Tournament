@@ -31,6 +31,17 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   pick a sub, or skip the game. A sub's game counts for the other three, not for the sub.
 - **Undo last draw** works as long as nothing in that stage has a score.
 
+## Points, levels and recaps
+- **Profile photos:** add one on the Me tab. The phone crops and shrinks it before upload.
+- **Points:** every weekend earns points for turning up (10), each game (1), each win (3), and
+  your finish (Gold champion 30, runner-up 15, finalist 6; Silver 15 / 8 / 3; and so on). They add
+  up into levels: 🌱 Rookie, 🏐 Regular (40), ⚡ Contender (100), 🔥 Pro (200), 👑 Elite (350),
+  🌟 Legend (550). Cosmetic only: they never affect the draw. (`src/lib/levels.ts`)
+- **Recap reel:** after a tournament, tap **Watch your recap**. It covers your record, game by
+  game, your finish, points and level, partners, you vs the field, your moments, the trend since
+  last time, and every final's winner. It can be saved as an image or shared. (`src/lib/recap.ts`)
+- **Live winners:** everyone on the event page gets a pop-up the moment a final is decided.
+
 ## Accounts
 - Anyone can view everything without signing in.
 - Signed-in players (name + 4-digit code) can add themselves, check in, enter scores and subs.

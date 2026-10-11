@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProfile } from "@/lib/data";
 import { getSession } from "@/lib/auth/session";
-import { Header, Section, Avatar, card, tierColor, fmtDate } from "@/components/ui";
+import { Header, Section, Avatar, card, tierColor, fmtDate, LevelPill } from "@/components/ui";
+import { levelFor } from "@/lib/levels";
 
 export const dynamic = "force-dynamic";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -29,6 +30,25 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
     <main>
       <Header eyebrow={mine ? "Your profile" : "Player"} title={player.name} right={<Avatar p={player} size={52} />} />
       {!player.claimed && <p className="-mt-2 px-5 pb-4 text-[13px] text-dim">Added on the day. Join with this name on the Me tab to make it yours.</p>}
+      {mine && !player.photo && <Link href="/me" className="-mt-2 mb-4 ml-5 inline-block text-[13px] font-bold text-accent">+ Add a profile photo</Link>}
+
+      {(() => {
+        const lv = levelFor(pr.points);
+        return (
+          <div className="px-4 pb-4">
+            <div className={`${card} p-4`}>
+              <div className="flex items-center justify-between">
+                <LevelPill level={lv.level} size="md" />
+                <span className="tnum text-[13px] text-muted">{pr.points} points</span>
+              </div>
+              <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full rounded-full" style={{ width: `${lv.progress * 100}%`, background: lv.level.color }} />
+              </div>
+              <div className="mt-2 text-[12.5px] text-dim">{lv.next ? `${lv.next.min - pr.points} points to ${lv.next.emoji} ${lv.next.name}. Every weekend earns points for playing, winning and your finish.` : "Top level. Legend."}</div>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-2 gap-2.5 px-4 pb-6">
         <Tile label="Weekends" value={String(stats.events)} />

@@ -6,8 +6,9 @@ import Link from "next/link";
 import { signUp, signIn, signOut, unlockOrganiser, lockOrganiser } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { Header, Section, card, btnPrimary, btnGhost, btnQuiet, input, fmtTime } from "@/components/ui";
+import { AvatarPicker } from "@/components/AvatarPicker";
 
-export function MeScreen({ me, org, orgUntil, next }: { me: { id: string; name: string } | null; org: boolean; orgUntil: number | null; next: string | null }) {
+export function MeScreen({ me, org, orgUntil, next }: { me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [mode, setMode] = useState<"join" | "in">("join");
@@ -52,6 +53,7 @@ export function MeScreen({ me, org, orgUntil, next }: { me: { id: string; name: 
       ) : (
         <Section title="Your profile">
           <div className={`${card} grid gap-2 p-4`}>
+            <div className="pb-2"><AvatarPicker me={me} /></div>
             <Link href={`/p/${me.id}`} className={btnPrimary}>See my stats and history</Link>
             {next && <Link href={next} className={btnGhost}>Back to the event</Link>}
             <button disabled={pending} onClick={() => run(() => signOut(), "Signed out")} className={btnQuiet}>Sign out</button>

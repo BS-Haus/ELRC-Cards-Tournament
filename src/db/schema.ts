@@ -8,6 +8,9 @@ export const players = pgTable("players", {
   name: text("name").notNull(),
   color: text("color").notNull(),
   pinHash: text("pin_hash"),
+  // Profile picture: a small square JPEG (resized on the phone) as a data URL, served by /a/[id].
+  avatar: text("avatar"),
+  avatarAt: timestamp("avatar_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

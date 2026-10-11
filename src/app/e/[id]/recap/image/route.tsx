@@ -1,4 +1,7 @@
 import { ImageResponse } from "next/og";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { players } from "@/db/schema";
 import { getRecap } from "@/lib/data";
 import { tierColor } from "@/components/ui";
 
@@ -18,6 +21,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const f = me?.finish;
   const c = f ? tierColor(f.tier) : "#CBFB4F";
   const name = (pid: string) => names[pid]?.name ?? "Someone";
+  const [row] = me ? await db.select({ avatar: players.avatar }).from(players).where(eq(players.id, me.id)) : [];
+  const photo = row?.avatar ?? null;
+  const swing = me ? Math.max(1, ...me.timeline.map((g) => Math.abs(g.mine - g.theirs))) : 1;
 
   return new ImageResponse(
     (
@@ -28,13 +34,32 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
         {me ? (
           <div style={{ display: "flex", flexDirection: "column", marginTop: 110 }}>
-            <div style={{ fontSize: 52, fontWeight: 800 }}>{name(me.id)}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+              {photo
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={photo} width={132} height={132} style={{ borderRadius: 66, objectFit: "cover" }} alt="" />
+                : <div style={{ width: 132, height: 132, borderRadius: 66, background: names[me.id]?.color ?? "#CBFB4F", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 64, fontWeight: 900, color: "#0c0e10" }}>{name(me.id)[0]}</div>}
+              <div style={{ fontSize: 56, fontWeight: 800 }}>{name(me.id)}</div>
+            </div>
             <div style={{ display: "flex", fontSize: 260, fontWeight: 900, lineHeight: 1, marginTop: 20 }}>{`${me.line.w}–${me.line.l}`}</div>
             <div style={{ display: "flex", gap: 56, fontSize: 40, color: "#C9CED2", marginTop: 24 }}>
               <span>{`${me.line.gp ? Math.round((100 * me.line.w) / me.line.gp) : 0}% wins`}</span>
               <span>{`${me.line.pf} points`}</span>
               <span>{`${me.line.pf - me.line.pa > 0 ? "+" : ""}${me.line.pf - me.line.pa}`}</span>
             </div>
+            {me.timeline.length > 1 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, height: 180, marginTop: 56, position: "relative" }}>
+                {me.timeline.map((g, i) => {
+                  const h = Math.round((Math.abs(g.mine - g.theirs) / swing) * 84);
+                  return (
+                    <div key={i} style={{ display: "flex", flexDirection: "column", flex: 1, height: 180 }}>
+                      <div style={{ display: "flex", height: 90, alignItems: "flex-end" }}>{g.won && <div style={{ width: "100%", height: h, background: "#5CD37D", borderRadius: 6 }} />}</div>
+                      <div style={{ display: "flex", height: 90, alignItems: "flex-start" }}>{!g.won && <div style={{ width: "100%", height: h, background: "#FF6B6B", borderRadius: 6 }} />}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {f && (
               <div style={{ display: "flex", flexDirection: "column", marginTop: 90, padding: 48, borderRadius: 40, background: `${c}22`, border: `3px solid ${c}66` }}>
                 <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: 4, color: c, textTransform: "uppercase" }}>{`${f.tier} final`}</div>
