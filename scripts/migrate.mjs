@@ -8,7 +8,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 config({ path: ".env.local", quiet: true });
 config({ path: ".env", quiet: true });
 
-const url = process.env.DATABASE_URL;
+const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 if (!url) {
   console.log("migrate: no DATABASE_URL, skipping");
   process.exit(0);
