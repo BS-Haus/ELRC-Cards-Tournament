@@ -45,3 +45,11 @@ button:disabled { cursor: default; }
 .spk-toast { animation: spkToast 0.22s ease-out both; }
 .spk-live { animation: spkPulse 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .spk-up, .spk-sheet, .spk-toast, .spk-live { animation: none; } }
+
+/* Recap reel */
+.spk-noselect, .spk-noselect * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@keyframes spkConfetti { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(105vh) rotate(540deg); opacity: 0.6; } }
+.spk-confetti { animation: spkConfetti 2.6s cubic-bezier(.3,.6,.5,1) both; }
+@keyframes spkCrown { 0% { transform: scale(.7); opacity: 0; } 60% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); } }
+.spk-crown { animation: spkCrown .5s cubic-bezier(.2,.9,.3,1.2) both; }
+@media (prefers-reduced-motion: reduce) { .spk-confetti, .spk-crown { animation: none; } .spk-confetti { display: none; } }

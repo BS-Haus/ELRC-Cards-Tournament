@@ -86,6 +86,7 @@ export async function getEventCards(me: string | null): Promise<{ upcoming: Even
 
 export { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
 import { finalsOf } from "@/lib/views";
+import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
@@ -210,3 +211,16 @@ export async function getProfile(id: string): Promise<Profile | null> {
 }
 
 export const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
+
+// ---------------------------------------------------------------------------------------------
+// Recaps
+
+/** One event's recap from a player's point of view (src/lib/recap.ts), with everyone's names. */
+export async function getRecap(eventId: string, playerId: string | null): Promise<{ recap: Recap; names: Record<string, PlayerLite> } | null> {
+  const { ps, evs, gs } = await everything();
+  const days: DayEvent[] = evs.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.getTime(), status: e.status, games: gs.filter((g) => g.eventId === e.id) }));
+  const ev = days.find((d) => d.id === eventId);
+  if (!ev) return null;
+  const who = playerId && ps.some((p) => p.id === playerId) ? playerId : null;
+  return { recap: buildRecap(ev, who, days), names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])) };
+}

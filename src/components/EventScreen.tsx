@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { setMyEntry, setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider } from "@/app/actions";
@@ -41,6 +41,27 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
   const queues = netQueues(games, ev.nets);
   const subAlerts = games.filter((g) => needsSub(g, out).length);
   const finals = finalsOf(view);
+
+  // Crown each final's winner the moment it's decided, on every phone that's watching. Winners
+  // already decided when the page opened don't pop up; only ones that arrive while you watch.
+  const [crown, setCrown] = useState<{ tier: string; id: string } | null>(null);
+  const crowned = useRef<Set<string> | null>(null);
+  const winnersKey = (finals?.groups ?? []).filter((g) => g.winner).map((g) => `${finals!.stageNo}:${g.name}:${g.winner}`).join("|");
+  useEffect(() => {
+    const now = new Set(winnersKey ? winnersKey.split("|") : []);
+    if (crowned.current) {
+      const fresh = [...now].find((k) => !crowned.current!.has(k));
+      if (fresh) {
+        const [, tier, id] = fresh.split(":");
+        setCrown({ tier, id });
+        const t = setTimeout(() => setCrown(null), 6000);
+        crowned.current = now;
+        return () => clearTimeout(t);
+      }
+    }
+    crowned.current = now;
+  }, [winnersKey]);
+  const iPlayed = !!me && games.some((g) => g.status === "done" && [...g.a, ...g.b].includes(me) && !g.subs.includes(me));
   const standings = useMemo(() => eventStandings(view), [view]);
   const openGame = games.find((g) => g.id === open) ?? null;
   const live = ev.status === "live";
@@ -72,6 +93,30 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
       </header>
 
       {!done && <YouBar me={me} state={myEntry} eventId={ev.id} started={!!current} run={run} pending={pending} />}
+
+      {crown && (
+        <button onClick={() => setCrown(null)} className="spk-crown fixed inset-x-4 top-[calc(16px+env(safe-area-inset-top))] z-40 mx-auto flex max-w-[448px] items-center gap-3 rounded-3xl p-4 text-left shadow-2xl" style={{ background: tierColor(crown.tier), color: "#0c0e10" }} aria-live="polite">
+          <span className="text-[34px]" aria-hidden="true">🏆</span>
+          <span className="min-w-0">
+            <span className="block text-[12px] font-black uppercase tracking-[.16em] opacity-70">{crown.tier} final</span>
+            <span className="block truncate text-[20px] font-black">{crown.id === me ? `You win ${crown.tier}!` : `${p(crown.id)?.name ?? "Someone"} wins ${crown.tier}!`}</span>
+          </span>
+        </button>
+      )}
+
+      {(done || finals?.groups.some((g) => g.winner)) && games.some(isDone) && (
+        <div className="px-4 pb-5">
+          <Link href={`/e/${ev.id}/recap`} className="spk-press flex items-center gap-3 rounded-2xl bg-gradient-to-r from-accent to-[#9be15d] p-4 text-ink">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-accent" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[17px] font-black">{iPlayed ? "Watch your recap" : "Watch the recap"}</span>
+              <span className="block text-[13px] font-semibold opacity-70">{iPlayed ? "Your day, your numbers, and who won" : "Winners and the moments of the day"}</span>
+            </span>
+          </Link>
+        </div>
+      )}
 
       {done && finals && <Podium groups={finals.groups} people={people} />}
 

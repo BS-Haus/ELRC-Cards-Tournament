@@ -56,17 +56,38 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
         </Section>
       )}
 
+      {pr.events.filter((e) => e.w + e.l > 0).length > 1 && (
+        <Section title="Win rate by weekend">
+          <div className={`${card} flex h-36 items-end gap-2 p-4`}>
+            {pr.events.filter((e) => e.w + e.l > 0).slice(0, 10).reverse().map((e) => {
+              const pc = e.w / (e.w + e.l);
+              return (
+                <Link key={e.id} href={`/e/${e.id}/recap?p=${player.id}`} className="flex h-full flex-1 flex-col items-center justify-end gap-1" aria-label={`${e.title}: ${Math.round(100 * pc)}% wins`}>
+                  <span className="tnum text-[10px] font-bold text-muted">{Math.round(100 * pc)}%</span>
+                  <span className="w-full rounded-t-md bg-accent/80" style={{ height: `${Math.max(4, pc * 80)}%` }} />
+                  <span className="text-[10px] text-dim">{fmtDate(e.startsAt, false).split(" ").slice(1).join(" ")}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </Section>
+      )}
+
       <Section title="Weekends">
         {pr.events.length ? (
           <div className={`${card} divide-y divide-white/[.05]`}>
             {pr.events.map((e) => (
-              <Link key={e.id} href={`/e/${e.id}`} className="spk-press flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
+              <div key={e.id} className="flex items-center gap-3 px-4 py-3">
+                <Link href={`/e/${e.id}`} className="spk-press min-w-0 flex-1">
                   <div className="truncate text-[14.5px] font-bold">{e.title}</div>
-                  <div className="text-[12.5px] text-dim">{fmtDate(e.startsAt, false)}{e.finish ? ` · ${e.finish}` : ""}</div>
-                </div>
-                <span className="tnum shrink-0 font-mono text-[13px] text-num">{e.w}–{e.l}</span>
-              </Link>
+                  <div className="text-[12.5px] text-dim">{fmtDate(e.startsAt, false)}{e.finish ? ` · ${e.finish}` : ""} · <span className="tnum font-mono">{e.w}–{e.l}</span></div>
+                </Link>
+                {e.w + e.l > 0 && (
+                  <Link href={`/e/${e.id}/recap?p=${player.id}`} className="spk-press flex shrink-0 items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[12.5px] font-black text-ink">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>Recap
+                  </Link>
+                )}
+              </div>
             ))}
           </div>
         ) : <div className={`${card} p-5 text-[14px] text-muted`}>No weekends yet. Add yourself to the next one on the Events tab.</div>}
