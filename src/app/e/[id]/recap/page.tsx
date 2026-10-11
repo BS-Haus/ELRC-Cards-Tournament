@@ -44,5 +44,5 @@ export default async function RecapPage({ params, searchParams }: Props) {
   if (!s) notFound();
   // Did the viewer play? Then the story ends by offering their own review.
   const mine = viewer ? await getRecap(id, viewer) : null;
-  return <TournamentStory story={s.story} names={s.names} viewer={viewer} viewerPlayed={!!mine?.recap.me} />;
+  return <TournamentStory story={s.story} names={s.names} photos={s.photos} viewer={viewer} viewerPlayed={!!mine?.recap.me} />;
 }

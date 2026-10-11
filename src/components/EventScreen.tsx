@@ -6,6 +6,7 @@ import Link from "next/link";
 import { setMyEntry, setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { ScoreSheet } from "@/components/ScoreSheet";
+import { EventPhotos } from "@/components/EventPhotos";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind } from "@/lib/cards";
 import { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
@@ -125,6 +126,8 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
       )}
 
       {done && finals && <Podium groups={finals.groups} people={people} />}
+
+      {(live || done) && <EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} />}
 
       {subAlerts.length > 0 && !done && (
         <Section title="Needs a sub">

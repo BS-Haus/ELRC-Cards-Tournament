@@ -78,6 +78,20 @@ export const games = pgTable(
   (t) => [index("games_event_idx").on(t.eventId)],
 );
 
+// Photos from the day: anyone signed in can add them; the tournament story opens on the first one.
+// A JPEG the phone has already resized, as a data URL, served by /ph/[id].
+export const eventPhotos = pgTable(
+  "event_photos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+    data: text("data").notNull(),
+    byId: uuid("by_id").references(() => players.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("event_photos_event_idx").on(t.eventId)],
+);
+
 // Sign-in attempt counting, shared across serverless instances (same approach as Spike).
 export const rateLimits = pgTable("rate_limits", {
   bucket: text("bucket").primaryKey(),

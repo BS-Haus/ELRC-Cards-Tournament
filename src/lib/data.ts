@@ -1,7 +1,7 @@
 import "server-only";
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { players, events, entries, stages, games } from "@/db/schema";
+import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
 import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line } from "@/lib/cards";
 
 /** `photo` is the profile picture's URL (versioned, so it can be cached for good), or null. */
@@ -17,7 +17,18 @@ export type EventView = {
   stages: StageRow[];
   games: Game[];
   people: Record<string, PlayerLite>;
+  /** Photos from the day, oldest first: the first one leads the tournament story. */
+  photos: EventPhoto[];
 };
+
+export type EventPhoto = { id: string; url: string; by: string | null };
+export const photoOf = (p: { id: string; createdAt: Date; byId: string | null }): EventPhoto => ({ id: p.id, url: `/ph/${p.id}?v=${p.createdAt.getTime()}`, by: p.byId });
+
+/** An event's photos, oldest first (no image data: that's served by /ph/[id]). */
+export async function eventPhotosOf(eventId: string): Promise<EventPhoto[]> {
+  const rows = await db.select({ id: eventPhotos.id, createdAt: eventPhotos.createdAt, byId: eventPhotos.byId }).from(eventPhotos).where(eq(eventPhotos.eventId, eventId)).orderBy(asc(eventPhotos.createdAt));
+  return rows.map(photoOf);
+}
 
 export const photoUrl = (p: { id: string; avatarAt: Date | null }) => (p.avatarAt ? `/a/${p.id}?v=${p.avatarAt.getTime()}` : null);
 const lite = (p: typeof players.$inferSelect): PlayerLite => ({ id: p.id, name: p.name, color: p.color, claimed: !!p.pinHash, photo: photoUrl(p) });
@@ -37,10 +48,11 @@ export async function allPlayers(): Promise<PlayerLite[]> {
 export async function getEventView(id: string): Promise<EventView | null> {
   const [event] = await db.select().from(events).where(eq(events.id, id));
   if (!event) return null;
-  const [ens, sts, gs] = await Promise.all([
+  const [ens, sts, gs, photos] = await Promise.all([
     db.select().from(entries).where(eq(entries.eventId, id)).orderBy(asc(entries.createdAt)),
     db.select().from(stages).where(eq(stages.eventId, id)).orderBy(asc(stages.no)),
     db.select().from(games).where(eq(games.eventId, id)),
+    eventPhotosOf(id),
   ]);
   const stageRows = sts.map((s) => ({ id: s.id, no: s.no, kind: s.kind as StageKind }));
   const stMap = new Map(sts.map((s) => [s.id, { id: s.id, no: s.no, kind: s.kind as StageKind }]));
@@ -53,6 +65,7 @@ export async function getEventView(id: string): Promise<EventView | null> {
     stages: stageRows,
     games: gs.map((g) => toGame(g, stMap)),
     people: Object.fromEntries(ps.map((p) => [p.id, lite(p)])),
+    photos,
   };
 }
 
@@ -242,10 +255,10 @@ export async function getRecap(eventId: string, playerId: string | null): Promis
 }
 
 /** One event's tournament story (src/lib/story.ts), with everyone's names. */
-export async function getStory(eventId: string): Promise<{ story: Story; names: Record<string, PlayerLite> } | null> {
+export async function getStory(eventId: string): Promise<{ story: Story; names: Record<string, PlayerLite>; photos: EventPhoto[] } | null> {
   const { ps, evs, gs } = await everything();
   const days: DayEvent[] = evs.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.getTime(), status: e.status, games: gs.filter((g) => g.eventId === e.id) }));
   const ev = days.find((d) => d.id === eventId);
   if (!ev) return null;
-  return { story: buildStory(ev, days), names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])) };
+  return { story: buildStory(ev, days), names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])), photos: await eventPhotosOf(eventId) };
 }

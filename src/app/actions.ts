@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { players, events, entries, stages, games } from "@/db/schema";
+import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
 import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin";
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
@@ -172,6 +172,39 @@ export async function reopenEvent(id: string): Promise<Result> {
   if (!isUuid(id)) return fail("Unknown event.");
   await db.update(events).set({ status: "live" }).where(eq(events.id, id));
   refresh(id);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Photos from the day
+
+const PHOTO_RE = /^data:image\/(?:jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+const PHOTO_MAX = 450_000; // characters of base64: ~330 KB, room for a 1440px JPEG
+const PHOTOS_PER_EVENT = 24;
+
+/** Add a photo to an event: a JPEG the phone has already resized (PhotoPicker). Anyone signed in. */
+export async function addEventPhoto(eventId: string, dataUrl: string): Promise<Result> {
+  const s = await me(); if (!s) return fail("Sign in to add photos.");
+  if (!isUuid(eventId)) return fail("Unknown event.");
+  if (typeof dataUrl !== "string" || dataUrl.length > PHOTO_MAX || !PHOTO_RE.test(dataUrl)) return fail("That photo couldn't be used. Try another.");
+  const [ev] = await db.select({ id: events.id }).from(events).where(eq(events.id, eventId));
+  if (!ev) return fail("Unknown event.");
+  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(eventPhotos).where(eq(eventPhotos.eventId, eventId));
+  if (n >= PHOTOS_PER_EVENT) return fail(`This event already has ${PHOTOS_PER_EVENT} photos.`);
+  await db.insert(eventPhotos).values({ eventId, data: dataUrl, byId: s.playerId });
+  refresh(eventId);
+  return { ok: true };
+}
+
+/** Remove a photo: whoever added it, or an organiser. */
+export async function deleteEventPhoto(photoId: string): Promise<Result> {
+  if (!isUuid(photoId)) return fail("Unknown photo.");
+  const [p] = await db.select({ eventId: eventPhotos.eventId, byId: eventPhotos.byId }).from(eventPhotos).where(eq(eventPhotos.id, photoId));
+  if (!p) return fail("Unknown photo.");
+  const s = await getSession();
+  if (!(s?.playerId && s.playerId === p.byId) && !isOrganiser(s)) return fail("Only whoever added it, or an organiser, can remove a photo.");
+  await db.delete(eventPhotos).where(eq(eventPhotos.id, photoId));
+  refresh(p.eventId);
   return { ok: true };
 }
 

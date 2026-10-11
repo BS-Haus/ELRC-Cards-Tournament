@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { players } from "@/db/schema";
+import { players, eventPhotos } from "@/db/schema";
 import { getRecap, getStory } from "@/lib/data";
 import { tierColor } from "@/components/ui";
 
@@ -99,9 +99,15 @@ async function storyCard(id: string) {
   const name = (pid: string) => names[pid]?.name ?? "Someone";
   const champ = story.champion;
   const [row] = champ ? await db.select({ avatar: players.avatar }).from(players).where(eq(players.id, champ.id)) : [];
+  const [cover] = await db.select({ data: eventPhotos.data }).from(eventPhotos).where(eq(eventPhotos.eventId, id)).orderBy(asc(eventPhotos.createdAt)).limit(1);
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", padding: 96, background: "linear-gradient(180deg, #3a2c06 0%, #120f05 45%, #0c0e10 100%)", color: "#F4F5F6", fontFamily: "sans-serif" }}>
+      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", padding: 96, background: "linear-gradient(180deg, #3a2c06 0%, #120f05 45%, #0c0e10 100%)", color: "#F4F5F6", fontFamily: "sans-serif", position: "relative" }}>
+        {cover?.data && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover.data} width={1080} height={1920} style={{ position: "absolute", top: 0, left: 0, width: 1080, height: 1920, objectFit: "cover" }} alt="" />
+        )}
+        {cover?.data && <div style={{ position: "absolute", top: 0, left: 0, width: 1080, height: 1920, background: "linear-gradient(180deg, rgba(12,14,16,.55) 0%, rgba(12,14,16,.35) 35%, rgba(12,14,16,.92) 70%, #0c0e10 100%)" }} />}
         <div style={{ fontSize: 34, letterSpacing: 6, color: "#FFCF5C", textTransform: "uppercase" }}>{`${story.event.title} · ${when(story.event.startsAt)}`}</div>
         {champ ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 110 }}>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Avatar, tierColor, fmtDate } from "@/components/ui";
 import { StoryReel, CountUp, type Slide } from "@/components/StoryReel";
 import type { Story, Tale } from "@/lib/story";
-import type { PlayerLite } from "@/lib/data";
+import type { PlayerLite, EventPhoto } from "@/lib/data";
 
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 const TALE_BG: Record<Tale["kind"], string> = {
@@ -15,12 +15,26 @@ const TALE_BG: Record<Tale["kind"], string> = {
 const TALE_ICON: Record<Tale["kind"], string> = { unbeaten: "💯", firstTitle: "✨", climber: "🧗", streak: "🔥", partnership: "🤝", blowout: "💥", deuce: "😮‍💨", points: "🎯" };
 
 /** The tournament as a story: the champion first, then the day's stories, its records and its numbers. */
-export function TournamentStory({ story, names, viewerPlayed, viewer }: { story: Story; names: Record<string, PlayerLite>; viewerPlayed: boolean; viewer: string | null }) {
+export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: { story: Story; names: Record<string, PlayerLite>; photos: EventPhoto[]; viewerPlayed: boolean; viewer: string | null }) {
   const n = (id: string) => names[id]?.name ?? "Someone";
   const both = (ids: string[]) => ids.map(n).join(" & ");
   const slides: Slide[] = [];
   const ev = story.event;
   const champ = story.champion;
+
+  // 0. The cover: the day's first photo, full screen, with the title over it.
+  if (photos.length) {
+    slides.push({
+      key: "cover", bg: "from-[#0c0e10] to-[#0c0e10]", image: photos[0].url,
+      body: (
+        <div className="mt-[38vh]">
+          <div className="text-[13px] font-bold uppercase tracking-[.22em] text-accent">{fmtDate(ev.startsAt, false)} · {story.numbers.players} players</div>
+          <div className="mt-2 text-[48px] font-black leading-[1] tracking-[-.02em] drop-shadow-lg">{ev.title}</div>
+          <div className="mt-2 text-[17px] text-white/80">{champ ? "Here's how it went." : "The story so far."}</div>
+        </div>
+      ),
+    });
+  }
 
   // 1. The hero: who won.
   slides.push(champ ? {
@@ -116,6 +130,24 @@ export function TournamentStory({ story, names, viewerPlayed, viewer }: { story:
               </div>
             </div>
           ))}
+        </div>
+      ),
+    });
+  }
+
+  // 4b. More photos, if the day has them.
+  if (photos.length > 1) {
+    slides.push({
+      key: "photos", bg: "from-[#0c0e10] to-[#0c0e10]",
+      body: (
+        <div className="grid gap-3">
+          <div className="text-[13px] font-bold uppercase tracking-[.2em] text-white/55">📸 From the day</div>
+          <div className="grid grid-cols-2 gap-2">
+            {photos.slice(1, 7).map((p, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={p.id} src={p.url} alt="" className={`w-full rounded-xl object-cover ${i === 0 && photos.length > 3 ? "col-span-2 aspect-[16/10]" : "aspect-square"}`} />
+            ))}
+          </div>
         </div>
       ),
     });

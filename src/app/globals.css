@@ -53,3 +53,5 @@ button:disabled { cursor: default; }
 @keyframes spkCrown { 0% { transform: scale(.7); opacity: 0; } 60% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); } }
 .spk-crown { animation: spkCrown .5s cubic-bezier(.2,.9,.3,1.2) both; }
 @media (prefers-reduced-motion: reduce) { .spk-confetti, .spk-crown { animation: none; } .spk-confetti { display: none; } }
+@keyframes spkFade { 0% { opacity: 0; transform: scale(1.04); } 100% { opacity: 1; transform: scale(1); } }
+.spk-fade { animation: spkFade .8s ease-out both; }

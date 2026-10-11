@@ -44,6 +44,10 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 - **Your review (second):** each player's own reel, under the story on the event page and on every
   weekend in their profile: record, game by game, finish, points and rank, partners, you vs the
   field, and the trend since last time. (`src/lib/recap.ts`)
+- **Photos from the day:** anyone signed in can add photos to an event (take one or pick from the
+  camera roll; the phone shrinks them first). The first one is the cover of the tournament story and
+  the backdrop of its shareable card. Up to 24 per event; whoever added one, or an organiser, can
+  remove it. Videos aren't supported yet: they'd need a file store (e.g. Vercel Blob).
 - **Live winners:** everyone on the event page gets a pop-up the moment a final is decided.
 
 ## Accounts

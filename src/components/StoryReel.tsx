@@ -39,7 +39,8 @@ export function Confetti() {
   );
 }
 
-export type Slide = { key: string; bg: string; body: React.ReactNode; confetti?: boolean };
+/** `image`: a photo filling the screen behind the slide, darkened so the words read over it. */
+export type Slide = { key: string; bg: string; body: React.ReactNode; confetti?: boolean; image?: string };
 
 export function StoryReel({ slides, label, backHref, imageUrl, shareUrl, title, endTitle, endNote, endExtra }: {
   slides: Slide[]; label: string; backHref: string; imageUrl: string; shareUrl: string; title: string;
@@ -109,6 +110,13 @@ export function StoryReel({ slides, label, backHref, imageUrl, shareUrl, title, 
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col bg-[#0c0e10] text-fg">
       <div className={`absolute inset-0 bg-gradient-to-b ${done ? "from-[#1b2410] to-[#0c0e10]" : s.bg}`} />
+      {!done && s.image && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img key={s.key} src={s.image} alt="" className="spk-fade absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0c0e10] via-[#0c0e10]/35 to-[#0c0e10]/70" />
+        </>
+      )}
       {!done && s.confetti && <Confetti key={s.key} />}
       <div className="relative z-10 flex gap-1 px-3 pt-[calc(10px+env(safe-area-inset-top))]">
         {slides.map((x, i) => (
