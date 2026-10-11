@@ -1,8 +1,6 @@
 // Points and ranks: cosmetic, for fun. Every weekend you play earns points for turning up, for
-// your wins and for where you finish; points add up over time into ranks shaped like Rocket
-// League's (five tiers climbing bronze → silver → gold → diamond → champion, three divisions each)
-// but named in roundnet slang, like the ladder app's tiers (and deliberately not the same names,
-// so the two are never confused): Rim Rat, Dig Dog, Hinge Hero, Spike Sorcerer, Net Royalty.
+// your wins and for where you finish; points add up over time into Rocket League-style ranks:
+// Bronze, Silver, Gold, Diamond and Champion, three divisions each (Gold I, Gold II, Gold III).
 // Nothing here affects who plays whom. Pure: games in, points out.
 import { tally, isDone, type Game } from "@/lib/cards";
 import { finishOf } from "@/lib/recap";
@@ -19,11 +17,11 @@ export const POINTS = {
 
 /** The five ranks and the points each starts at. Champion's divisions are 100 points apart. */
 export const RANKS = [
-  { tier: "Rim Rat", icon: "🐀", min: 0, color: "#D08A57" }, // bronze
-  { tier: "Dig Dog", icon: "🐕", min: 60, color: "#C4CDD6" }, // silver
-  { tier: "Hinge Hero", icon: "🦸", min: 150, color: "#FFCF5C" }, // gold
-  { tier: "Spike Sorcerer", icon: "🔮", min: 300, color: "#7DD3FC" }, // diamond
-  { tier: "Net Royalty", icon: "👑", min: 500, color: "#C084FC" }, // champion
+  { tier: "Bronze", icon: "🥉", min: 0, color: "#D08A57" },
+  { tier: "Silver", icon: "🥈", min: 60, color: "#C4CDD6" },
+  { tier: "Gold", icon: "🥇", min: 150, color: "#FFCF5C" },
+  { tier: "Diamond", icon: "💎", min: 300, color: "#7DD3FC" },
+  { tier: "Champion", icon: "🏆", min: 500, color: "#C084FC" },
 ] as const;
 const CHAMP_STEP = 100;
 const DIVISIONS = ["I", "II", "III"];
@@ -51,7 +49,7 @@ export function eventPoints(games: Game[], id: string): Earned {
   return { total: parts.reduce((n, p) => n + p.points, 0), parts: parts.filter((p) => p.points > 0) };
 }
 
-/** Every division in order, lowest first: Rim Rat I … Net Royalty III. */
+/** Every division in order, lowest first: Bronze I … Champion III. */
 export const LEVELS: Level[] = RANKS.flatMap((r, i) => {
   const step = i + 1 < RANKS.length ? (RANKS[i + 1].min - r.min) / 3 : CHAMP_STEP;
   return DIVISIONS.map((d, j) => ({ name: `${r.tier} ${d}`, tier: r.tier, icon: r.icon, division: j + 1, min: Math.round(r.min + j * step), color: r.color }));

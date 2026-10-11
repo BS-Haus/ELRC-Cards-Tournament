@@ -35,8 +35,8 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 - **Profile photos:** add one on the Me tab. The phone crops and shrinks it before upload.
 - **Points:** every weekend earns points for turning up (10), each game (1), each win (3), and
   your finish (Gold champion 30, runner-up 15, finalist 6; Silver 15 / 8 / 3; and so on). They add
-  up into five ranks in roundnet slang, each in divisions I, II and III: 🐀 Rim Rat (0),
-  🐕 Dig Dog (60), 🦸 Hinge Hero (150), 🔮 Spike Sorcerer (300) and 👑 Net Royalty (500). Cosmetic only: they never affect the draw. (`src/lib/levels.ts`)
+  up into Rocket League-style ranks, each in divisions I, II and III: 🥉 Bronze (0), 🥈 Silver (60),
+  🥇 Gold (150), 💎 Diamond (300) and 🏆 Champion (500). Cosmetic only: they never affect the draw. (`src/lib/levels.ts`)
 - **Tournament story (the main event):** after a tournament, tap **Watch the tournament story**.
   The champion is the hero, then every final's podium, the day's stories (perfect days, streaks,
   dream teams, the climb from the bottom into Gold, the epic deuce), records broken against every

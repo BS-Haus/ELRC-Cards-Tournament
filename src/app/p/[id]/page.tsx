@@ -44,7 +44,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
               <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/10">
                 <div className="h-full rounded-full" style={{ width: `${lv.progress * 100}%`, background: lv.level.color }} />
               </div>
-              <div className="mt-2 text-[12.5px] text-dim">{lv.next ? `${lv.next.min - pr.points} points to ${lv.next.name}. Every weekend earns points for playing, winning and your finish.` : "Net Royalty III: as high as it goes."}</div>
+              <div className="mt-2 text-[12.5px] text-dim">{lv.next ? `${lv.next.min - pr.points} points to ${lv.next.name}. Every weekend earns points for playing, winning and your finish.` : "Champion III: as high as it goes."}</div>
             </div>
           </div>
         );

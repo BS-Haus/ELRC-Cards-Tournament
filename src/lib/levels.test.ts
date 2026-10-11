@@ -24,12 +24,12 @@ describe("points and levels", () => {
     expect(eventPoints(day, "nobody")).toEqual({ total: 0, parts: [] });
   });
   it("turns points into five ranks of three divisions", () => {
-    expect(levelFor(0).level.name).toBe("Rim Rat I");
-    expect(levelFor(150).level.name).toBe("Hinge Hero I");
-    expect(levelFor(299).level.name).toBe("Hinge Hero III");
-    expect([...new Set(LEVELS.map((l) => l.tier))]).toEqual(["Rim Rat", "Dig Dog", "Hinge Hero", "Spike Sorcerer", "Net Royalty"]);
+    expect(levelFor(0).level.name).toBe("Bronze I");
+    expect(levelFor(150).level.name).toBe("Gold I");
+    expect(levelFor(299).level.name).toBe("Gold III");
+    expect([...new Set(LEVELS.map((l) => l.tier))]).toEqual(["Bronze", "Silver", "Gold", "Diamond", "Champion"]);
     expect(LEVELS).toHaveLength(15);
-    expect(LEVELS.at(-1)!.name).toBe("Net Royalty III");
+    expect(LEVELS.at(-1)!.name).toBe("Champion III");
     expect(levelFor(LEVELS[1].min).level.name).toBe(LEVELS[1].name);
     const mid = levelFor((LEVELS[2].min + LEVELS[3].min) / 2);
     expect(mid.level.name).toBe(LEVELS[2].name);
