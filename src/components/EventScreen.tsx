@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { setMyEntry, setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent } from "@/app/actions";
+import { setMyEntry, setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, type Game, type StageKind } from "@/lib/cards";
+import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind } from "@/lib/cards";
 import { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 
@@ -80,7 +80,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
           <div className="grid gap-2">
             {subAlerts.map((g) => (
               <button key={g.id} onClick={() => setOpen(g.id)} className="spk-press flex items-center justify-between gap-3 rounded-2xl border border-loss/40 bg-loss/10 p-3.5 text-left">
-                <span className="text-[14px]"><b>{needsSub(g, out).map((id) => p(id)?.name).join(" & ")}</b> left. {g.kind === "final" ? `${g.groupName} final` : `Group ${g.groupName}`}, game {g.seq} needs someone.</span>
+                <span className="text-[14px]"><b>{needsSub(g, out).map((id) => p(id)?.name).join(" & ")}</b> left. {gameLabel(g)}, game {g.seq} needs someone.</span>
                 <span className="shrink-0 text-[13px] font-bold text-loss">Sort it →</span>
               </button>
             ))}
@@ -101,7 +101,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
       {current && (
         <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`}>
           <div className="grid gap-3">
-            {curGroups.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} />)}
+            {curGroups.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
           </div>
         </Section>
       )}
@@ -137,7 +137,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
                   <span className="text-muted transition group-open:rotate-90">›</span>
                 </summary>
                 <div className="grid gap-3 px-3 pb-3">
-                  {groupsOf(view, s.no).map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} />)}
+                  {groupsOf(view, s.no).map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
                 </div>
               </details>
             ))}
@@ -153,7 +153,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
 
       {openGame && (
         <ScoreSheet
-          game={openGame} people={people} to={openGame.kind === "final" ? ev.finalTo : ev.groupTo} canScore={!!me} org={org}
+          game={openGame} people={people} to={openGame.decider ? DECIDER_TO : openGame.kind === "final" ? ev.finalTo : ev.groupTo} canScore={!!me} org={org}
           candidates={here.filter((id) => ![...openGame.a, ...openGame.b].includes(id) && !out.has(id))} out={out}
           onClose={() => setOpen(null)}
         />
@@ -237,7 +237,7 @@ function NetCard({ net, now, next, people, out, onOpen }: { net: number; now?: G
       <button onClick={() => onOpen(now.id)} className="spk-press block w-full p-4 text-left">
         <div className="flex items-center justify-between text-[12px] font-bold uppercase tracking-[.1em]">
           <span className="text-accent">Net {net} · on now</span>
-          <span className="text-dim">{now.kind === "final" ? `${now.groupName} final` : `Group ${now.groupName}`} · game {now.seq}</span>
+          <span className="text-dim">{gameLabel(now)} · game {now.seq}</span>
         </div>
         <div className="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[16px] font-extrabold leading-tight">
           <span>{teamLine(now.a, people, now.subs, out)}</span>
@@ -255,9 +255,13 @@ function NetCard({ net, now, next, people, out, onOpen }: { net: number; now?: G
   );
 }
 
-function GroupCard({ g, people, me, out, onOpen }: { g: GroupView; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void }) {
+function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: { g: GroupView; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string }) {
   const final = g.kind === "final";
   const tint = final ? tierColor(g.name) : "#CBFB4F";
+  const name = (id: string) => people[id]?.name ?? "Someone";
+  const deciders = g.games.filter((x) => x.decider && x.status !== "void");
+  const pts = deciderPoints(deciders, g.tied);
+  const tiedNames = g.tied.map(name).join(" and ");
   return (
     <div className={`${card} spk-up overflow-hidden`}>
       <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
@@ -269,7 +273,18 @@ function GroupCard({ g, people, me, out, onOpen }: { g: GroupView; people: Recor
       </div>
       {(g.winner || g.tied.length > 0) && (
         <div className="mx-3 mb-2 rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: `${tint}22`, color: tint }}>
-          {g.winner ? `★ ${people[g.winner]?.name} ${final ? `wins ${g.name}` : "tops the group"}` : `Tied at the top: ${g.tied.map((id) => people[id]?.name).join(" and ")}. Play a decider if it matters.`}
+          {g.winner
+            ? `★ ${name(g.winner)} ${final ? `wins ${g.name}` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)} on points` : ""}`
+            : g.decider === "playing"
+              ? `Decider: ${tiedNames} play two games to ${DECIDER_TO}, swapping partners. Most points across both wins.`
+              : g.decider === "level"
+                ? `Still level after the decider (${pts[0]}–${pts[1]}). Play it again, or toss a coin.`
+                : `Tied at the top: ${tiedNames}.${org ? "" : " The organiser can set up a decider."}`}
+          {org && g.tied.length === 2 && (g.decider === "none" || g.decider === "level") && (
+            <button disabled={pending} onClick={() => run(() => addDecider(eventId, g.stageNo, g.groupNo), "Decider added. It's next on the net")} className={`${btnPrimary} mt-2 w-full`}>
+              {g.decider === "level" ? "Play the decider again" : "Play decider"}
+            </button>
+          )}
         </div>
       )}
       <table className="tnum w-full text-[14px]">
@@ -305,7 +320,7 @@ function GameRow({ g, people, out, onOpen }: { g: Game; people: Record<string, P
   const aWon = fin && g.scoreA! > g.scoreB!;
   return (
     <button onClick={() => onOpen(g.id)} className={`spk-press grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-white/[.03] px-4 py-2.5 text-left text-[13.5px] last:border-0 ${g.status === "void" ? "opacity-40" : ""}`}>
-      <span className={aWon ? "font-bold" : "text-fg/85"}>{teamLine(g.a, people, g.subs, out)}</span>
+      <span className={aWon ? "font-bold" : "text-fg/85"}>{g.decider && <span className="mr-1.5 rounded bg-accent/15 px-1 py-0.5 text-[10px] font-bold uppercase tracking-[.08em] text-accent">Decider</span>}{teamLine(g.a, people, g.subs, out)}</span>
       <span className={`tnum min-w-[58px] rounded-lg px-2 py-1 text-center font-mono text-[13px] font-bold ${fin ? "bg-raised" : g.status === "void" ? "text-dim" : "border border-dashed border-white/15 text-dim"}`}>
         {fin ? `${g.scoreA}–${g.scoreB}` : g.status === "void" ? "skipped" : "score"}
       </span>

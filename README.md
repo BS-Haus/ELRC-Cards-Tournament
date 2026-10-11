@@ -16,7 +16,9 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
    group keeps its own net. Everyone partners everyone in their group once. 1 point per win.
 5. **Enter scores** from any phone, in any order: tap the winners, tap the losers' score.
 6. **Finals:** Gold, Silver (and Bronze with 12+), seeded from the group stage. Most wins in
-   Gold is champion, second is runner-up; level on wins goes to points difference, then a decider.
+   Gold is champion, second is runner-up; level on wins goes to points difference, then a decider: the organiser taps
+   **Play decider** and the tied pair play two games to 11 on opposite sides, swapping partners;
+   most points across both wins. Deciders count for nothing else.
    Late arrivals who haven't played start in the bottom final.
 7. **Big fields (16+) only:** an extra "regroup by level" stage can come before the finals. The
    finals are then seeded by where people finished in that stage's groups, not by win %.

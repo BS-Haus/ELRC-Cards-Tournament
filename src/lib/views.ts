@@ -2,7 +2,7 @@
 import { tally, rank, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line } from "@/lib/cards";
 import type { EventView } from "@/lib/data";
 
-export type GroupView = { stageNo: number; kind: StageKind; groupNo: number; name: string; net: number; games: Game[]; table: Line[]; winner: string | null; tied: string[]; complete: boolean };
+export type GroupView = { stageNo: number; kind: StageKind; groupNo: number; name: string; net: number; games: Game[]; table: Line[]; winner: string | null; tied: string[]; decider: "none" | "playing" | "decided" | "level"; complete: boolean };
 
 export function groupsOf(v: EventView, stageNo: number): GroupView[] {
   const gs = v.games.filter((g) => g.stageNo === stageNo);
@@ -11,8 +11,8 @@ export function groupsOf(v: EventView, stageNo: number): GroupView[] {
     const games = gs.filter((g) => g.groupNo === groupNo).sort((a, b) => a.seq - b.seq);
     const live = games.filter((g) => g.status !== "void");
     const table = groupRank(tally(live, groupMembers(games)).values());
-    const { winner, tied } = groupWinner(games);
-    return { stageNo, kind: games[0].kind, groupNo, name: games[0].groupName, net: games[0].net, games, table, winner, tied, complete: live.every(isDone) };
+    const { winner, tied, decider } = groupWinner(games);
+    return { stageNo, kind: games[0].kind, groupNo, name: games[0].groupName, net: games[0].net, games, table, winner, tied, decider, complete: live.every(isDone) };
   });
 }
 

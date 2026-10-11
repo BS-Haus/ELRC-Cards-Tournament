@@ -19,6 +19,8 @@ export type Game = {
   scoreA: number | null;
   scoreB: number | null;
   status: GameStatus;
+  /** One of the two tie-break games (decideTie): settles who tops the group, counts for nothing else. */
+  decider?: boolean;
 };
 
 export type Planned = { a: [string, string]; b: [string, string] };
@@ -133,7 +135,7 @@ export function tally(games: Game[], ids?: Iterable<string>): Map<string, Line> 
   const line = (id: string) => t.get(id) ?? (t.set(id, { id, gp: 0, w: 0, l: 0, pf: 0, pa: 0 }), t.get(id)!);
   if (ids) for (const id of ids) line(id);
   for (const g of games) {
-    if (!isDone(g)) continue;
+    if (!isDone(g) || g.decider) continue;
     const aWon = g.scoreA! > g.scoreB!;
     for (const [side, won, f, a] of [[g.a, aWon, g.scoreA!, g.scoreB!], [g.b, !aWon, g.scoreB!, g.scoreA!]] as const) {
       for (const id of side) {
@@ -222,15 +224,45 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
 }
 
 /** A finished group's winner, or the tied pair when first place is level on wins and difference. */
-export function groupWinner(games: Game[]): { winner: string | null; tied: string[] } {
-  const live = games.filter((g) => g.status !== "void");
-  if (!live.length || live.some((g) => !isDone(g))) return { winner: null, tied: [] };
+export function groupWinner(games: Game[]): { winner: string | null; tied: string[]; decider: "none" | "playing" | "decided" | "level" } {
+  const live = games.filter((g) => g.status !== "void" && !g.decider);
+  if (!live.length || live.some((g) => !isDone(g))) return { winner: null, tied: [], decider: "none" };
   const rows = groupRank(tally(live, groupMembers(live)).values());
-  if (rows.length > 1 && rows[0].w === rows[1].w && rows[0].pf - rows[0].pa === rows[1].pf - rows[1].pa) {
-    return { winner: null, tied: [rows[0].id, rows[1].id] };
+  if (!(rows.length > 1 && rows[0].w === rows[1].w && rows[0].pf - rows[0].pa === rows[1].pf - rows[1].pa)) {
+    return { winner: rows[0]?.id ?? null, tied: [], decider: "none" };
   }
-  return { winner: rows[0]?.id ?? null, tied: [] };
+  const tied = [rows[0].id, rows[1].id];
+  const d = games.filter((g) => g.decider && g.status !== "void");
+  if (!d.length) return { winner: null, tied, decider: "none" };
+  if (d.some((g) => !isDone(g))) return { winner: null, tied, decider: "playing" };
+  const [x, y] = deciderPoints(d, tied);
+  if (x === y) return { winner: null, tied, decider: "level" };
+  return { winner: x > y ? tied[0] : tied[1], tied, decider: "decided" };
 }
+
+/** Points each of the tied pair scored across the decider games, in the pair's order. */
+export function deciderPoints(deciders: Game[], tied: string[]): number[] {
+  return tied.map((id) => deciders.filter(isDone).reduce((n, g) => n + (g.a.includes(id) ? g.scoreA! : g.b.includes(id) ? g.scoreB! : 0), 0));
+}
+
+/**
+ * A fair decider between two players level at the top of a group: two games in which they're on
+ * opposite sides and swap partners, so each plays once with each of the next two in the table
+ * (x+c v y+d, then x+d v y+c). Neither gets the better partner. Most points across both wins.
+ */
+export function decideTie(table: Line[], tied: [string, string]): Planned[] {
+  const [x, y] = tied;
+  const [c, d] = table.map((r) => r.id).filter((id) => id !== x && id !== y);
+  if (!c || !d) return [];
+  return [{ a: [x, c], b: [y, d] }, { a: [x, d], b: [y, c] }];
+}
+
+/** "Group A", "Gold final" or "Group A decider": what a game is, for headings. */
+export const gameLabel = (g: Pick<Game, "kind" | "groupName" | "decider">) =>
+  `${g.kind === "final" ? `${g.groupName} final` : `Group ${g.groupName}`}${g.decider ? " decider" : ""}`;
+
+/** Deciders are short: to 11, win by two. */
+export const DECIDER_TO = 11;
 
 /** Each net's queue of games still to play, in order: [0] is on now, [1] is next. */
 export function netQueues(games: Game[], nets: number): Game[][] {

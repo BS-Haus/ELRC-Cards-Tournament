@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, jsonb, primaryKey, index } from "drizzle-orm/pg-core";
+import { pgTable, boolean, uuid, text, integer, timestamp, jsonb, primaryKey, index } from "drizzle-orm/pg-core";
 
 // A person. `handle` is the lower-cased name used to sign in. A walk-in added by the organiser
 // has no PIN yet; whoever signs up with that name later claims the profile and its history.
@@ -68,6 +68,7 @@ export const games = pgTable(
     scoreA: integer("score_a"),
     scoreB: integer("score_b"),
     status: text("status").notNull().default("todo"), // todo | done | void
+    decider: boolean("decider").notNull().default(false), // a tie-break game: decides the group's top spot only
     enteredById: uuid("entered_by_id").references(() => players.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

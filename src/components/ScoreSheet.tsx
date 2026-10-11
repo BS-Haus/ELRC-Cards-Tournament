@@ -5,7 +5,7 @@ import Link from "next/link";
 import { enterScore, clearScore, setSkipped, subIn } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { Avatar, btnPrimary, btnGhost, btnQuiet } from "@/components/ui";
-import { isDone, winnerScore, type Game } from "@/lib/cards";
+import { isDone, winnerScore, gameLabel, type Game } from "@/lib/cards";
 import type { PlayerLite } from "@/lib/data";
 
 /**
@@ -26,7 +26,7 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
   const team = (ids: string[]) => ids.map(name).join(" & ");
   const w = loser == null ? null : winnerScore(loser, to);
   const scoreA = winner === "a" ? w : loser, scoreB = winner === "b" ? w : loser;
-  const label = game.kind === "final" ? `${game.groupName} final` : `Group ${game.groupName}`;
+  const label = gameLabel(game);
   const save = () => {
     if (scoreA == null || scoreB == null) return;
     run(() => enterScore(game.id, scoreA, scoreB), "Score saved", (r) => r.ok && onClose());

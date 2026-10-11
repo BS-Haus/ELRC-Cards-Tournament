@@ -7,8 +7,8 @@ import { players, events, entries, stages, games } from "@/db/schema";
 import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin";
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
-import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, type StageKind } from "@/lib/cards";
-import { getEventView } from "@/lib/data";
+import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, type StageKind } from "@/lib/cards";
+import { getEventView, groupsOf } from "@/lib/data";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -243,6 +243,36 @@ export async function drawStage(eventId: string, kind: StageKind): Promise<Resul
     }
     await tx.update(events).set({ status: "live" }).where(eq(events.id, eventId));
   });
+  refresh(eventId);
+  return { ok: true };
+}
+
+/**
+ * Organiser: settle a tie at the top of a group with two decider games (decideTie): the tied pair
+ * on opposite sides, swapping partners between the next two in the table. They go on the group's
+ * net, next in line, and count for nothing but who tops the group.
+ */
+export async function addDecider(eventId: string, stageNo: number, groupNo: number): Promise<Result> {
+  const no = await requireOrganiser(); if (no) return no;
+  if (!isUuid(eventId) || !Number.isInteger(stageNo) || !Number.isInteger(groupNo)) return fail("Unknown group.");
+  const v = await getEventView(eventId);
+  if (!v) return fail("Unknown event.");
+  if (v.event.status === "done") return fail("This event has finished. Reopen it first.");
+  const stage = v.stages.find((st) => st.no === stageNo);
+  const g = stage && groupsOf(v, stageNo).find((x) => x.groupNo === groupNo);
+  if (!stage || !g) return fail("Unknown group.");
+  if (g.tied.length !== 2) return fail("Nobody's tied at the top of this group.");
+  if (g.decider === "playing" || g.decider === "decided") return fail("This group already has a decider.");
+  const plan = decideTie(g.table, [g.tied[0], g.tied[1]]);
+  if (!plan.length) return fail("A decider needs two other players in the group.");
+  const inStage = v.games.filter((x) => x.stageNo === stageNo);
+  const seq = Math.max(0, ...g.games.map((x) => x.seq));
+  // Next on this net: just after whatever's still to play there (or straight on if it's free).
+  const ord = Math.max(0, ...inStage.map((x) => x.ord));
+  await db.insert(games).values(plan.map((x, i) => ({
+    eventId, stageId: stage.id, groupNo, groupName: g.name, seq: seq + i + 1, ord: ord + i + 1, net: g.net,
+    a1: x.a[0], a2: x.a[1], b1: x.b[0], b2: x.b[1], decider: true,
+  })));
   refresh(eventId);
   return { ok: true };
 }

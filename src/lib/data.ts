@@ -24,7 +24,7 @@ function toGame(g: typeof games.$inferSelect, st: Map<string, StageRow>): Game {
   const s = st.get(g.stageId)!;
   return {
     id: g.id, stageNo: s.no, kind: s.kind, groupNo: g.groupNo, groupName: g.groupName, seq: g.seq, ord: g.ord, net: g.net,
-    a: [g.a1, g.a2], b: [g.b1, g.b2], subs: g.subs ?? [], scoreA: g.scoreA, scoreB: g.scoreB, status: g.status as Game["status"],
+    a: [g.a1, g.a2], b: [g.b1, g.b2], subs: g.subs ?? [], scoreA: g.scoreA, scoreB: g.scoreB, status: g.status as Game["status"], decider: g.decider,
   };
 }
 
