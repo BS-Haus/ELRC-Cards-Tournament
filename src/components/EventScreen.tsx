@@ -7,7 +7,7 @@ import { setMyEntry, setEntry, addWalkIn, drawStage, undoStage, finishEvent, reo
 import { useAction } from "@/components/useAction";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, type Game, type StageKind } from "@/lib/cards";
+import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, type Game, type StageKind } from "@/lib/cards";
 import { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 
@@ -27,8 +27,12 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
   }, [ev.status, open, router]);
 
   const p = (id: string) => people[id];
-  const myEntry = entries.find((e) => e.playerId === me)?.state ?? null;
-  const here = entries.filter((e) => e.state === "here").map((e) => e.playerId);
+  // Who's in the tournament right now: checked in, plus everyone from the last stage not marked
+  // out (drawPool). The same list the next draw takes, so the page never disagrees with it.
+  const here = useMemo(() => drawPool(entries, games), [entries, games]);
+  const inPool = new Set(here);
+  const rawEntry = entries.find((e) => e.playerId === me)?.state ?? null;
+  const myEntry = me && rawEntry !== "out" && inPool.has(me) ? "here" : rawEntry;
   const out = new Set(entries.filter((e) => e.state === "out").map((e) => e.playerId));
   const current = stages.at(-1);
   const curGroups = current ? groupsOf(view, current.no) : [];
@@ -115,7 +119,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
 
       {!current && <WhoIsIn view={view} />}
 
-      {org && !done && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} />}
+      {org && !done && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} pool={inPool} />}
 
       {current && standings.some((r) => r.gp) && (
         <Section title="Standings" aside="Group stages · win % then +/−">
@@ -361,22 +365,23 @@ function Podium({ groups, people }: { groups: GroupView[]; people: Record<string
 
 // ---------------------------------------------------------------------------------------------
 
-function OrganiserPanel({ view, roster, run, pending, waiting }: { view: EventView; roster: PlayerLite[]; run: Run; pending: boolean; waiting: string[] }) {
+function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: EventView; roster: PlayerLite[]; run: Run; pending: boolean; waiting: string[]; pool: Set<string> }) {
   const { event: ev, entries, stages, games, people } = view;
   const [name, setName] = useState("");
   const [edit, setEdit] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
-  const here = entries.filter((e) => e.state === "here").length;
+  const here = pool.size;
   const sizes = splitSizes(here);
   const current = stages.at(-1);
   const left = current ? games.filter((g) => g.stageNo === current.no && g.status === "todo").length : 0;
   const stageDone = current && left === 0;
   const twice = (key: string, fn: () => void) => { if (confirm === key) { setConfirm(null); fn(); } else { setConfirm(key); setTimeout(() => setConfirm((c) => (c === key ? null : c)), 3500); } };
   const plan = sizes.length
-    ? `${here} here → groups of ${sizes.join(" + ")}. Everyone plays ${[...new Set(sizes.map(gamesEachForSize))].join(" or ")} games, about ${stageMinutes(sizes, ev.nets, ev.groupTo)} min.`
+    ? `${here} playing → groups of ${sizes.join(" + ")}. Everyone plays ${[...new Set(sizes.map(gamesEachForSize))].join(" or ")} games, about ${stageMinutes(sizes, ev.nets, ev.groupTo)} min.`
     : "Check in at least 4 players to draw groups.";
-  const order: EntryState[] = ["here", "going", "out"];
-  const sorted = [...entries].sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state) || (people[a.playerId]?.name ?? "").localeCompare(people[b.playerId]?.name ?? ""));
+  // A–Z and nothing else: re-sorting by state moved rows under the organiser's finger (and on every
+  // 5-second refresh), so a tap meant for one player could land on another's buttons.
+  const sorted = [...entries].sort((a, b) => (people[a.playerId]?.name ?? "").localeCompare(people[b.playerId]?.name ?? "") || a.playerId.localeCompare(b.playerId));
 
   return (
     <Section title="Organiser">
@@ -390,10 +395,12 @@ function OrganiserPanel({ view, roster, run, pending, waiting }: { view: EventVi
           <p className="mt-1 text-[13px] text-dim">{plan}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {!current && <button disabled={pending || here < 4} onClick={() => run(() => drawStage(ev.id, "random"), "Groups drawn")} className={btnPrimary}>Draw random groups</button>}
+            {/* Two stages is the format: random groups, then Gold / Silver finals. A middle
+                "regroup by level" stage only earns its place in a big field (16+). */}
             {current && current.kind !== "final" && (
               <>
-                <button disabled={pending || here < 4} onClick={() => twice("seeded", () => run(() => drawStage(ev.id, "seeded"), "Next stage drawn"))} className={stageDone ? btnPrimary : btnGhost}>{confirm === "seeded" ? "Tap again to draw" : "Next stage: regroup by level"}</button>
-                <button disabled={pending || here < 4} onClick={() => twice("final", () => run(() => drawStage(ev.id, "final"), "Finals drawn"))} className={btnGhost}>{confirm === "final" ? "Tap again for finals" : "Start finals"}</button>
+                <button disabled={pending || here < 4} onClick={() => twice("final", () => run(() => drawStage(ev.id, "final"), "Finals drawn"))} className={stageDone ? btnPrimary : btnGhost}>{confirm === "final" ? "Tap again for finals" : "Start finals"}</button>
+                {here >= 16 && current.kind === "random" && <button disabled={pending} onClick={() => twice("seeded", () => run(() => drawStage(ev.id, "seeded"), "Next stage drawn"))} className={btnGhost}>{confirm === "seeded" ? "Tap again to draw" : "Extra stage: regroup by level"}</button>}
               </>
             )}
             {current && <button disabled={pending} onClick={() => twice("undo", () => run(() => undoStage(ev.id), "Stage taken back"))} className={btnQuiet}>{confirm === "undo" ? "Tap again to undo" : "Undo last draw"}</button>}
@@ -403,7 +410,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting }: { view: EventVi
 
         <div className="border-t border-white/[.05] pt-4">
           <div className="text-[15px] font-extrabold">Check-in</div>
-          <p className="mt-1 text-[13px] text-muted">Only people marked <b className="text-fg">here</b> get drawn. Mark someone <b className="text-fg">out</b> if they leave: their games get flagged for a sub.</p>
+          <p className="mt-1 text-[13px] text-muted">Mark people <b className="text-fg">here</b> as they arrive. After the first stage everyone who played stays in, so only mark someone <b className="text-fg">out</b> if they leave: their games get flagged for a sub.</p>
           <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) run(() => addWalkIn(ev.id, name), `${name.trim()} checked in`, (r) => r.ok && setName("")); }}>
             <input className={input} list="roster" value={name} onChange={(e) => setName(e.target.value)} placeholder="Add someone by name" aria-label="Add someone by name" />
             <datalist id="roster">{roster.map((r) => <option key={r.id} value={r.name} />)}</datalist>
@@ -415,11 +422,16 @@ function OrganiserPanel({ view, roster, run, pending, waiting }: { view: EventVi
                 <Avatar p={people[e.playerId]} size={26} dim={e.state === "out"} />
                 <span className={`min-w-0 flex-1 truncate text-[14px] font-semibold ${e.state === "out" ? "text-dim" : ""}`}>{people[e.playerId]?.name}</span>
                 <div className="flex rounded-lg border border-white/[.06] bg-panel p-0.5 text-[12px] font-bold">
-                  {(["going", "here", "out"] as const).map((s) => (
-                    <button key={s} disabled={pending} onClick={() => run(() => setEntry(ev.id, e.playerId, s))} className={`rounded-md px-2.5 py-1.5 ${e.state === s ? (s === "out" ? "bg-loss text-ink" : "bg-accent text-ink") : "text-muted"}`} aria-pressed={e.state === s}>
-                      {s === "going" ? "In" : s === "here" ? "Here" : "Out"}
+                  {/* Once groups are drawn, "Coming" means nothing (everyone who played stays in),
+                      so it's only Here or Out, and the row shows what the next draw will do. */}
+                  {(current ? (["here", "out"] as const) : (["going", "here", "out"] as const)).map((s) => {
+                    const shown = e.state !== "out" && pool.has(e.playerId) ? "here" : e.state;
+                    return (
+                    <button key={s} disabled={pending} onClick={() => run(() => setEntry(ev.id, e.playerId, s))} className={`rounded-md px-2.5 py-1.5 ${shown === s ? (s === "out" ? "bg-loss text-ink" : "bg-accent text-ink") : "text-muted"}`} aria-pressed={shown === s}>
+                      {s === "going" ? "Coming" : s === "here" ? "Here" : "Out"}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}

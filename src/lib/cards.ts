@@ -167,6 +167,60 @@ export function groupMembers(games: Game[]): string[] {
   return [...all].filter((id) => !subOnly.has(id));
 }
 
+/**
+ * Who the next draw takes: everyone checked in ("here"), plus everyone who played in the latest
+ * stage and hasn't been marked out. Playing a stage keeps you in the tournament, so nobody has
+ * to be checked in again between stages; only "out" takes you out. A sub from the latest stage is
+ * carried too if they're on the list (they turned up), but someone who only ever subbed with no
+ * entry at all isn't. Checked-in players come first, in check-in order, then the carried ones.
+ */
+export function drawPool(entries: { playerId: string; state: string }[], games: Game[]): string[] {
+  const state = new Map(entries.map((e) => [e.playerId, e.state]));
+  const pool = new Set(entries.filter((e) => e.state === "here").map((e) => e.playerId));
+  const latest = games.filter((g) => g.stageNo === Math.max(0, ...games.map((x) => x.stageNo)));
+  const members = new Set(groupMembers(latest));
+  for (const id of new Set(latest.flatMap(players))) {
+    const s = state.get(id);
+    if (s === "out") continue;
+    if (members.has(id) || s) pool.add(id);
+  }
+  return [...pool];
+}
+
+/**
+ * The order a seeded stage or the finals draws from: best first, so group A / Gold gets the top.
+ * After a seeded stage it's by group finish (everyone in group A above everyone in group B), so a
+ * 4–0 in the weaker group can't jump into Gold over someone who went 2–2 among the best. After a
+ * random stage it's the group-stage table (win %, then +/− per game). Someone with no games yet (a
+ * late arrival) goes mid-table for a seeded stage, where they'll be sorted out, but to the bottom
+ * for the finals: Gold is for people who've shown they belong there.
+ */
+export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final"): string[] {
+  const inPool = new Set(pool);
+  const groupStages = games.filter((g) => g.kind !== "final");
+  const lastNo = Math.max(0, ...groupStages.map((g) => g.stageNo));
+  const last = groupStages.filter((g) => g.stageNo === lastNo);
+  let played: string[];
+  if (last.length && last[0].kind === "seeded") {
+    const nos = [...new Set(last.map((g) => g.groupNo))].sort((a, b) => a - b);
+    played = nos.flatMap((no) => {
+      const gs = last.filter((g) => g.groupNo === no);
+      return groupRank(tally(gs.filter((g) => g.status !== "void"), groupMembers(gs)).values()).map((r) => r.id);
+    });
+    // Anyone who played earlier stages but not the last one (rare): after them, by the table.
+    const rest = rank(tally(groupStages).values()).filter((r) => r.gp > 0).map((r) => r.id);
+    played = [...new Set([...played, ...rest])];
+  } else {
+    played = rank(tally(groupStages).values()).filter((r) => r.gp > 0).map((r) => r.id);
+  }
+  played = played.filter((id) => inPool.has(id));
+  const placed = new Set(played);
+  const fresh = pool.filter((id) => !placed.has(id));
+  if (kind === "final") return [...played, ...fresh];
+  const mid = Math.floor(played.length / 2);
+  return [...played.slice(0, mid), ...fresh, ...played.slice(mid)];
+}
+
 /** A finished group's winner, or the tied pair when first place is level on wins and difference. */
 export function groupWinner(games: Game[]): { winner: string | null; tied: string[] } {
   const live = games.filter((g) => g.status !== "void");

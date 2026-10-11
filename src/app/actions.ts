@@ -1,14 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { players, events, entries, stages, games } from "@/db/schema";
 import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin";
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
-import { planStage, shuffle, validScore, withSub, type StageKind } from "@/lib/cards";
-import { getEventView, eventStandings } from "@/lib/data";
+import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, type StageKind } from "@/lib/cards";
+import { getEventView } from "@/lib/data";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -220,19 +220,11 @@ export async function drawStage(eventId: string, kind: StageKind): Promise<Resul
   if (!isUuid(eventId) || !["random", "seeded", "final"].includes(kind)) return fail("Unknown event.");
   const v = await getEventView(eventId);
   if (!v) return fail("Unknown event.");
-  const present = v.entries.filter((e) => e.state === "here").map((e) => e.playerId);
+  // Everyone checked in, plus everyone still in the tournament from the stage before (drawPool).
+  const present = drawPool(v.entries, v.games);
   if (present.length < 4) return fail("Check in at least 4 players first.");
-  let order: string[];
-  if (kind === "random") order = shuffle(present);
-  else {
-    // Best first. Anyone with no games yet (a late arrival) slots in mid-table rather than
-    // being dropped to the bottom: they haven't lost anything.
-    const ranked = eventStandings(v).filter((r) => present.includes(r.id));
-    const played = ranked.filter((r) => r.gp > 0).map((r) => r.id);
-    const fresh = ranked.filter((r) => r.gp === 0).map((r) => r.id);
-    const mid = Math.floor(played.length / 2);
-    order = [...played.slice(0, mid), ...fresh, ...played.slice(mid)];
-  }
+  const order = kind === "random" ? shuffle(present) : seedOrder(v.games, present, kind);
+  const carried = present.filter((id) => v.entries.find((e) => e.playerId === id)?.state !== "here");
   const plan = planStage(kind, order, v.event.nets);
   const stageNo = (v.stages.at(-1)?.no ?? 0) + 1;
   await db.transaction(async (tx) => {
@@ -243,6 +235,12 @@ export async function drawStage(eventId: string, kind: StageKind): Promise<Resul
       a1: x.a[0], a2: x.a[1], b1: x.b[0], b2: x.b[1],
     })));
     await tx.insert(games).values(rows);
+    // Whoever was carried over is playing, so the check-in list should say so.
+    for (const playerId of carried) {
+      await tx.insert(entries).values({ eventId, playerId, state: "here" })
+        // Never over an "out" that landed while this draw was being worked out.
+        .onConflictDoUpdate({ target: [entries.eventId, entries.playerId], set: { state: "here", updatedAt: new Date() }, setWhere: ne(entries.state, "out") });
+    }
     await tx.update(events).set({ status: "live" }).where(eq(events.id, eventId));
   });
   refresh(eventId);

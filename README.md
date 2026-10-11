@@ -15,8 +15,12 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 4. **Draw random groups.** Groups of 4 (3 games) or 5 (5 games, one sits out each game). Each
    group keeps its own net. Everyone partners everyone in their group once. 1 point per win.
 5. **Enter scores** from any phone, in any order: tap the winners, tap the losers' score.
-6. **Next stage: regroup by level.** Best players together, then the next group, and so on.
-7. **Finals:** Gold, Silver (and Bronze with 12+). Best record in Gold is champion.
+6. **Finals:** Gold, Silver (and Bronze with 12+), seeded from the group stage. Most wins in
+   Gold is champion, second is runner-up; level on wins goes to points difference, then a decider.
+   Late arrivals who haven't played start in the bottom final.
+7. **Big fields (16+) only:** an extra "regroup by level" stage can come before the finals. The
+   finals are then seeded by where people finished in that stage's groups, not by win %.
+8. **Nobody re-checks in between stages.** Everyone who played stays in unless marked Out.
 
 ### Changes on the day never break the draw
 - A game, once drawn, keeps its players. Nothing gets redrawn under you.
