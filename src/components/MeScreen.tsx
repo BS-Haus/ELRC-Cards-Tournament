@@ -8,13 +8,15 @@ import { useAction } from "@/components/useAction";
 import { Header, Section, card, btnPrimary, btnGhost, btnQuiet, input, fmtTime } from "@/components/ui";
 import { AvatarPicker } from "@/components/AvatarPicker";
 import { CheckIn } from "@/components/CheckIn";
-import { MySeason, type Season } from "@/components/MySeason";
+import { PlayerBody } from "@/components/PlayerBody";
+import type { Profile, Season } from "@/lib/data";
 import { levelFor } from "@/lib/levels";
 import type { EntryState } from "@/lib/data";
 
-export function MeScreen({ me, org, orgUntil, next, today, season }: {
+export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
   me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null;
   today: { id: string; title: string; state: EntryState | null; started: boolean } | null; season: Season | null;
+  profile: Pick<Profile, "tierWins" | "bestPartner" | "recent" | "names"> | null;
 }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
@@ -76,7 +78,7 @@ export function MeScreen({ me, org, orgUntil, next, today, season }: {
             <CheckIn me={me.id} state={today.state} eventId={today.id} started={today.started} title={today.title} />
           </>
         )}
-        {season && <MySeason s={season} />}
+        {season && profile && <PlayerBody season={season} pr={profile} />}
         </>
       )}
 

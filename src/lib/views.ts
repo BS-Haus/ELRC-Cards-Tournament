@@ -73,3 +73,11 @@ export function myCheckIn(entries: { playerId: string; state: "going" | "here" |
   const raw = entries.find((e) => e.playerId === me)?.state ?? null;
   return raw !== "out" && drawPool(entries, games).includes(me) ? "here" : raw;
 }
+
+/** The Players tab's Today table at a live event: everyone in it (the next draw's pool, plus anyone
+ *  who has played today and since left), best day first (win %, then points difference per game),
+ *  those yet to play last. `out` is who has left, to show as such. */
+export function todayTable(v: EventView): { rows: Line[]; out: Set<string> } {
+  const ids = new Set([...drawPool(v.entries, v.games), ...v.games.filter(isDone).flatMap((g) => [...g.a, ...g.b].filter((id) => !g.subs.includes(id)))]);
+  return { rows: rank(tally(v.games, ids).values()), out: new Set(v.entries.filter((e) => e.state === "out").map((e) => e.playerId)) };
+}

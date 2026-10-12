@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { card, fmtDate } from "@/components/ui";
 import { levelFor, climb } from "@/lib/levels";
@@ -7,17 +10,17 @@ export type { Season };
 
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 
-/** A player's weekends at a glance (the Me tab, and the top of a profile): rank, the headline numbers, the climb in
- *  rank points, and your latest weekends. Compact on purpose; the full detail is further down a profile. */
-export function MySeason({ s, title = "Your weekends", more = true }: { s: Season; title?: string; more?: boolean }) {
+/** A player's weekends at a glance (the Me tab and every profile): rank points and place, the
+ *  headline numbers, the climb in rank points, and the latest weekend with the rest a tap away. */
+export function MySeason({ s }: { s: Season }) {
+  const [all, setAll] = useState(false);
   const lv = levelFor(s.points);
   const played = s.events.filter((e) => e.w + e.l > 0);
   const { stats } = s;
   return (
     <section className="px-4 pb-6">
       <div className="mb-2.5 flex items-baseline justify-between gap-3 px-1">
-        <h2 className="text-[12px] font-bold uppercase tracking-[.12em] text-muted">{title}</h2>
-        {more && <Link href={`/p/${s.id}`} className="text-[12px] font-bold text-accent">Full profile →</Link>}
+        <h2 className="text-[12px] font-bold uppercase tracking-[.12em] text-muted">At a glance</h2>
       </div>
       <div className={`${card} overflow-hidden`}>
         <div className="p-4">
@@ -50,7 +53,7 @@ export function MySeason({ s, title = "Your weekends", more = true }: { s: Seaso
           <>
             <Climb events={[...played].reverse()} />
             <div className="border-t border-white/[.05]">
-              {played.slice(0, 4).map((e) => (
+              {(all ? played : played.slice(0, 1)).map((e) => (
                 <Link key={e.id} href={e.live ? `/e/${e.id}` : `/e/${e.id}/recap?p=${s.id}`} className="spk-press flex items-center gap-3 border-b border-white/[.03] px-4 py-2.5 last:border-0">
                   <span className="w-12 shrink-0 text-[12px] font-bold text-dim">{fmtDate(e.startsAt, false).split(" ").slice(1).join(" ")}</span>
                   <span className="min-w-0 flex-1 truncate text-[13.5px]"><span className="tnum font-mono font-bold">{e.w}–{e.l}</span>{e.live ? <span className="text-accent"> · so far, live</span> : e.finish && <span className="text-muted"> · {e.finish}</span>}</span>
@@ -58,6 +61,7 @@ export function MySeason({ s, title = "Your weekends", more = true }: { s: Seaso
                   <span className="shrink-0 text-[12px] text-dim" aria-hidden="true">▶</span>
                 </Link>
               ))}
+              {played.length > 1 && <ShowAll open={all} n={played.length - 1} what={played.length === 2 ? "weekend" : "weekends"} onClick={() => setAll(!all)} />}
             </div>
           </>
         ) : (
@@ -106,5 +110,16 @@ function Climb({ events }: { events: ProfileEvent[] }) {
         {events.length > 1 && <span>{fmtDate(events.at(-1)!.startsAt, false).split(" ").slice(1).join(" ")}</span>}
       </div>
     </div>
+  );
+}
+
+/** The "Show N more" / "Show less" row under a shortened list. */
+export function ShowAll({ open, n, what, onClick }: { open: boolean; n: number; what: string; onClick: () => void }) {
+  // n is how many are hidden: "Show 3 more weekends".
+  return (
+    <button onClick={onClick} className="spk-press flex w-full items-center justify-center gap-1.5 border-t border-white/[.05] py-2.5 text-[12.5px] font-bold text-accent">
+      {open ? "Show less" : `Show ${n} more ${what}`}
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className={open ? "rotate-180" : ""} aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </button>
   );
 }

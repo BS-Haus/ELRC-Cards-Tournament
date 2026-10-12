@@ -19,5 +19,5 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   // Every weekend you've played, summarised: rank, numbers, the climb (src/components/MySeason).
   const pr = p ? await getProfile(p.id) : null;
   const season = pr ? await getSeason(pr) : null;
-  return <MeScreen me={p ? { id: p.id, name: p.name, color: p.color, photo: photoUrl(p) } : null} org={isOrganiser(s)} orgUntil={s?.orgUntil ?? null} next={safeNext} today={today} season={season} />;
+  return <MeScreen me={p ? { id: p.id, name: p.name, color: p.color, photo: photoUrl(p) } : null} org={isOrganiser(s)} orgUntil={s?.orgUntil ?? null} next={safeNext} today={today} season={season} profile={pr ? { tierWins: pr.tierWins, bestPartner: pr.bestPartner, recent: pr.recent, names: pr.names } : null} />;
 }

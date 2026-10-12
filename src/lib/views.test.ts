@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { planStage, type Game } from "./cards";
-import { myDay, liveEventId, LIVE_FOR_MS } from "./views";
+import { myDay, liveEventId, LIVE_FOR_MS, todayTable } from "./views";
+import type { EventView } from "./data";
 
 const ids = Array.from({ length: 8 }, (_, i) => `p${i}`);
 const plan = planStage("random", ids, 2, () => 0.5);
@@ -50,5 +51,25 @@ describe("liveEventId", () => {
   it("shows the list when nothing is live, or the only live one was left running", () => {
     expect(liveEventId([ev("up", "upcoming", -2), ev("done", "done", 4)], now)).toBeNull();
     expect(liveEventId([ev("forgotten", "live", LIVE_FOR_MS / 3600_000 + 1)], now)).toBeNull();
+  });
+});
+
+describe("todayTable", () => {
+  const g = games[0];
+  const [winner] = g.a;
+  const absent = ids.find((id) => ![...g.a, ...g.b].includes(id))!;
+  const left = new Set([winner, absent]); // one played and then left, one left without playing
+  const v = { entries: ids.map((id) => ({ playerId: id, state: left.has(id) ? "out" : "here", at: 0 })), games: score(games, g.id, 15, 4) } as unknown as EventView;
+  const t = todayTable(v);
+
+  it("puts the day's winners first and those yet to play last", () => {
+    expect(t.rows.slice(0, 2).map((r) => r.id).sort()).toEqual([...g.a].sort());
+    expect(t.rows.slice(-3).every((r) => r.gp === 0)).toBe(true);
+  });
+
+  it("keeps someone who played and then left, but not someone who left without playing", () => {
+    expect(t.rows.map((r) => r.id)).toContain(winner);
+    expect(t.rows.map((r) => r.id)).not.toContain(absent);
+    expect(t.out.has(winner)).toBe(true);
   });
 });
