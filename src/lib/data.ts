@@ -1,10 +1,11 @@
 import "server-only";
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { players, events, entries, stages, games } from "@/db/schema";
-import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line } from "@/lib/cards";
+import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
+import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle } from "@/lib/cards";
 
-export type PlayerLite = { id: string; name: string; color: string; claimed: boolean };
+/** `photo` is the profile picture's URL (versioned, so it can be cached for good), or null. */
+export type PlayerLite = { id: string; name: string; color: string; claimed: boolean; photo: string | null };
 export type EventRow = typeof events.$inferSelect;
 export type EntryState = "going" | "here" | "out";
 export type Entry = { playerId: string; state: EntryState; at: number };
@@ -16,15 +17,27 @@ export type EventView = {
   stages: StageRow[];
   games: Game[];
   people: Record<string, PlayerLite>;
+  /** Photos from the day, oldest first: the first one leads the tournament story. */
+  photos: EventPhoto[];
 };
 
-const lite = (p: typeof players.$inferSelect): PlayerLite => ({ id: p.id, name: p.name, color: p.color, claimed: !!p.pinHash });
+export type EventPhoto = { id: string; url: string; by: string | null };
+export const photoOf = (p: { id: string; createdAt: Date; byId: string | null }): EventPhoto => ({ id: p.id, url: `/ph/${p.id}?v=${p.createdAt.getTime()}`, by: p.byId });
+
+/** An event's photos, oldest first (no image data: that's served by /ph/[id]). */
+export async function eventPhotosOf(eventId: string): Promise<EventPhoto[]> {
+  const rows = await db.select({ id: eventPhotos.id, createdAt: eventPhotos.createdAt, byId: eventPhotos.byId }).from(eventPhotos).where(eq(eventPhotos.eventId, eventId)).orderBy(asc(eventPhotos.createdAt));
+  return rows.map(photoOf);
+}
+
+export const photoUrl = (p: { id: string; avatarAt: Date | null }) => (p.avatarAt ? `/a/${p.id}?v=${p.avatarAt.getTime()}` : null);
+const lite = (p: typeof players.$inferSelect): PlayerLite => ({ id: p.id, name: p.name, color: p.color, claimed: !!p.pinHash, photo: photoUrl(p) });
 
 function toGame(g: typeof games.$inferSelect, st: Map<string, StageRow>): Game {
   const s = st.get(g.stageId)!;
   return {
-    id: g.id, stageNo: s.no, kind: s.kind, groupNo: g.groupNo, groupName: g.groupName, seq: g.seq, ord: g.ord, net: g.net,
-    a: [g.a1, g.a2], b: [g.b1, g.b2], subs: g.subs ?? [], scoreA: g.scoreA, scoreB: g.scoreB, status: g.status as Game["status"],
+    id: g.id, stageNo: s.no, kind: s.kind, groupNo: g.groupNo, groupName: s.kind === "final" ? finalName(g.groupName) : g.groupName, seq: g.seq, ord: g.ord, net: g.net,
+    a: [g.a1, g.a2], b: [g.b1, g.b2], subs: g.subs ?? [], scoreA: g.scoreA, scoreB: g.scoreB, status: g.status as Game["status"], decider: g.decider,
   };
 }
 
@@ -35,10 +48,11 @@ export async function allPlayers(): Promise<PlayerLite[]> {
 export async function getEventView(id: string): Promise<EventView | null> {
   const [event] = await db.select().from(events).where(eq(events.id, id));
   if (!event) return null;
-  const [ens, sts, gs] = await Promise.all([
+  const [ens, sts, gs, photos] = await Promise.all([
     db.select().from(entries).where(eq(entries.eventId, id)).orderBy(asc(entries.createdAt)),
     db.select().from(stages).where(eq(stages.eventId, id)).orderBy(asc(stages.no)),
     db.select().from(games).where(eq(games.eventId, id)),
+    eventPhotosOf(id),
   ]);
   const stageRows = sts.map((s) => ({ id: s.id, no: s.no, kind: s.kind as StageKind }));
   const stMap = new Map(sts.map((s) => [s.id, { id: s.id, no: s.no, kind: s.kind as StageKind }]));
@@ -51,10 +65,17 @@ export async function getEventView(id: string): Promise<EventView | null> {
     stages: stageRows,
     games: gs.map((g) => toGame(g, stMap)),
     people: Object.fromEntries(ps.map((p) => [p.id, lite(p)])),
+    photos,
   };
 }
 
 export type EventCard = EventRow & { going: number; here: number; mine: EntryState | null; champion: string | null };
+
+/** The live event the Tournament tab opens straight into, if there is one (see liveEventId). */
+export async function liveNowId(): Promise<string | null> {
+  const rows = await db.select({ id: events.id, status: events.status, startsAt: events.startsAt }).from(events).where(eq(events.status, "live"));
+  return liveEventId(rows, Date.now());
+}
 
 export async function getEventCards(me: string | null): Promise<{ upcoming: EventCard[]; live: EventCard[]; past: EventCard[] }> {
   const evs = await db.select().from(events).orderBy(desc(events.startsAt));
@@ -85,12 +106,19 @@ export async function getEventCards(me: string | null): Promise<{ upcoming: Even
 }
 
 export { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
-import { finalsOf } from "@/lib/views";
+import { finalsOf, liveEventId } from "@/lib/views";
+import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
+import { careerPoints, eventPoints } from "@/lib/levels";
+import { buildStory, type Story } from "@/lib/story";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
 
-export type PlayerStats = PlayerLite & Line & { events: number; tierWins: Record<string, number> };
+export type PlayerStats = PlayerLite & Line & { events: number; tierWins: Record<string, number>; points: number };
+
+/** Each event's games, for points (src/lib/levels.ts). */
+const byEvent = (evs: { id: string; startsAt: Date }[], gs: (Game & { eventId: string })[]) =>
+  evs.map((e) => ({ id: e.id, startsAt: e.startsAt.getTime(), games: gs.filter((g) => g.eventId === e.id) }));
 
 async function everything() {
   const [ps, evs, ens, sts, gs] = await Promise.all([
@@ -120,8 +148,9 @@ function tierWinners(evGames: Game[]): { tier: string; winner: string }[] {
 }
 
 export async function getPlayerStats(): Promise<PlayerStats[]> {
-  const { ps, ens, gs } = await everything();
+  const { ps, evs, ens, gs } = await everything();
   const t = tally(gs.filter((g) => g.status === "done"), ps.map((p) => p.id));
+  const days = byEvent(evs, gs);
   const evByPlayer = new Map<string, Set<string>>();
   for (const e of ens) if (e.state === "here") (evByPlayer.get(e.playerId) ?? evByPlayer.set(e.playerId, new Set()).get(e.playerId)!).add(e.eventId);
   for (const g of gs) if (isDone(g)) for (const id of [...g.a, ...g.b]) if (!g.subs.includes(id)) (evByPlayer.get(id) ?? evByPlayer.set(id, new Set()).get(id)!).add(g.eventId);
@@ -132,11 +161,11 @@ export async function getPlayerStats(): Promise<PlayerStats[]> {
       r[tier] = (r[tier] ?? 0) + 1;
     }
   }
-  return ps.map((p) => ({ ...lite(p), ...t.get(p.id)!, events: evByPlayer.get(p.id)?.size ?? 0, tierWins: tiers.get(p.id) ?? {} }));
+  return ps.map((p) => ({ ...lite(p), ...t.get(p.id)!, events: evByPlayer.get(p.id)?.size ?? 0, tierWins: tiers.get(p.id) ?? {}, points: careerPoints(days, p.id) }));
 }
 
 export type ProfileGame = { id: string; eventId: string; eventTitle: string; at: number; won: boolean; mine: number; theirs: number; partner: string; opponents: string[]; sub: boolean; label: string };
-export type ProfileEvent = { id: string; title: string; startsAt: number; w: number; l: number; finish: string | null };
+export type ProfileEvent = { id: string; title: string; startsAt: number; live: boolean; w: number; l: number; finish: string | null; points: number };
 export type Profile = {
   player: PlayerLite;
   stats: Line & { events: number };
@@ -145,7 +174,17 @@ export type Profile = {
   events: ProfileEvent[];
   recent: ProfileGame[];
   names: Record<string, PlayerLite>;
+  points: number;
 };
+
+/** The headline of a player's weekends: rank points and place among everyone who's played, their
+ *  totals, A-final titles and every weekend. Shown on the Me page and at the top of a profile. */
+export type Season = { id: string; points: number; position: number; of: number; stats: Line & { events: number }; titles: number; events: ProfileEvent[] };
+
+export async function getSeason(pr: Profile): Promise<Season> {
+  const field = (await getPlayerStats()).filter((x) => x.events > 0).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+  return { id: pr.player.id, points: pr.points, stats: pr.stats, titles: pr.tierWins.A ?? 0, events: pr.events, position: field.findIndex((x) => x.id === pr.player.id) + 1, of: field.length };
+}
 
 export async function getProfile(id: string): Promise<Profile | null> {
   const { ps, evs, ens, gs } = await everything();
@@ -184,10 +223,10 @@ export async function getProfile(id: string): Promise<Profile | null> {
         const pos = table.findIndex((r) => r.id === id) + 1;
         const { winner } = groupWinner(gg);
         if (winner === id) tierWins[gg[0].groupName] = (tierWins[gg[0].groupName] ?? 0) + 1;
-        finish = winner === id ? `${gg[0].groupName} winner` : `${gg[0].groupName} final · ${ordinal(pos)}`;
+        finish = winner === id ? finalWinTitle(gg[0].groupName) : `${gg[0].groupName} final · ${ordinal(pos)}`;
       }
     }
-    return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), w: line.w, l: line.l, finish };
+    return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), live: ev.status === "live", w: line.w, l: line.l, finish, points: eventPoints(eg, id).total };
   }).sort((a, b) => b.startsAt - a.startsAt);
 
   const recent: ProfileGame[] = mine
@@ -206,7 +245,35 @@ export async function getProfile(id: string): Promise<Profile | null> {
       };
     });
 
-  return { player: lite(me), stats: { ...stats, events: evIds.size }, tierWins, bestPartner: bp ? { id: bp[0], ...bp[1] } : null, events, recent, names };
+  return { player: lite(me), stats: { ...stats, events: evIds.size }, tierWins, bestPartner: bp ? { id: bp[0], ...bp[1] } : null, events, recent, names, points: careerPoints(byEvent(evs, gs), id) };
 }
 
 export const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
+
+// ---------------------------------------------------------------------------------------------
+// Recaps
+
+/** One event's recap from a player's point of view (src/lib/recap.ts), with everyone's names. */
+export async function getRecap(eventId: string, playerId: string | null): Promise<{ recap: Recap; names: Record<string, PlayerLite> } | null> {
+  const { ps, evs, gs } = await everything();
+  const days: DayEvent[] = evs.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.getTime(), status: e.status, games: gs.filter((g) => g.eventId === e.id) }));
+  const ev = days.find((d) => d.id === eventId);
+  if (!ev) return null;
+  const who = playerId && ps.some((p) => p.id === playerId) ? playerId : null;
+  const recap = buildRecap(ev, who, days);
+  if (recap.me) {
+    const earned = eventPoints(ev.games, recap.me.id);
+    const after = careerPoints(days, recap.me.id, ev.startsAt);
+    recap.progress = { earned, before: after - earned.total, after };
+  }
+  return { recap, names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])) };
+}
+
+/** One event's tournament story (src/lib/story.ts), with everyone's names. */
+export async function getStory(eventId: string): Promise<{ story: Story; names: Record<string, PlayerLite>; photos: EventPhoto[] } | null> {
+  const { ps, evs, gs } = await everything();
+  const days: DayEvent[] = evs.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.getTime(), status: e.status, games: gs.filter((g) => g.eventId === e.id) }));
+  const ev = days.find((d) => d.id === eventId);
+  if (!ev) return null;
+  return { story: buildStory(ev, days), names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])), photos: await eventPhotosOf(eventId) };
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, type Game } from "./cards";
+import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, finalName, finalWinTitle, isFinalScore, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -41,10 +41,10 @@ describe("groupGames", () => {
 });
 
 describe("planStage", () => {
-  it("puts the top of the order in group A / Gold and gives each group its own net", () => {
+  it("puts the top of the order in group A / the A final and gives each group its own net", () => {
     const order = ids(10);
     const g = planStage("final", order, 2);
-    expect(g.map((x) => x.name)).toEqual(["Gold", "Silver"]);
+    expect(g.map((x) => x.name)).toEqual(["A", "B"]);
     expect(g[0].ids).toEqual(order.slice(0, 5));
     expect(g.map((x) => x.net)).toEqual([1, 2]);
   });
@@ -99,5 +99,136 @@ describe("scores", () => {
     expect(validScore(-1, 3)).toBe(false);
     expect(winnerScore(9, 15)).toBe(15);
     expect(winnerScore(14, 15)).toBe(16);
+  });
+});
+
+describe("drawPool", () => {
+  const stage1 = asGames(planStage("random", ids(8), 2));
+  it("is just who's checked in before anything is drawn", () => {
+    const e = [{ playerId: "p0", state: "here" }, { playerId: "p1", state: "going" }, { playerId: "p2", state: "here" }];
+    expect(drawPool(e, [])).toEqual(["p0", "p2"]);
+  });
+  it("keeps everyone from the last stage in, even if they're no longer marked here", () => {
+    // The live bug: the stage-1 players had been flipped back to "going" (signed up), and the next
+    // stage refused to draw with "check in at least 4 players".
+    const e = ids(8).map((playerId) => ({ playerId, state: "going" }));
+    expect(drawPool(e, stage1).sort()).toEqual(ids(8).sort());
+  });
+  it("adds late arrivals who are checked in, and drops anyone marked out", () => {
+    const e = [...ids(8).map((playerId) => ({ playerId, state: playerId === "p3" ? "out" : "here" })), { playerId: "late", state: "here" }];
+    const pool = drawPool(e, stage1);
+    expect(pool).toContain("late");
+    expect(pool).not.toContain("p3");
+    expect(pool).toHaveLength(8);
+    expect(new Set(pool).size).toBe(pool.length);
+  });
+  it("carries a sub who's on the list, even if a mis-tap left them as Coming", () => {
+    const [g, ...rest] = stage1;
+    const subbed = { ...g, ...withSub(g, g.a[0], "late") };
+    const e = [{ playerId: g.a[0], state: "out" }, { playerId: "late", state: "going" }];
+    expect(drawPool(e, [subbed, ...rest])).toContain("late");
+  });
+  it("doesn't carry over someone who only ever subbed", () => {
+    const [g, ...rest] = stage1;
+    const subbed = { ...g, ...withSub(g, g.a[0], "sub") };
+    const e = [{ playerId: g.a[0], state: "out" }];
+    expect(drawPool(e, [subbed, ...rest])).not.toContain("sub");
+  });
+  it("only carries the latest stage, so someone who left after stage 1 isn't redrawn", () => {
+    const stage2 = asGames(planStage("seeded", ids(4), 1), 2);
+    expect(drawPool([], [...stage1, ...stage2]).sort()).toEqual(ids(4).sort());
+  });
+});
+
+describe("seedOrder", () => {
+  // p0 beats everyone; otherwise the side with the lower-numbered player wins.
+  const score = (gs: Game[]) => gs.map((g) => {
+    const best = (t: string[]) => Math.min(...t.map((x) => Number(x.slice(1))));
+    const aWon = best(g.a) < best(g.b);
+    return { ...g, status: "done" as const, scoreA: aWon ? 15 : 10, scoreB: aWon ? 10 : 15 };
+  });
+
+  it("puts a late arrival at the bottom of the finals, but mid-table for a seeded stage", () => {
+    const g = score(asGames(planStage("random", ids(8), 2)));
+    const pool = [...ids(8), "late"];
+    expect(seedOrder(g, pool, "final").at(-1)).toBe("late");
+    expect(seedOrder(g, pool, "seeded").indexOf("late")).toBe(4);
+  });
+
+  it("after a seeded stage, ranks by group finish, so the weaker group's winner can't jump into the A final", () => {
+    // Stage 2, seeded: group A = p0..p3 (the strong four), group B = p4..p7.
+    const stage2 = score(asGames(planStage("seeded", ids(8), 2), 2)).map((g) => ({ ...g, kind: "seeded" as const }));
+    // Group B's winner went unbeaten, so on win % alone they'd top the table.
+    const order = seedOrder(stage2, ids(8), "final");
+    const groupA = new Set(stage2.filter((g) => g.groupNo === 0).flatMap((g) => [...g.a, ...g.b]));
+    expect(order.slice(0, 4).every((id) => groupA.has(id))).toBe(true);
+    expect(order).toHaveLength(8);
+  });
+
+  it("only seeds people in the pool, each exactly once", () => {
+    const g = score(asGames(planStage("random", ids(8), 2)));
+    const order = seedOrder(g, ["p1", "p5", "p6", "p7", "x"], "final");
+    expect([...order].sort()).toEqual(["p1", "p5", "p6", "p7", "x"]);
+  });
+});
+
+describe("decider", () => {
+  // A group of 4 where p0, p1 and p3 all go 2–1, +5: the top two are level.
+  const base = asGames(planStage("random", ids(4), 1));
+  const wins = (g: Game, side: "a" | "b") => ({ ...g, status: "done" as const, scoreA: side === "a" ? 15 : 10, scoreB: side === "a" ? 10 : 15 });
+  // Games: (p0,p1 v p2,p3), (p0,p2 v p1,p3), (p0,p3 v p1,p2). p0+p1 win, then p1+p3 win, then p0+p3 win.
+  const tiedGroup = [wins(base[0], "a"), wins(base[1], "b"), wins(base[2], "a")];
+  const d = (x: Game, i: number, plan: { a: [string, string]; b: [string, string] }, sa: number, sb: number): Game =>
+    ({ ...x, id: `d${i}`, seq: 4 + i, a: plan.a, b: plan.b, decider: true, status: "done", scoreA: sa, scoreB: sb });
+
+  it("reports the tie, then pairs the tied two against each other with swapped partners", () => {
+    const w = groupWinner(tiedGroup);
+    expect(w.winner).toBeNull();
+    expect(w.tied).toHaveLength(2);
+    const table = groupRank(tally(tiedGroup, ids(4)).values());
+    const plan = decideTie(table, [w.tied[0], w.tied[1]]);
+    expect(plan).toHaveLength(2);
+    const [x, y] = w.tied;
+    // Opposite sides in both games, and each partners each of the other two exactly once.
+    for (const g of plan) expect(g.a.includes(x) && g.b.includes(y)).toBe(true);
+    expect(new Set([plan[0].a[1], plan[1].a[1]]).size).toBe(2);
+    expect(plan[0].a[1]).toBe(plan[1].b[1]);
+  });
+
+  it("decides on total points across both games, and never changes anyone's record", () => {
+    const w = groupWinner(tiedGroup);
+    const table = groupRank(tally(tiedGroup, ids(4)).values());
+    const plan = decideTie(table, [w.tied[0], w.tied[1]]);
+    const games = [...tiedGroup, d(base[0], 0, plan[0], 11, 9), d(base[0], 1, plan[1], 8, 11)];
+    const r = groupWinner(games);
+    expect(r.decider).toBe("decided");
+    expect(r.winner).toBe(w.tied[1]); // y: 9 + 11 = 20 beats x: 11 + 8 = 19
+    expect(tally(games).get("p0")).toEqual(tally(tiedGroup).get("p0"));
+  });
+
+  it("is playing until both games have scores, and level if the points tie", () => {
+    const w = groupWinner(tiedGroup);
+    const table = groupRank(tally(tiedGroup, ids(4)).values());
+    const plan = decideTie(table, [w.tied[0], w.tied[1]]);
+    const one = d(base[0], 0, plan[0], 11, 9);
+    expect(groupWinner([...tiedGroup, one, { ...d(base[0], 1, plan[1], 0, 0), status: "todo", scoreA: null, scoreB: null }]).decider).toBe("playing");
+    expect(groupWinner([...tiedGroup, one, d(base[0], 1, plan[1], 9, 11)]).decider).toBe("level");
+  });
+});
+
+describe("final names", () => {
+  it("reads finals stored under the old metal names as letters, so they never clash with the ranks", () => {
+    expect(["Gold", "Silver", "Bronze", "Copper", "A", "B"].map(finalName)).toEqual(["A", "B", "C", "D", "A", "B"]);
+    expect(finalWinTitle("A")).toBe("Champion");
+    expect(finalWinTitle("B")).toBe("B final winner");
+  });
+});
+
+describe("isFinalScore", () => {
+  it("takes a win on the target, or two clear in a deuce", () => {
+    expect([[15, 9], [9, 15], [15, 13], [17, 15], [22, 20]].every(([a, b]) => isFinalScore(a, b, 15))).toBe(true);
+  });
+  it("refuses short, level, one-point and overshot scores", () => {
+    expect([[14, 9], [15, 15], [15, 14], [16, 9], [18, 15], [1, 0]].some(([a, b]) => isFinalScore(a, b, 15))).toBe(false);
   });
 });

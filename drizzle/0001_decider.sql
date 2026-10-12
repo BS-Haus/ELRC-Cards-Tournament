@@ -1,0 +1,1 @@
+ALTER TABLE "games" ADD COLUMN "decider" boolean DEFAULT false NOT NULL;

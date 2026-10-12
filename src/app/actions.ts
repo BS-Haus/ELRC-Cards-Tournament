@@ -1,14 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { players, events, entries, stages, games } from "@/db/schema";
+import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
 import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin";
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
-import { planStage, shuffle, validScore, withSub, type StageKind } from "@/lib/cards";
-import { getEventView, eventStandings } from "@/lib/data";
+import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, type StageKind } from "@/lib/cards";
+import { getEventView, groupsOf } from "@/lib/data";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -74,6 +74,18 @@ export async function signIn(nameIn: string, pin: string): Promise<Result> {
   await setSession({ playerId: p.id, name: p.name, orgUntil: s?.orgUntil });
   refresh();
   return { ok: true, id: p.id };
+}
+
+/** Set (or, with null, remove) your profile picture: a small square JPEG the phone has already
+ *  resized (AvatarPicker), as a data URL. Anything else, or anything big, is refused. */
+const AVATAR_RE = /^data:image\/(?:jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+const AVATAR_MAX = 120_000; // characters of base64: ~90 KB, far above a 320px JPEG
+export async function setAvatar(dataUrl: string | null): Promise<Result> {
+  const s = await me(); if (!s) return fail("Sign in first.");
+  if (dataUrl !== null && (typeof dataUrl !== "string" || dataUrl.length > AVATAR_MAX || !AVATAR_RE.test(dataUrl))) return fail("That photo couldn't be used. Try another.");
+  await db.update(players).set({ avatar: dataUrl, avatarAt: dataUrl ? new Date() : null }).where(eq(players.id, s.playerId!));
+  refresh();
+  return { ok: true };
 }
 
 export async function signOut(): Promise<Result> {
@@ -164,6 +176,39 @@ export async function reopenEvent(id: string): Promise<Result> {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Photos from the day
+
+const PHOTO_RE = /^data:image\/(?:jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+const PHOTO_MAX = 450_000; // characters of base64: ~330 KB, room for a 1440px JPEG
+const PHOTOS_PER_EVENT = 24;
+
+/** Add a photo to an event: a JPEG the phone has already resized (PhotoPicker). Anyone signed in. */
+export async function addEventPhoto(eventId: string, dataUrl: string): Promise<Result> {
+  const s = await me(); if (!s) return fail("Sign in to add photos.");
+  if (!isUuid(eventId)) return fail("Unknown event.");
+  if (typeof dataUrl !== "string" || dataUrl.length > PHOTO_MAX || !PHOTO_RE.test(dataUrl)) return fail("That photo couldn't be used. Try another.");
+  const [ev] = await db.select({ id: events.id }).from(events).where(eq(events.id, eventId));
+  if (!ev) return fail("Unknown event.");
+  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(eventPhotos).where(eq(eventPhotos.eventId, eventId));
+  if (n >= PHOTOS_PER_EVENT) return fail(`This event already has ${PHOTOS_PER_EVENT} photos.`);
+  await db.insert(eventPhotos).values({ eventId, data: dataUrl, byId: s.playerId });
+  refresh(eventId);
+  return { ok: true };
+}
+
+/** Remove a photo: whoever added it, or an organiser. */
+export async function deleteEventPhoto(photoId: string): Promise<Result> {
+  if (!isUuid(photoId)) return fail("Unknown photo.");
+  const [p] = await db.select({ eventId: eventPhotos.eventId, byId: eventPhotos.byId }).from(eventPhotos).where(eq(eventPhotos.id, photoId));
+  if (!p) return fail("Unknown photo.");
+  const s = await getSession();
+  if (!(s?.playerId && s.playerId === p.byId) && !isOrganiser(s)) return fail("Only whoever added it, or an organiser, can remove a photo.");
+  await db.delete(eventPhotos).where(eq(eventPhotos.id, photoId));
+  refresh(p.eventId);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------------------------
 // Sign-ups and check-in
 
 const STATES = ["going", "here", "out"] as const;
@@ -220,19 +265,11 @@ export async function drawStage(eventId: string, kind: StageKind): Promise<Resul
   if (!isUuid(eventId) || !["random", "seeded", "final"].includes(kind)) return fail("Unknown event.");
   const v = await getEventView(eventId);
   if (!v) return fail("Unknown event.");
-  const present = v.entries.filter((e) => e.state === "here").map((e) => e.playerId);
+  // Everyone checked in, plus everyone still in the tournament from the stage before (drawPool).
+  const present = drawPool(v.entries, v.games);
   if (present.length < 4) return fail("Check in at least 4 players first.");
-  let order: string[];
-  if (kind === "random") order = shuffle(present);
-  else {
-    // Best first. Anyone with no games yet (a late arrival) slots in mid-table rather than
-    // being dropped to the bottom: they haven't lost anything.
-    const ranked = eventStandings(v).filter((r) => present.includes(r.id));
-    const played = ranked.filter((r) => r.gp > 0).map((r) => r.id);
-    const fresh = ranked.filter((r) => r.gp === 0).map((r) => r.id);
-    const mid = Math.floor(played.length / 2);
-    order = [...played.slice(0, mid), ...fresh, ...played.slice(mid)];
-  }
+  const order = kind === "random" ? shuffle(present) : seedOrder(v.games, present, kind);
+  const carried = present.filter((id) => v.entries.find((e) => e.playerId === id)?.state !== "here");
   const plan = planStage(kind, order, v.event.nets);
   const stageNo = (v.stages.at(-1)?.no ?? 0) + 1;
   await db.transaction(async (tx) => {
@@ -243,8 +280,44 @@ export async function drawStage(eventId: string, kind: StageKind): Promise<Resul
       a1: x.a[0], a2: x.a[1], b1: x.b[0], b2: x.b[1],
     })));
     await tx.insert(games).values(rows);
+    // Whoever was carried over is playing, so the check-in list should say so.
+    for (const playerId of carried) {
+      await tx.insert(entries).values({ eventId, playerId, state: "here" })
+        // Never over an "out" that landed while this draw was being worked out.
+        .onConflictDoUpdate({ target: [entries.eventId, entries.playerId], set: { state: "here", updatedAt: new Date() }, setWhere: ne(entries.state, "out") });
+    }
     await tx.update(events).set({ status: "live" }).where(eq(events.id, eventId));
   });
+  refresh(eventId);
+  return { ok: true };
+}
+
+/**
+ * Organiser: settle a tie at the top of a group with two decider games (decideTie): the tied pair
+ * on opposite sides, swapping partners between the next two in the table. They go on the group's
+ * net, next in line, and count for nothing but who tops the group.
+ */
+export async function addDecider(eventId: string, stageNo: number, groupNo: number): Promise<Result> {
+  const no = await requireOrganiser(); if (no) return no;
+  if (!isUuid(eventId) || !Number.isInteger(stageNo) || !Number.isInteger(groupNo)) return fail("Unknown group.");
+  const v = await getEventView(eventId);
+  if (!v) return fail("Unknown event.");
+  if (v.event.status === "done") return fail("This event has finished. Reopen it first.");
+  const stage = v.stages.find((st) => st.no === stageNo);
+  const g = stage && groupsOf(v, stageNo).find((x) => x.groupNo === groupNo);
+  if (!stage || !g) return fail("Unknown group.");
+  if (g.tied.length !== 2) return fail("Nobody's tied at the top of this group.");
+  if (g.decider === "playing" || g.decider === "decided") return fail("This group already has a decider.");
+  const plan = decideTie(g.table, [g.tied[0], g.tied[1]]);
+  if (!plan.length) return fail("A decider needs two other players in the group.");
+  const inStage = v.games.filter((x) => x.stageNo === stageNo);
+  const seq = Math.max(0, ...g.games.map((x) => x.seq));
+  // Next on this net: just after whatever's still to play there (or straight on if it's free).
+  const ord = Math.max(0, ...inStage.map((x) => x.ord));
+  await db.insert(games).values(plan.map((x, i) => ({
+    eventId, stageId: stage.id, groupNo, groupName: g.name, seq: seq + i + 1, ord: ord + i + 1, net: g.net,
+    a1: x.a[0], a2: x.a[1], b1: x.b[0], b2: x.b[1], decider: true,
+  })));
   refresh(eventId);
   return { ok: true };
 }

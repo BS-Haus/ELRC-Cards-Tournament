@@ -15,8 +15,14 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 4. **Draw random groups.** Groups of 4 (3 games) or 5 (5 games, one sits out each game). Each
    group keeps its own net. Everyone partners everyone in their group once. 1 point per win.
 5. **Enter scores** from any phone, in any order: tap the winners, tap the losers' score.
-6. **Next stage: regroup by level.** Best players together, then the next group, and so on.
-7. **Finals:** Gold, Silver (and Bronze with 12+). Best record in Gold is champion.
+6. **Finals:** Gold, Silver (and Bronze with 12+), seeded from the group stage. Most wins in
+   Gold is champion, second is runner-up; level on wins goes to points difference, then a decider: the organiser taps
+   **Play decider** and the tied pair play two games to 11 on opposite sides, swapping partners;
+   most points across both wins. Deciders count for nothing else.
+   Late arrivals who haven't played start in the bottom final.
+7. **Big fields (16+) only:** an extra "regroup by level" stage can come before the finals. The
+   finals are then seeded by where people finished in that stage's groups, not by win %.
+8. **Nobody re-checks in between stages.** Everyone who played stays in unless marked Out.
 
 ### Changes on the day never break the draw
 - A game, once drawn, keeps its players. Nothing gets redrawn under you.
@@ -24,6 +30,25 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 - **Someone leaves:** they (or the organiser) mark them out. Their games show "Needs a sub":
   pick a sub, or skip the game. A sub's game counts for the other three, not for the sub.
 - **Undo last draw** works as long as nothing in that stage has a score.
+
+## Points, levels and recaps
+- **Profile photos:** add one on the Me tab. The phone crops and shrinks it before upload.
+- **Points:** every weekend earns points for turning up (10), each game (1), each win (3), and
+  your finish (Gold champion 30, runner-up 15, finalist 6; Silver 15 / 8 / 3; and so on). They add
+  up into Rocket League-style ranks, each in divisions I, II and III: 🥉 Bronze (0), 🥈 Silver (60),
+  🥇 Gold (150), 💎 Diamond (300) and 🏆 Champion (500). Cosmetic only: they never affect the draw. (`src/lib/levels.ts`)
+- **Tournament story (the main event):** after a tournament, tap **Watch the tournament story**.
+  The champion is the hero, then every final's podium, the day's stories (perfect days, streaks,
+  dream teams, the climb from the bottom into Gold, the epic deuce), records broken against every
+  earlier weekend, and the day in numbers. (`src/lib/story.ts`)
+- **Your review (second):** each player's own reel, under the story on the event page and on every
+  weekend in their profile: record, game by game, finish, points and rank, partners, you vs the
+  field, and the trend since last time. (`src/lib/recap.ts`)
+- **Photos from the day:** anyone signed in can add photos to an event (take one or pick from the
+  camera roll; the phone shrinks them first). The first one is the cover of the tournament story and
+  the backdrop of its shareable card. Up to 24 per event; whoever added one, or an organiser, can
+  remove it. Videos aren't supported yet: they'd need a file store (e.g. Vercel Blob).
+- **Live winners:** everyone on the event page gets a pop-up the moment a final is decided.
 
 ## Accounts
 - Anyone can view everything without signing in.

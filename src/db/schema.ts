@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, jsonb, primaryKey, index } from "drizzle-orm/pg-core";
+import { pgTable, boolean, uuid, text, integer, timestamp, jsonb, primaryKey, index } from "drizzle-orm/pg-core";
 
 // A person. `handle` is the lower-cased name used to sign in. A walk-in added by the organiser
 // has no PIN yet; whoever signs up with that name later claims the profile and its history.
@@ -8,6 +8,9 @@ export const players = pgTable("players", {
   name: text("name").notNull(),
   color: text("color").notNull(),
   pinHash: text("pin_hash"),
+  // Profile picture: a small square JPEG (resized on the phone) as a data URL, served by /a/[id].
+  avatar: text("avatar"),
+  avatarAt: timestamp("avatar_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -38,7 +41,7 @@ export const entries = pgTable(
   (t) => [primaryKey({ columns: [t.eventId, t.playerId] })],
 );
 
-// One round of groups: random, seeded, or the Gold/Silver/Bronze finals.
+// One round of groups: random, seeded, or the A/B/C/D finals (older events stored Gold/Silver/…).
 export const stages = pgTable("stages", {
   id: uuid("id").primaryKey().defaultRandom(),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
@@ -68,10 +71,25 @@ export const games = pgTable(
     scoreA: integer("score_a"),
     scoreB: integer("score_b"),
     status: text("status").notNull().default("todo"), // todo | done | void
+    decider: boolean("decider").notNull().default(false), // a tie-break game: decides the group's top spot only
     enteredById: uuid("entered_by_id").references(() => players.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("games_event_idx").on(t.eventId)],
+);
+
+// Photos from the day: anyone signed in can add them; the tournament story opens on the first one.
+// A JPEG the phone has already resized, as a data URL, served by /ph/[id].
+export const eventPhotos = pgTable(
+  "event_photos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+    data: text("data").notNull(),
+    byId: uuid("by_id").references(() => players.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("event_photos_event_idx").on(t.eventId)],
 );
 
 // Sign-in attempt counting, shared across serverless instances (same approach as Spike).

@@ -8,6 +8,27 @@
       "when": 1791727400381,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791745010220,
+      "tag": "0001_decider",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791746880207,
+      "tag": "0002_avatars",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791748699151,
+      "tag": "0003_event_photos",
+      "breakpoints": true
     }
   ]
 }
