@@ -41,7 +41,7 @@ const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n
  *  plus where each person is now (their group or final and place) and who's on a net. */
 function Today({ rows, out, where, byId, title, eventId }: { rows: Line[]; out: Set<string>; where: Record<string, TodayWhere>; byId: Map<string, PlayerStats>; title: string; eventId: string }) {
   return (
-    <Section title={`Playing today · ${rows.length}`} aside={<Link href={`/e/${eventId}`} className="font-bold text-accent">{title} →</Link>}>
+    <Section title={`Playing today · ${rows.length}`}>
       <div className={`${card} overflow-hidden`}>
         <div className="grid grid-cols-[20px_1fr_44px_44px] items-center gap-x-3 border-b border-white/[.05] px-4 py-2 text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">
           <span>#</span><span>Player</span><span className="text-right">Win</span><span className="text-right">W–L</span>
@@ -73,6 +73,15 @@ function Today({ rows, out, where, byId, title, eventId }: { rows: Line[]; out: 
           );
         })}
       </div>
+      {/* The way back to the event: a card at the end of the list, not a link in the header,
+          so it reads as somewhere to go rather than a label. */}
+      <Link href={`/e/${eventId}`} className={`${card} spk-press mt-3 flex items-center justify-between gap-3 p-4`}>
+        <span className="flex min-w-0 items-center gap-2.5">
+          <LiveBadge />
+          <span className="truncate text-[15px] font-black">{title}</span>
+        </span>
+        <span className="shrink-0 text-[13.5px] font-bold text-accent">Go to tournament →</span>
+      </Link>
     </Section>
   );
 }
