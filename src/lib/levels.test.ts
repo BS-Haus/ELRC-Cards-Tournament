@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planStage, type Game, type StageKind } from "./cards";
-import { eventPoints, levelFor, careerPoints, LEVELS, POINTS } from "./levels";
+import { eventPoints, levelFor, careerPoints, LEVELS, POINTS, climb } from "./levels";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const num = (id: string) => Number(id.slice(1));
@@ -40,5 +40,21 @@ describe("points and levels", () => {
     const evs = [{ id: "a", startsAt: 1, games: day }, { id: "b", startsAt: 2, games: day }];
     expect(careerPoints(evs, "p0")).toBe(2 * eventPoints(day, "p0").total);
     expect(careerPoints(evs, "p0", 1)).toBe(eventPoints(day, "p0").total);
+  });
+});
+
+describe("climb", () => {
+  it("adds the weekends up and marks the ranks passed and the next one", () => {
+    const c = climb([10, 35, 64]);
+    expect(c.totals).toEqual([10, 45, 109]);
+    expect(c.marks.map((m) => `${m.tier} ${m.min}`)).toEqual(["Silver 60", "Gold 150"]);
+  });
+
+  it("leaves out a next rank that's still far off", () => {
+    expect(climb([100, 50]).marks.map((m) => m.tier)).toEqual(["Silver", "Gold"]);
+  });
+
+  it("has nothing to draw before a first weekend, but still shows the first rank to reach", () => {
+    expect(climb([])).toEqual({ totals: [], marks: [expect.objectContaining({ tier: "Silver", min: 60 })] });
   });
 });

@@ -67,3 +67,14 @@ export function levelFor(points: number): { level: Level; next: Level | null; pr
 export function careerPoints(events: { id: string; startsAt: number; games: Game[] }[], id: string, until = Infinity): number {
   return events.filter((e) => e.startsAt <= until).reduce((n, e) => n + eventPoints(e.games, id).total, 0);
 }
+
+/** Running points after each weekend (oldest first), and the ranks that climb has passed plus the
+ *  one it's heading for: what the Me tab's chart draws. The next rank only shows while it's within
+ *  reach (half as much again), or it flattens the line into the bottom of a small chart. */
+export function climb(perWeekend: number[]): { totals: number[]; marks: { tier: string; min: number; color: string }[] } {
+  const totals = perWeekend.reduce<number[]>((acc, p) => [...acc, (acc.at(-1) ?? 0) + p], []);
+  const top = totals.at(-1) ?? 0;
+  const next = RANKS.find((r) => r.min > top && r.min <= Math.max(top * 1.5, RANKS[1].min));
+  const marks = [...RANKS.filter((r) => r.min > 0 && r.min <= top), ...(next ? [next] : [])].map((r) => ({ tier: r.tier, min: r.min, color: r.color }));
+  return { totals, marks };
+}

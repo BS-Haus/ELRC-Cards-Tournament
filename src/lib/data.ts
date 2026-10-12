@@ -165,7 +165,7 @@ export async function getPlayerStats(): Promise<PlayerStats[]> {
 }
 
 export type ProfileGame = { id: string; eventId: string; eventTitle: string; at: number; won: boolean; mine: number; theirs: number; partner: string; opponents: string[]; sub: boolean; label: string };
-export type ProfileEvent = { id: string; title: string; startsAt: number; w: number; l: number; finish: string | null; points: number };
+export type ProfileEvent = { id: string; title: string; startsAt: number; live: boolean; w: number; l: number; finish: string | null; points: number };
 export type Profile = {
   player: PlayerLite;
   stats: Line & { events: number };
@@ -217,7 +217,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
         finish = winner === id ? finalWinTitle(gg[0].groupName) : `${gg[0].groupName} final · ${ordinal(pos)}`;
       }
     }
-    return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), w: line.w, l: line.l, finish, points: eventPoints(eg, id).total };
+    return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), live: ev.status === "live", w: line.w, l: line.l, finish, points: eventPoints(eg, id).total };
   }).sort((a, b) => b.startsAt - a.startsAt);
 
   const recent: ProfileGame[] = mine

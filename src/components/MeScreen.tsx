@@ -8,11 +8,12 @@ import { useAction } from "@/components/useAction";
 import { Header, Section, card, btnPrimary, btnGhost, btnQuiet, input, fmtTime } from "@/components/ui";
 import { AvatarPicker } from "@/components/AvatarPicker";
 import { CheckIn } from "@/components/CheckIn";
+import { MySeason, type Season } from "@/components/MySeason";
 import type { EntryState } from "@/lib/data";
 
-export function MeScreen({ me, org, orgUntil, next, today }: {
+export function MeScreen({ me, org, orgUntil, next, today, season }: {
   me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null;
-  today: { id: string; title: string; state: EntryState | null; started: boolean } | null;
+  today: { id: string; title: string; state: EntryState | null; started: boolean } | null; season: Season | null;
 }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
@@ -63,10 +64,10 @@ export function MeScreen({ me, org, orgUntil, next, today }: {
             <CheckIn me={me.id} state={today.state} eventId={today.id} started={today.started} title={today.title} />
           </>
         )}
+        {season && <MySeason s={season} />}
         <Section title="Your profile">
           <div className={`${card} grid gap-2 p-4`}>
             <div className="pb-2"><AvatarPicker me={me} /></div>
-            <Link href={`/p/${me.id}`} className={btnPrimary}>See my stats and history</Link>
             {next && <Link href={next} className={btnGhost}>Back to the event</Link>}
             <button disabled={pending} onClick={() => run(() => signOut(), "Signed out")} className={btnQuiet}>Sign out</button>
           </div>
