@@ -48,7 +48,7 @@ function Today({ rows, out, where, byId, title, eventId }: { rows: Line[]; out: 
         </div>
         {rows.map((r, i) => {
           const p = byId.get(r.id);
-          const pdg = r.gp ? (r.pf - r.pa) / r.gp : 0;
+          const pd = r.pf - r.pa;
           const left = out.has(r.id);
           const w = where[r.id];
           return (
@@ -63,7 +63,7 @@ function Today({ rows, out, where, byId, title, eventId }: { rows: Line[]; out: 
                     {!left && !w?.onNow && w?.next && <span className="shrink-0 rounded-full border border-accent/50 px-1.5 py-px text-[9.5px] font-black uppercase tracking-[.08em] text-accent">Next</span>}
                   </span>
                   <span className="block truncate text-[12px] text-dim">
-                    {left ? "Left" : [w?.group && w.place ? `${ordinal(w.place)} in ${w.group}` : w?.group, r.gp ? `${pdg > 0 ? "+" : ""}${pdg.toFixed(1)} a game` : "yet to play"].filter(Boolean).join(" · ")}
+                    {left ? "Left" : [w?.group && w.place ? `${ordinal(w.place)} in ${w.group}` : w?.group, r.gp ? `${pd > 0 ? "+" : ""}${pd} pts` : "yet to play"].filter(Boolean).join(" · ")}
                   </span>
                 </span>
               </span>
