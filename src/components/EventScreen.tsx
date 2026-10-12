@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { setMyEntry, setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider } from "@/app/actions";
+import { setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
+import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
-import { groupsOf, finalsOf, eventStandings, myDay, type GroupView, type MyDay, type MyGame } from "@/lib/views";
+import { groupsOf, finalsOf, eventStandings, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
 import { eventPoints } from "@/lib/levels";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 
@@ -33,8 +34,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
   // out (drawPool). The same list the next draw takes, so the page never disagrees with it.
   const here = useMemo(() => drawPool(entries, games), [entries, games]);
   const inPool = new Set(here);
-  const rawEntry = entries.find((e) => e.playerId === me)?.state ?? null;
-  const myEntry = me && rawEntry !== "out" && inPool.has(me) ? "here" : rawEntry;
+  const myEntry = me ? myCheckIn(entries, games, me) : null;
   const out = new Set(entries.filter((e) => e.state === "out").map((e) => e.playerId));
   const current = stages.at(-1);
   const curGroups = current ? groupsOf(view, current.no) : [];
@@ -95,7 +95,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
           <button onClick={share} className="spk-press rounded-full border border-white/[.08] bg-raised px-3.5 py-1.5 text-[13px] font-bold">Share link</button>
         </div>
         <div className="mt-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.14em]">
-          {live ? <><span className="spk-live h-2 w-2 rounded-full bg-accent" /><span className="text-accent">Live</span></> : done ? <span className="text-gold">Finished</span> : <span className="text-accent">Coming up</span>}
+          {live ? <LiveBadge /> : done ? <span className="text-gold">Finished</span> : <span className="text-accent">Coming up</span>}
         </div>
         <h1 className="mt-1 text-[28px] font-black leading-[1.05] tracking-[-.02em] text-balance">{ev.title}</h1>
         <p className="mt-1.5 text-[14px] text-muted">{fmtDate(ev.startsAt)}{ev.location ? ` · ${ev.location}` : ""}</p>
@@ -114,7 +114,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
 
       {!started && (
         <>
-          <YouBar me={me} state={myEntry} eventId={ev.id} started={false} run={run} pending={pending} />
+          <CheckIn me={me} state={myEntry} eventId={ev.id} started={false} />
           <WhoIsIn view={view} />
           {org && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} pool={inPool} />}
         </>
@@ -239,51 +239,14 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
 
 type Run = ReturnType<typeof useAction>["run"];
 
-function YouBar({ me, state, eventId, started, run, pending }: { me: string | null; state: EntryState | null; eventId: string; started: boolean; run: Run; pending: boolean }) {
-  if (!me) {
-    return (
-      <div className="px-4 pb-6">
-        <div className={`${card} flex items-center justify-between gap-3 p-4`}>
-          <p className="text-[14px] text-muted">Make a profile to add yourself and enter scores. It&apos;s just your name and a 4-digit code.</p>
-          <Link href={`/me?next=/e/${eventId}`} className={`${btnPrimary} shrink-0`}>Join</Link>
-        </div>
-      </div>
-    );
-  }
-  const set = (s: EntryState, msg: string) => run(() => setMyEntry(eventId, s), msg);
-  const label = state === "here" ? "You're checked in" : state === "going" ? "You're in" : state === "out" ? "You're out" : "Are you coming?";
-  // Checked in is the usual state on the day, and its only action is leaving: one line, not a card.
-  if (state === "here") {
-    return (
-      <div className="px-4 pb-5">
-        <div className={`${card} flex items-center justify-between gap-3 py-1.5 pr-1.5 pl-4`}>
-          <span className="flex items-center gap-2 text-[14.5px] font-extrabold"><span className="text-accent" aria-hidden="true">✓</span>{label}</span>
-          <button disabled={pending} onClick={() => set("out", started ? "Marked as left. Your remaining games will get a sub" : "No worries, you're off the list")} className={btnQuiet}>{started ? "I have to leave" : "Can't make it"}</button>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="px-4 pb-6">
-      <div className={`${card} p-4`}>
-        <div className="text-[15px] font-extrabold">{label}</div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {state !== "going" && <button disabled={pending} onClick={() => set("going", "You're in. See you there!")} className={btnPrimary}>I&apos;m in</button>}
-          <button disabled={pending} onClick={() => set("here", started ? "Checked in. You'll join the next stage" : "Checked in")} className={state === "going" ? btnPrimary : btnGhost}>I&apos;m here</button>
-          {state !== "out" && <button disabled={pending} onClick={() => set("out", started ? "Marked as left. Your remaining games will get a sub" : "No worries, you're off the list")} className={btnQuiet}>Can&apos;t make it</button>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const TAB_ICON = {
-  live: "M2 12h3l3-8 4 16 3-8h7",
+  overall: "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
   results: "M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2Z",
   you: "M20 21v-1a6 6 0 0 0-6-6h-4a6 6 0 0 0-6 6v1M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
 };
 
-/** The event's own navigation, under the header: the whole event, or your day. Drawn as a tab bar
+/** The event's own navigation, under the header: the whole event (Overall, Results once done), or
+ *  your day. LIVE is said once, by the pulsing badge in the header, not by a tab. Drawn as a tab bar
  *  (icons, underline, full width) rather than a toggle, so it reads as a place to go. */
 function Tabs({ tab, setTab, done, nudge }: { tab: "event" | "you"; setTab: (t: "event" | "you") => void; done: boolean; nudge: boolean }) {
   return (
@@ -291,11 +254,11 @@ function Tabs({ tab, setTab, done, nudge }: { tab: "event" | "you"; setTab: (t: 
       <div className="grid grid-cols-2">
         {(["event", "you"] as const).map((t) => {
           const on = tab === t;
-          const icon = t === "you" ? TAB_ICON.you : done ? TAB_ICON.results : TAB_ICON.live;
+          const icon = t === "you" ? TAB_ICON.you : done ? TAB_ICON.results : TAB_ICON.overall;
           return (
             <button key={t} role="tab" aria-selected={on} onClick={() => { setTab(t); window.scrollTo({ top: 0 }); }} className={`spk-press relative flex items-center justify-center gap-2 py-3.5 text-[15px] font-bold ${on ? "text-fg" : "text-dim"}`}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={on ? "text-accent" : ""}><path d={icon} /></svg>
-              {t === "event" ? (done ? "Results" : "Live") : "You"}
+              {t === "event" ? (done ? "Results" : "Overall") : "You"}
               {t === "you" && nudge && !on && <span className="spk-live h-2 w-2 rounded-full bg-accent" aria-label="your game is on" />}
               {on && <span className="absolute inset-x-6 -bottom-px h-[3px] rounded-full bg-accent" aria-hidden="true" />}
             </button>
@@ -316,7 +279,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
   const { event: ev, games, people } = view;
   const name = (id: string) => people[id]?.name ?? "Someone";
   const both = (ids: string[]) => ids.map(name).join(" & ");
-  if (!me || !day) return <><YouBar me={me} state={state} eventId={ev.id} started run={run} pending={pending} /><EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} /></>;
+  if (!me || !day) return <><CheckIn me={me} state={state} eventId={ev.id} started /><EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} /></>;
   const [first, ...later] = day.next;
   const myGroup = groups.find((g) => g.table.some((r) => r.id === me));
   const place = myGroup ? myGroup.table.findIndex((r) => r.id === me) + 1 : 0;
@@ -324,8 +287,6 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
   const pd = day.line.pf - day.line.pa;
   return (
     <>
-      {!done && <YouBar me={me} state={state} eventId={ev.id} started run={run} pending={pending} />}
-
       {done && iPlayed && (
         <div className="px-4 pb-5">
           <Link href={`/e/${ev.id}/recap?p=${me}`} className="spk-press flex items-center gap-3 rounded-2xl bg-gradient-to-r from-accent to-[#9be15d] p-4 text-ink">
@@ -365,7 +326,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
             </div>
           ) : (
             <div className={`${card} p-4 text-[14px] text-muted`}>
-              {waiting ? "You're in for the next stage. It starts when the organiser draws it." : state === "out" ? "You're marked as left." : day.played.length ? "No more games for you in this stage." : "Nothing on for you yet. Tap I'm here and you'll be in the next stage."}
+              {waiting ? "You're in for the next stage. It starts when the organiser draws it." : state === "out" ? <>You&apos;re marked as left. Back? Check in on <Link href="/me" className="font-bold text-accent">Me</Link>.</> : day.played.length ? "No more games for you in this stage." : <>Nothing on for you yet. Check in on <Link href="/me" className="font-bold text-accent">Me</Link> and you&apos;ll be in the next stage.</>}
             </div>
           )}
         </Section>

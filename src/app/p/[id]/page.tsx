@@ -110,7 +110,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
               </div>
             ))}
           </div>
-        ) : <div className={`${card} p-5 text-[14px] text-muted`}>No weekends yet. Add yourself to the next one on the Events tab.</div>}
+        ) : <div className={`${card} p-5 text-[14px] text-muted`}>No weekends yet. Add yourself to the next one on the Tournament tab.</div>}
       </Section>
 
       {pr.recent.length > 0 && (

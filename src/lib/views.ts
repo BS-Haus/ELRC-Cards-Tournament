@@ -1,5 +1,5 @@
 // Derived views of one event, shared by the server and the event screen. Pure: no database.
-import { tally, rank, groupWinner, groupRank, groupMembers, isDone, netQueues, type Game, type StageKind, type Line } from "@/lib/cards";
+import { tally, rank, groupWinner, groupRank, groupMembers, isDone, netQueues, drawPool, type Game, type StageKind, type Line } from "@/lib/cards";
 import type { EventView } from "@/lib/data";
 
 export type GroupView = { stageNo: number; kind: StageKind; groupNo: number; name: string; net: number; games: Game[]; table: Line[]; winner: string | null; tied: string[]; decider: "none" | "playing" | "decided" | "level"; complete: boolean };
@@ -65,4 +65,11 @@ export function liveEventId(evs: { id: string; status: string; startsAt: Date }[
     .filter((e) => e.status === "live" && now - e.startsAt.getTime() < LIVE_FOR_MS)
     .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
   return on[0]?.id ?? null;
+}
+
+/** Your check-in as the next draw sees it: anyone from the last stage who isn't out is still in,
+ *  so they read as "here" without checking in again. */
+export function myCheckIn(entries: { playerId: string; state: "going" | "here" | "out" }[], games: Game[], me: string): "going" | "here" | "out" | null {
+  const raw = entries.find((e) => e.playerId === me)?.state ?? null;
+  return raw !== "out" && drawPool(entries, games).includes(me) ? "here" : raw;
 }

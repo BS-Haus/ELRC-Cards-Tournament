@@ -7,8 +7,13 @@ import { signUp, signIn, signOut, unlockOrganiser, lockOrganiser } from "@/app/a
 import { useAction } from "@/components/useAction";
 import { Header, Section, card, btnPrimary, btnGhost, btnQuiet, input, fmtTime } from "@/components/ui";
 import { AvatarPicker } from "@/components/AvatarPicker";
+import { CheckIn } from "@/components/CheckIn";
+import type { EntryState } from "@/lib/data";
 
-export function MeScreen({ me, org, orgUntil, next }: { me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null }) {
+export function MeScreen({ me, org, orgUntil, next, today }: {
+  me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null;
+  today: { id: string; title: string; state: EntryState | null; started: boolean } | null;
+}) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [mode, setMode] = useState<"join" | "in">("join");
@@ -51,6 +56,13 @@ export function MeScreen({ me, org, orgUntil, next }: { me: { id: string; name: 
           </form>
         </Section>
       ) : (
+        <>
+        {today && (
+          <>
+            <h2 className="px-5 pb-2.5 text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</h2>
+            <CheckIn me={me.id} state={today.state} eventId={today.id} started={today.started} title={today.title} />
+          </>
+        )}
         <Section title="Your profile">
           <div className={`${card} grid gap-2 p-4`}>
             <div className="pb-2"><AvatarPicker me={me} /></div>
@@ -59,13 +71,14 @@ export function MeScreen({ me, org, orgUntil, next }: { me: { id: string; name: 
             <button disabled={pending} onClick={() => run(() => signOut(), "Signed out")} className={btnQuiet}>Sign out</button>
           </div>
         </Section>
+        </>
       )}
 
       <Section title="Organisers">
         <div className={`${card} grid gap-3 p-4`}>
           {org ? (
             <>
-              <p className="text-[14px] text-muted">Organiser tools are unlocked on this phone until {fmtTime(orgUntil!)}. You&apos;ll see them on the Events page and on each event.</p>
+              <p className="text-[14px] text-muted">Organiser tools are unlocked on this phone until {fmtTime(orgUntil!)}. You&apos;ll see them on the Tournament tab and on each event.</p>
               <button disabled={pending} onClick={() => run(() => lockOrganiser(), "Locked")} className={btnGhost}>Lock organiser tools</button>
             </>
           ) : (
