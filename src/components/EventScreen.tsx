@@ -9,7 +9,8 @@ import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
-import { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
+import { groupsOf, finalsOf, eventStandings, myDay, type GroupView, type MyDay, type MyGame } from "@/lib/views";
+import { eventPoints } from "@/lib/levels";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 
 const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded: "Seeded groups", final: "Finals" };
@@ -67,6 +68,14 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
   const openGame = games.find((g) => g.id === open) ?? null;
   const live = ev.status === "live";
   const done = ev.status === "done";
+  // Once groups are drawn the page has two jobs, so two tabs: the whole event (nets, tables,
+  // results) and your own day (status, what's next for you, your games, photos). Before the
+  // draw it's just sign-up, so no tabs. Players open it on their own day while it's live.
+  const started = !!current || done;
+  const takingPart = !!me && (inPool.has(me) || iPlayed);
+  const [tab, setTab] = useState<"event" | "you">(live && takingPart ? "you" : "event");
+  const mine = useMemo(() => (me ? myDay(games, ev.nets, me) : null), [games, ev.nets, me]);
+  const myTurn = !!mine?.next.length && mine.next[0].ahead === 0;
 
   const share = async () => {
     const url = `${location.origin}/e/${ev.id}`;
@@ -93,8 +102,6 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
         {ev.notes && <p className="mt-2 whitespace-pre-line text-[14px] leading-relaxed text-fg/80">{ev.notes}</p>}
       </header>
 
-      {!done && <YouBar me={me} state={myEntry} eventId={ev.id} started={!!current} run={run} pending={pending} />}
-
       {crown && (
         <button onClick={() => setCrown(null)} className="spk-crown fixed inset-x-4 top-[calc(16px+env(safe-area-inset-top))] z-40 mx-auto flex max-w-[448px] items-center gap-3 rounded-3xl p-4 text-left shadow-2xl" style={{ background: tierColor(crown.tier), color: "#0c0e10" }} aria-live="polite">
           <span className="text-[34px]" aria-hidden="true">🏆</span>
@@ -105,104 +112,116 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
         </button>
       )}
 
-      {(done || finals?.groups.some((g) => g.winner)) && games.some(isDone) && (
-        <div className="px-4 pb-5">
-          <Link href={`/e/${ev.id}/recap`} className="spk-press flex items-center gap-3 rounded-2xl bg-gradient-to-r from-accent to-[#9be15d] p-4 text-ink">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-accent" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[17px] font-black">{done ? "Watch the tournament story" : "The story so far"}</span>
-              <span className="block text-[13px] font-semibold opacity-70">Who won, the stories of the day, records broken</span>
-            </span>
-          </Link>
-          {iPlayed && (
-            <Link href={`/e/${ev.id}/recap?p=${me}`} className="spk-press mt-2 flex items-center justify-between rounded-2xl border border-white/[.08] bg-surface px-4 py-3">
-              <span className="text-[14.5px] font-bold">Your review of the day</span>
-              <span className="text-[13px] font-bold text-accent">▶ Watch</span>
-            </Link>
-          )}
-        </div>
+      {!started && (
+        <>
+          <YouBar me={me} state={myEntry} eventId={ev.id} started={false} run={run} pending={pending} />
+          <WhoIsIn view={view} />
+          {org && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} pool={inPool} />}
+        </>
       )}
 
-      {done && finals && <Podium groups={finals.groups} people={people} />}
+      {started && <Tabs tab={tab} setTab={setTab} eventLabel={done ? "Results" : "Live"} nudge={myTurn} />}
 
-      {(live || done) && <EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} />}
-
-      {subAlerts.length > 0 && !done && (
-        <Section title="Needs a sub">
-          <div className="grid gap-2">
-            {subAlerts.map((g) => (
-              <button key={g.id} onClick={() => setOpen(g.id)} className="spk-press flex items-center justify-between gap-3 rounded-2xl border border-loss/40 bg-loss/10 p-3.5 text-left">
-                <span className="text-[14px]"><b>{needsSub(g, out).map((id) => p(id)?.name).join(" & ")}</b> left. {gameLabel(g)}, game {g.seq} needs someone.</span>
-                <span className="shrink-0 text-[13px] font-bold text-loss">Sort it →</span>
-              </button>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {live && queues.some((q) => q.length) && (
-        <Section title="On the nets" aside="Tap a game to enter the score">
-          <div className="grid gap-2.5">
-            {queues.map((q, i) => (
-              <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {current && (
-        <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`}>
-          <div className="grid gap-3">
-            {curGroups.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
-          </div>
-        </Section>
-      )}
-
-      {live && waiting.length > 0 && (
-        <Section title="Joining next stage">
-          <div className={`${card} p-4`}>
-            <div className="flex flex-wrap gap-2">
-              {waiting.map((id) => <Chip key={id} p={p(id)} />)}
+      {started && tab === "event" && (
+        <>
+          {(done || finals?.groups.some((g) => g.winner)) && games.some(isDone) && (
+            <div className="px-4 pb-5">
+              <Link href={`/e/${ev.id}/recap`} className="spk-press flex items-center gap-3 rounded-2xl bg-gradient-to-r from-accent to-[#9be15d] p-4 text-ink">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-accent" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[17px] font-black">{done ? "Watch the tournament story" : "The story so far"}</span>
+                  <span className="block text-[13px] font-semibold opacity-70">Who won, the stories of the day, records broken</span>
+                </span>
+              </Link>
             </div>
-            <p className="mt-3 text-[13px] leading-relaxed text-muted">Arrived after the draw. They go into the next stage, and can sub in for anyone who has to leave in the meantime.</p>
-          </div>
-        </Section>
-      )}
+          )}
 
-      {!current && <WhoIsIn view={view} />}
+          {done && finals && <Podium groups={finals.groups} people={people} />}
 
-      {org && !done && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} pool={inPool} />}
+          {subAlerts.length > 0 && !done && (
+            <Section title="Needs a sub">
+              <div className="grid gap-2">
+                {subAlerts.map((g) => (
+                  <button key={g.id} onClick={() => setOpen(g.id)} className="spk-press flex items-center justify-between gap-3 rounded-2xl border border-loss/40 bg-loss/10 p-3.5 text-left">
+                    <span className="text-[14px]"><b>{needsSub(g, out).map((id) => p(id)?.name).join(" & ")}</b> left. {gameLabel(g)}, game {g.seq} needs someone.</span>
+                    <span className="shrink-0 text-[13px] font-bold text-loss">Sort it →</span>
+                  </button>
+                ))}
+              </div>
+            </Section>
+          )}
 
-      {current && standings.some((r) => r.gp) && (
-        <Section title="Standings" aside="Group stages · win % then +/−">
-          <Standings rows={standings} people={people} me={me} />
-        </Section>
-      )}
+          {live && queues.some((q) => q.length) && (
+            <Section title="On the nets" aside="Tap a game to enter the score">
+              <div className="grid gap-2.5">
+                {queues.map((q, i) => (
+                  <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} />
+                ))}
+              </div>
+            </Section>
+          )}
 
-      {stages.length > 1 && (
-        <Section title="Earlier stages">
-          <div className="grid gap-2">
-            {stages.slice(0, -1).reverse().map((s) => (
-              <details key={s.id} className={`${card} group`}>
-                <summary className="flex cursor-pointer list-none items-center justify-between p-4 text-[15px] font-bold">
-                  {s.kind === "final" ? "Finals" : `Stage ${s.no} · ${STAGE_TITLE[s.kind]}`}
-                  <span className="text-muted transition group-open:rotate-90">›</span>
-                </summary>
-                <div className="grid gap-3 px-3 pb-3">
-                  {groupsOf(view, s.no).map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
+          {current && (
+            <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`}>
+              <div className="grid gap-3">
+                {curGroups.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
+              </div>
+            </Section>
+          )}
+
+          {live && waiting.length > 0 && (
+            <Section title="Joining next stage">
+              <div className={`${card} p-4`}>
+                <div className="flex flex-wrap gap-2">
+                  {waiting.map((id) => <Chip key={id} p={p(id)} />)}
                 </div>
-              </details>
-            ))}
-          </div>
-        </Section>
+                <p className="mt-3 text-[13px] leading-relaxed text-muted">Arrived after the draw. They go into the next stage, and can sub in for anyone who has to leave in the meantime.</p>
+              </div>
+            </Section>
+          )}
+
+          {org && !done && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} pool={inPool} />}
+
+          {current && standings.some((r) => r.gp) && (
+            <Section title="Standings" aside="Group stages · win % then +/−">
+              <Standings rows={standings} people={people} me={me} />
+            </Section>
+          )}
+
+          {stages.length > 1 && (
+            <Section title="Earlier stages">
+              <div className="grid gap-2">
+                {stages.slice(0, -1).reverse().map((s) => (
+                  <details key={s.id} className={`${card} group`}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between p-4 text-[15px] font-bold">
+                      {s.kind === "final" ? "Finals" : `Stage ${s.no} · ${STAGE_TITLE[s.kind]}`}
+                      <span className="text-muted transition group-open:rotate-90">›</span>
+                    </summary>
+                    <div className="grid gap-3 px-3 pb-3">
+                      {groupsOf(view, s.no).map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {org && done && (
+            <Section title="Organiser">
+              <button disabled={pending} onClick={() => run(() => reopenEvent(ev.id), "Event reopened")} className={btnGhost}>Reopen event</button>
+            </Section>
+          )}
+
+        </>
       )}
 
-      {org && done && (
-        <Section title="Organiser">
-          <button disabled={pending} onClick={() => run(() => reopenEvent(ev.id), "Event reopened")} className={btnGhost}>Reopen event</button>
-        </Section>
+      {started && tab === "you" && (
+        <YouTab
+          view={view} me={me} state={myEntry} day={mine} iPlayed={iPlayed} waiting={!!me && waiting.includes(me)}
+          groups={curGroups} live={live} done={done} org={org} run={run} pending={pending} onOpen={setOpen}
+        />
       )}
 
       {openGame && (
@@ -233,17 +252,142 @@ function YouBar({ me, state, eventId, started, run, pending }: { me: string | nu
   }
   const set = (s: EntryState, msg: string) => run(() => setMyEntry(eventId, s), msg);
   const label = state === "here" ? "You're checked in" : state === "going" ? "You're in" : state === "out" ? "You're out" : "Are you coming?";
+  // Checked in is the usual state on the day, and its only action is leaving: one line, not a card.
+  if (state === "here") {
+    return (
+      <div className="px-4 pb-5">
+        <div className={`${card} flex items-center justify-between gap-3 py-1.5 pr-1.5 pl-4`}>
+          <span className="flex items-center gap-2 text-[14.5px] font-extrabold"><span className="text-accent" aria-hidden="true">✓</span>{label}</span>
+          <button disabled={pending} onClick={() => set("out", started ? "Marked as left. Your remaining games will get a sub" : "No worries, you're off the list")} className={btnQuiet}>{started ? "I have to leave" : "Can't make it"}</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="px-4 pb-6">
       <div className={`${card} p-4`}>
         <div className="text-[15px] font-extrabold">{label}</div>
         <div className="mt-3 flex flex-wrap gap-2">
-          {state !== "going" && state !== "here" && <button disabled={pending} onClick={() => set("going", "You're in. See you there!")} className={btnPrimary}>I&apos;m in</button>}
-          {state !== "here" && <button disabled={pending} onClick={() => set("here", started ? "Checked in. You'll join the next stage" : "Checked in")} className={state === "going" ? btnPrimary : btnGhost}>I&apos;m here</button>}
-          {state !== "out" && <button disabled={pending} onClick={() => set("out", started ? "Marked as left. Your remaining games will get a sub" : "No worries, you're off the list")} className={btnQuiet}>{started && state === "here" ? "I have to leave" : "Can't make it"}</button>}
+          {state !== "going" && <button disabled={pending} onClick={() => set("going", "You're in. See you there!")} className={btnPrimary}>I&apos;m in</button>}
+          <button disabled={pending} onClick={() => set("here", started ? "Checked in. You'll join the next stage" : "Checked in")} className={state === "going" ? btnPrimary : btnGhost}>I&apos;m here</button>
+          {state !== "out" && <button disabled={pending} onClick={() => set("out", started ? "Marked as left. Your remaining games will get a sub" : "No worries, you're off the list")} className={btnQuiet}>Can&apos;t make it</button>}
         </div>
       </div>
     </div>
+  );
+}
+
+function Tabs({ tab, setTab, eventLabel, nudge }: { tab: "event" | "you"; setTab: (t: "event" | "you") => void; eventLabel: string; nudge: boolean }) {
+  return (
+    <div className="sticky top-0 z-20 bg-bg/90 px-4 pt-1 pb-4 backdrop-blur-md">
+      <div className="grid grid-cols-2 rounded-full border border-white/[.06] bg-surface p-1 text-[14px] font-bold" role="tablist">
+        {(["event", "you"] as const).map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`spk-press flex items-center justify-center gap-1.5 rounded-full py-2 ${tab === t ? "bg-accent text-ink" : "text-muted"}`}>
+            {t === "event" ? eventLabel : "You"}
+            {t === "you" && nudge && tab !== "you" && <span className="spk-live h-2 w-2 rounded-full bg-accent" aria-label="your game is on" />}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
+
+/** Your own day: are you in, what's next for you and where, how it's gone so far, and the photos. */
+function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, org, run, pending, onOpen }: {
+  view: EventView; me: string | null; state: EntryState | null; day: MyDay | null; iPlayed: boolean; waiting: boolean;
+  groups: GroupView[]; live: boolean; done: boolean; org: boolean; run: Run; pending: boolean; onOpen: (id: string) => void;
+}) {
+  const { event: ev, games, people } = view;
+  const name = (id: string) => people[id]?.name ?? "Someone";
+  const both = (ids: string[]) => ids.map(name).join(" & ");
+  if (!me || !day) return <><YouBar me={me} state={state} eventId={ev.id} started run={run} pending={pending} /><EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} /></>;
+  const [first, ...later] = day.next;
+  const myGroup = groups.find((g) => g.table.some((r) => r.id === me));
+  const place = myGroup ? myGroup.table.findIndex((r) => r.id === me) + 1 : 0;
+  const pts = eventPoints(games, me).total;
+  const pd = day.line.pf - day.line.pa;
+  return (
+    <>
+      {!done && <YouBar me={me} state={state} eventId={ev.id} started run={run} pending={pending} />}
+
+      {done && iPlayed && (
+        <div className="px-4 pb-5">
+          <Link href={`/e/${ev.id}/recap?p=${me}`} className="spk-press flex items-center gap-3 rounded-2xl bg-gradient-to-r from-accent to-[#9be15d] p-4 text-ink">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-accent" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[17px] font-black">Watch your review</span>
+              <span className="block text-[13px] font-semibold opacity-70">Every game, your partners, the points you earned</span>
+            </span>
+          </Link>
+        </div>
+      )}
+
+      {live && (
+        <Section title="Up next">
+          {first ? (
+            <div className="grid gap-2">
+              <button onClick={() => onOpen(first.game.id)} className={`spk-press block w-full rounded-2xl p-4 text-left ${first.ahead === 0 ? "bg-accent text-ink" : `${card}`}`}>
+                <div className={`text-[12px] font-bold uppercase tracking-[.1em] ${first.ahead === 0 ? "opacity-70" : "text-accent"}`}>
+                  Net {first.net} · {first.ahead === 0 ? "you're on now" : first.ahead === 1 ? "you're next" : `${first.ahead} games before yours`}
+                </div>
+                <div className="mt-2 text-[20px] font-black leading-tight">With {name(first.partner)}</div>
+                <div className={`mt-0.5 text-[15px] font-semibold ${first.ahead === 0 ? "opacity-75" : "text-muted"}`}>vs {both(first.opponents)}{first.sub ? " · you're subbing" : ""}</div>
+                {first.ahead === 0 && <div className="mt-3 rounded-xl bg-ink py-2.5 text-center text-[14px] font-black text-accent">Enter score</div>}
+              </button>
+              {later.length > 0 && (
+                <div className={`${card} divide-y divide-white/[.04]`}>
+                  {later.map((x) => (
+                    <div key={x.game.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13.5px]">
+                      <span className="min-w-0 truncate">With <b>{name(x.partner)}</b> <span className="text-muted">vs {both(x.opponents)}</span></span>
+                      <span className="shrink-0 text-[12px] text-dim">Net {x.net}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className={`${card} p-4 text-[14px] text-muted`}>
+              {waiting ? "You're in for the next stage. It starts when the organiser draws it." : state === "out" ? "You're marked as left." : day.played.length ? "No more games for you in this stage." : "Nothing on for you yet. Tap I'm here and you'll be in the next stage."}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {day.played.length > 0 && (
+        <Section title="Your games" aside={myGroup && place ? `${ordinal(place)} in ${myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}` : undefined}>
+          <div className={`${card} overflow-hidden`}>
+            <div className="grid grid-cols-3 border-b border-white/[.05] text-center">
+              {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], [`+${pts}`, "rank points"]] as const).map(([v, l]) => (
+                <div key={l} className="py-3">
+                  <div className="tnum text-[20px] font-black">{v}</div>
+                  <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">{l}</div>
+                </div>
+              ))}
+            </div>
+            {day.played.map((x) => <MyGameRow key={x.game.id} x={x} name={name} onOpen={onOpen} />)}
+          </div>
+        </Section>
+      )}
+
+      <EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} />
+    </>
+  );
+}
+
+function MyGameRow({ x, name, onOpen }: { x: MyGame; name: (id: string) => string; onOpen: (id: string) => void }) {
+  return (
+    <button onClick={() => onOpen(x.game.id)} className="spk-press flex w-full items-center gap-3 border-b border-white/[.03] px-4 py-2.5 text-left last:border-0">
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-black ${x.won ? "bg-win/15 text-win" : "bg-loss/15 text-loss"}`}>{x.won ? "W" : "L"}</span>
+      <span className="min-w-0 flex-1 truncate text-[13.5px]">
+        With <b>{name(x.partner)}</b> <span className="text-muted">vs {x.opponents.map(name).join(" & ")}</span>
+        {(x.sub || x.game.decider) && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-[.08em] text-dim">{x.sub ? "sub" : "decider"}</span>}
+      </span>
+      <span className="tnum shrink-0 font-mono text-[13px] font-bold">{x.score![0]}–{x.score![1]}</span>
+    </button>
   );
 }
 
