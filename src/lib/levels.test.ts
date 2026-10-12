@@ -23,6 +23,14 @@ describe("points and levels", () => {
     expect(eventPoints(day, "p4").parts.map((p) => p.label)).toContain("B final winner");
     expect(eventPoints(day, "nobody")).toEqual({ total: 0, parts: [] });
   });
+  it("puts a podium on the A final: 3rd earns more than 4th, and only there", () => {
+    const aFinal = day.filter((g) => g.kind === "final" && g.groupNo === 0);
+    const order = [...new Set(aFinal.flatMap((g) => [...g.a, ...g.b]))].sort((x, y) => eventPoints(day, y).total - eventPoints(day, x).total);
+    const third = order.find((id) => eventPoints(day, id).parts.some((p) => p.label === "A final, 3rd"));
+    expect(third).toBeDefined();
+    expect(eventPoints(day, third!).parts.find((p) => p.label === "A final, 3rd")!.points).toBe(POINTS.third);
+    expect(day.flatMap((g) => [...g.a, ...g.b]).some((id) => eventPoints(day, id).parts.some((p) => p.label === "B final, 3rd"))).toBe(false);
+  });
   it("turns points into five ranks of three divisions", () => {
     expect(levelFor(0).level.name).toBe("Bronze I");
     expect(levelFor(150).level.name).toBe("Gold I");

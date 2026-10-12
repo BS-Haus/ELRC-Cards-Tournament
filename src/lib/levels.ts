@@ -13,6 +13,7 @@ export const POINTS = {
   champion: [30, 15, 10, 8],
   runnerUp: [15, 8, 5, 4],
   finalist: [6, 3, 2, 2],
+  third: 10, // 3rd in the A final: the podium. Other finals have one winner and no podium.
 };
 
 /** The five ranks and the points each starts at. Champion's divisions are 100 points apart. */
@@ -43,8 +44,9 @@ export function eventPoints(games: Game[], id: string): Earned {
   const f = finishOf(games, id);
   if (f) {
     const t = Math.min(f.tierIndex, 3);
-    const pts = f.won ? POINTS.champion[t] : f.position === 2 ? POINTS.runnerUp[t] : POINTS.finalist[t];
-    parts.push({ label: f.won ? finalWinTitle(f.tier) : f.position === 2 ? `${f.tier} final runner-up` : `${f.tier} final`, points: pts });
+    const podium3 = t === 0 && !f.won && f.position === 3;
+    const pts = f.won ? POINTS.champion[t] : f.position === 2 ? POINTS.runnerUp[t] : podium3 ? POINTS.third : POINTS.finalist[t];
+    parts.push({ label: f.won ? finalWinTitle(f.tier) : f.position === 2 ? `${f.tier} final runner-up` : podium3 ? `${f.tier} final, 3rd` : `${f.tier} final`, points: pts });
   }
   return { total: parts.reduce((n, p) => n + p.points, 0), parts: parts.filter((p) => p.points > 0) };
 }

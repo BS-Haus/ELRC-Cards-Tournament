@@ -8,7 +8,8 @@ export type Story = {
   event: { id: string; title: string; startsAt: number; done: boolean };
   champion: { id: string; line: Line; titles: number } | null;
   /** Every final (or group, before finals): winner and runner-up. */
-  podium: { name: string; winner: string | null; runnerUp: string | null; tied: string[] }[];
+  /** `third` only for the A final: it has a podium, the other finals have a winner. */
+  podium: { name: string; winner: string | null; runnerUp: string | null; third: string | null; tied: string[] }[];
   stories: Tale[];
   records: Record[];
   numbers: { players: number; games: number; points: number; deuces: number; nets: number };
@@ -71,11 +72,12 @@ export function buildStory(ev: DayEvent, history: DayEvent[]): Story {
   const priorTitles = (id: string) => before.filter((e) => goldChampion(e.games) === id).length;
   const champion = champId ? { id: champId, line: tally(b.played, [champId]).get(champId)!, titles: priorTitles(champId) + 1 } : null;
 
-  const podium = (res?.groups ?? []).map((g) => {
+  const podium = (res?.groups ?? []).map((g, i) => {
     const members = groupMembers(g.games.filter((x) => !x.decider));
     const table = rank(tally(g.games.filter((x) => x.status !== "void"), members).values()).map((r) => r.id);
-    const runnerUp = g.winner ? table.filter((id) => id !== g.winner)[0] ?? null : null;
-    return { name: res!.kind === "final" ? g.name : `Group ${g.name}`, winner: g.winner, runnerUp, tied: g.tied };
+    const rest = g.winner ? table.filter((id) => id !== g.winner) : [];
+    const third = res!.kind === "final" && i === 0 ? rest[1] ?? null : null;
+    return { name: res!.kind === "final" ? g.name : `Group ${g.name}`, winner: g.winner, runnerUp: rest[0] ?? null, third, tied: g.tied };
   });
 
   // Stories: the few things people will talk about. Strongest first, at most five.

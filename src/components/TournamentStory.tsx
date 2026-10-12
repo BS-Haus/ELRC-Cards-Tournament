@@ -66,7 +66,7 @@ export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: 
     ),
   });
 
-  // 2. The podium: every final's winner and runner-up.
+  // 2. The finals: the A final's podium (1st, 2nd, 3rd), every other final's winner and runner-up.
   if (story.podium.length) {
     slides.push({
       key: "podium", bg: "from-[#2e2408] to-[#0c0e10]",
@@ -82,6 +82,7 @@ export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: 
                   <div className="mt-2 grid gap-2">
                     <div className="flex items-center gap-3"><span className="w-6 text-center text-[20px]">🏆</span><Avatar p={names[p.winner]} size={38} /><span className="text-[21px] font-black">{n(p.winner)}</span></div>
                     {p.runnerUp && <div className="flex items-center gap-3 text-white/70"><span className="w-6 text-center text-[15px] font-black">2</span><Avatar p={names[p.runnerUp]} size={28} /><span className="text-[16px] font-bold">{n(p.runnerUp)}</span></div>}
+                    {p.third && <div className="flex items-center gap-3 text-white/60"><span className="w-6 text-center text-[15px] font-black">3</span><Avatar p={names[p.third]} size={28} /><span className="text-[16px] font-bold">{n(p.third)}</span></div>}
                   </div>
                 ) : <div className="mt-1 text-[18px] font-bold">{p.tied.length ? `Tied: ${both(p.tied)}` : "Still playing"}</div>}
               </div>

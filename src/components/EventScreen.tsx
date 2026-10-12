@@ -526,11 +526,19 @@ function Podium({ groups, people }: { groups: GroupView[]; people: Record<string
         {groups.map((g) => {
           const c = tierColor(g.name);
           return (
-            <div key={g.groupNo} className="spk-up flex items-center gap-3 rounded-2xl p-4" style={{ background: `${c}18`, border: `1px solid ${c}40` }}>
+            <div key={g.groupNo} className={`spk-up flex gap-3 rounded-2xl p-4 ${g.groupNo === 0 ? "items-start" : "items-center"}`} style={{ background: `${c}18`, border: `1px solid ${c}40` }}>
               <span className="text-[26px]" aria-hidden="true">{g.groupNo === 0 ? "🏆" : "★"}</span>
               <div className="min-w-0">
                 <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: c }}>{finalWinTitle(g.name)}</div>
                 <div className="truncate text-[20px] font-black">{g.winner ? people[g.winner]?.name : g.tied.length ? `Tie: ${g.tied.map((id) => people[id]?.name).join(" / ")}` : "Not finished"}</div>
+                {/* The A final has a podium; the others just a winner (src/lib/levels.ts pays 3rd there). */}
+                {g.groupNo === 0 && g.winner && (
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] font-bold text-fg/75">
+                    {g.table.map((r) => r.id).filter((id) => id !== g.winner).slice(0, 2).map((id, i) => (
+                      <span key={id} className="flex items-center gap-1.5"><span className="font-mono text-[12px] text-dim">{i + 2}</span><Avatar p={people[id]} size={20} />{people[id]?.name}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           );

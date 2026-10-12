@@ -26,6 +26,8 @@ describe("tournament story", () => {
     expect(s.champion?.titles).toBe(2);
     expect(s.podium.map((p) => p.name)).toEqual(["A", "B"]);
     expect(s.podium[0].runnerUp).not.toBeNull();
+    expect(s.podium[0].third).not.toBeNull(); // the A final has a podium
+    expect(s.podium[1].third).toBeNull(); // the others have a winner
   });
 
   it("tells the day's stories, strongest first, five at most", () => {
