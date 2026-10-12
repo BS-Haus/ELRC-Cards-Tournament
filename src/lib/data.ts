@@ -71,6 +71,12 @@ export async function getEventView(id: string): Promise<EventView | null> {
 
 export type EventCard = EventRow & { going: number; here: number; mine: EntryState | null; champion: string | null };
 
+/** The live event the Tournament tab opens straight into, if there is one (see liveEventId). */
+export async function liveNowId(): Promise<string | null> {
+  const rows = await db.select({ id: events.id, status: events.status, startsAt: events.startsAt }).from(events).where(eq(events.status, "live"));
+  return liveEventId(rows, Date.now());
+}
+
 export async function getEventCards(me: string | null): Promise<{ upcoming: EventCard[]; live: EventCard[]; past: EventCard[] }> {
   const evs = await db.select().from(events).orderBy(desc(events.startsAt));
   const ens = evs.length ? await db.select().from(entries).where(inArray(entries.eventId, evs.map((e) => e.id))) : [];
@@ -100,7 +106,7 @@ export async function getEventCards(me: string | null): Promise<{ upcoming: Even
 }
 
 export { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
-import { finalsOf } from "@/lib/views";
+import { finalsOf, liveEventId } from "@/lib/views";
 import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
 import { careerPoints, eventPoints } from "@/lib/levels";
 import { buildStory, type Story } from "@/lib/story";

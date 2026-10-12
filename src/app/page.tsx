@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getSession, isOrganiser } from "@/lib/auth/session";
-import { getEventCards, type EventCard } from "@/lib/data";
+import { getEventCards, liveNowId, type EventCard } from "@/lib/data";
 import { Header, Section, card, fmtDate } from "@/components/ui";
 import { RsvpButton, NewEvent } from "@/components/HomeBits";
 
@@ -21,7 +22,13 @@ function Row({ e, signedIn }: { e: EventCard; signedIn: boolean }) {
   );
 }
 
-export default async function Home() {
+// On the day, the Tournament tab is the live event: "/" opens it, and "/?all=1" (the event page's
+// back link) is the list. Any other day "/" is the list.
+export default async function Home({ searchParams }: { searchParams: Promise<{ all?: string }> }) {
+  if (!(await searchParams).all) {
+    const live = await liveNowId();
+    if (live) redirect(`/e/${live}`);
+  }
   const s = await getSession();
   const { upcoming, live, past } = await getEventCards(s?.playerId ?? null);
   const org = isOrganiser(s);

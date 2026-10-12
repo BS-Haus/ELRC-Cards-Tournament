@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planStage, type Game } from "./cards";
-import { myDay } from "./views";
+import { myDay, liveEventId, LIVE_FOR_MS } from "./views";
 
 const ids = Array.from({ length: 8 }, (_, i) => `p${i}`);
 const plan = planStage("random", ids, 2, () => 0.5);
@@ -36,5 +36,19 @@ describe("myDay", () => {
     const d = myDay(score(games.map((x) => (x.id === g.id ? { ...x, subs: [me] } : x)), g.id, 15, 3), 2, me);
     expect(d.played[0].sub).toBe(true);
     expect(d.line.gp).toBe(0);
+  });
+});
+
+describe("liveEventId", () => {
+  const now = Date.UTC(2026, 9, 17, 14);
+  const ev = (id: string, status: string, hoursAgo: number) => ({ id, status, startsAt: new Date(now - hoursAgo * 3600_000) });
+
+  it("opens the live event, the latest if there are two", () => {
+    expect(liveEventId([ev("old", "live", 5), ev("new", "live", 3), ev("next", "upcoming", -48)], now)).toBe("new");
+  });
+
+  it("shows the list when nothing is live, or the only live one was left running", () => {
+    expect(liveEventId([ev("up", "upcoming", -2), ev("done", "done", 4)], now)).toBeNull();
+    expect(liveEventId([ev("forgotten", "live", LIVE_FOR_MS / 3600_000 + 1)], now)).toBeNull();
   });
 });

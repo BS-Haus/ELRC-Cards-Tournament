@@ -53,3 +53,16 @@ export function myDay(games: Game[], nets: number, me: string): MyDay {
     .map((x) => ({ ...from(x.g), net: x.net, ahead: x.ahead }));
   return { played, next, line: tally(games, [me]).get(me)! };
 }
+
+/** How long after its start a live event still counts as today's. Past this, an event an
+ *  organiser forgot to finish stops hijacking the Tournament tab. */
+export const LIVE_FOR_MS = 18 * 60 * 60 * 1000;
+
+/** The event the Tournament tab should open straight into: the latest live one that started in
+ *  the last LIVE_FOR_MS (or is about to), else null and the tab shows the list. */
+export function liveEventId(evs: { id: string; status: string; startsAt: Date }[], now: number): string | null {
+  const on = evs
+    .filter((e) => e.status === "live" && now - e.startsAt.getTime() < LIVE_FOR_MS)
+    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
+  return on[0]?.id ?? null;
+}

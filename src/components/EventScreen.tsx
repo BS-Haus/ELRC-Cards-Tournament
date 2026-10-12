@@ -91,7 +91,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
       {toast}
       <header className="px-5 pt-[calc(14px+env(safe-area-inset-top))] pb-4">
         <div className="flex items-center justify-between">
-          <Link href="/" className="spk-press text-[13px] font-bold text-muted">← Events</Link>
+          <Link href="/?all=1" className="spk-press text-[13px] font-bold text-muted">← All events</Link>
           <button onClick={share} className="spk-press rounded-full border border-white/[.08] bg-raised px-3.5 py-1.5 text-[13px] font-bold">Share link</button>
         </div>
         <div className="mt-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.14em]">
@@ -120,7 +120,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
         </>
       )}
 
-      {started && <Tabs tab={tab} setTab={setTab} eventLabel={done ? "Results" : "Live"} nudge={myTurn} />}
+      {started && <Tabs tab={tab} setTab={setTab} done={done} nudge={myTurn} />}
 
       {started && tab === "event" && (
         <>
@@ -277,16 +277,30 @@ function YouBar({ me, state, eventId, started, run, pending }: { me: string | nu
   );
 }
 
-function Tabs({ tab, setTab, eventLabel, nudge }: { tab: "event" | "you"; setTab: (t: "event" | "you") => void; eventLabel: string; nudge: boolean }) {
+const TAB_ICON = {
+  live: "M2 12h3l3-8 4 16 3-8h7",
+  results: "M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2Z",
+  you: "M20 21v-1a6 6 0 0 0-6-6h-4a6 6 0 0 0-6 6v1M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
+};
+
+/** The event's own navigation, under the header: the whole event, or your day. Drawn as a tab bar
+ *  (icons, underline, full width) rather than a toggle, so it reads as a place to go. */
+function Tabs({ tab, setTab, done, nudge }: { tab: "event" | "you"; setTab: (t: "event" | "you") => void; done: boolean; nudge: boolean }) {
   return (
-    <div className="sticky top-0 z-20 bg-bg/90 px-4 pt-1 pb-4 backdrop-blur-md">
-      <div className="grid grid-cols-2 rounded-full border border-white/[.06] bg-surface p-1 text-[14px] font-bold" role="tablist">
-        {(["event", "you"] as const).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`spk-press flex items-center justify-center gap-1.5 rounded-full py-2 ${tab === t ? "bg-accent text-ink" : "text-muted"}`}>
-            {t === "event" ? eventLabel : "You"}
-            {t === "you" && nudge && tab !== "you" && <span className="spk-live h-2 w-2 rounded-full bg-accent" aria-label="your game is on" />}
-          </button>
-        ))}
+    <div className="sticky top-0 z-20 mb-4 border-b border-white/[.08] bg-bg/90 backdrop-blur-md" role="tablist">
+      <div className="grid grid-cols-2">
+        {(["event", "you"] as const).map((t) => {
+          const on = tab === t;
+          const icon = t === "you" ? TAB_ICON.you : done ? TAB_ICON.results : TAB_ICON.live;
+          return (
+            <button key={t} role="tab" aria-selected={on} onClick={() => { setTab(t); window.scrollTo({ top: 0 }); }} className={`spk-press relative flex items-center justify-center gap-2 py-3.5 text-[15px] font-bold ${on ? "text-fg" : "text-dim"}`}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={on ? "text-accent" : ""}><path d={icon} /></svg>
+              {t === "event" ? (done ? "Results" : "Live") : "You"}
+              {t === "you" && nudge && !on && <span className="spk-live h-2 w-2 rounded-full bg-accent" aria-label="your game is on" />}
+              {on && <span className="absolute inset-x-6 -bottom-px h-[3px] rounded-full bg-accent" aria-hidden="true" />}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -655,7 +669,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
           {!edit ? (
             <div className="flex flex-wrap gap-2">
               <button onClick={() => setEdit(true)} className={btnGhost}>Edit event details</button>
-              {!current && <button disabled={pending} onClick={() => twice("delete", () => run(() => deleteEvent(ev.id), "Event deleted", (r) => { if (r.ok) location.href = "/"; }))} className={btnQuiet}>{confirm === "delete" ? "Tap again to delete" : "Delete event"}</button>}
+              {!current && <button disabled={pending} onClick={() => twice("delete", () => run(() => deleteEvent(ev.id), "Event deleted", (r) => { if (r.ok) location.href = "/?all=1"; }))} className={btnQuiet}>{confirm === "delete" ? "Tap again to delete" : "Delete event"}</button>}
             </div>
           ) : (
             <EditEvent view={view} run={run} pending={pending} onDone={() => setEdit(false)} />
