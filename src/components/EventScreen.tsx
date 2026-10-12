@@ -9,6 +9,7 @@ import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { ScoreBoxes } from "@/components/ScoreBoxes";
+import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, eventStandings, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
@@ -520,30 +521,24 @@ function GameRow({ g, people, out, onOpen }: { g: Game; people: Record<string, P
 }
 
 function Podium({ groups, people }: { groups: GroupView[]; people: Record<string, PlayerLite> }) {
+  const [a, ...rest] = groups;
+  const tie = (g: GroupView) => (g.tied.length ? `Tie: ${g.tied.map((id) => people[id]?.name).join(" / ")}` : undefined);
+  const others = a?.winner ? a.table.map((r) => r.id).filter((id) => id !== a.winner) : [];
   return (
     <Section title="Results">
-      <div className="grid gap-2.5">
-        {groups.map((g) => {
-          const c = tierColor(g.name);
-          return (
-            <div key={g.groupNo} className={`spk-up flex gap-3 rounded-2xl p-4 ${g.groupNo === 0 ? "items-start" : "items-center"}`} style={{ background: `${c}18`, border: `1px solid ${c}40` }}>
-              <span className="text-[26px]" aria-hidden="true">{g.groupNo === 0 ? "🏆" : "★"}</span>
-              <div className="min-w-0">
-                <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: c }}>{finalWinTitle(g.name)}</div>
-                <div className="truncate text-[20px] font-black">{g.winner ? people[g.winner]?.name : g.tied.length ? `Tie: ${g.tied.map((id) => people[id]?.name).join(" / ")}` : "Not finished"}</div>
-                {/* The A final has a podium; the others just a winner (src/lib/levels.ts pays 3rd there). */}
-                {g.groupNo === 0 && g.winner && (
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] font-bold text-fg/75">
-                    {g.table.map((r) => r.id).filter((id) => id !== g.winner).slice(0, 2).map((id, i) => (
-                      <span key={id} className="flex items-center gap-1.5"><span className="font-mono text-[12px] text-dim">{i + 2}</span><Avatar p={people[id]} size={20} />{people[id]?.name}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {a && (a.winner ? (
+        <div className={`${card} overflow-hidden px-3 pt-4`}>
+          <div className="mb-2 text-center text-[11px] font-bold uppercase tracking-[.16em] text-accent">{a.name} final</div>
+          <PodiumStand first={people[a.winner]} second={people[others[0]]} third={people[others[1]]} />
+        </div>
+      ) : (
+        <div className={`${card} p-4 text-[15px] font-bold`}>{a.name} final: {tie(a) ?? "not finished"}</div>
+      ))}
+      {rest.length > 0 && (
+        <div className="mt-2.5">
+          <FinalWinners finals={rest.map((g) => ({ name: g.name, winner: g.winner ? people[g.winner] : undefined, tied: tie(g) }))} />
+        </div>
+      )}
     </Section>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Avatar, tierColor, fmtDate } from "@/components/ui";
 import { StoryReel, CountUp, type Slide } from "@/components/StoryReel";
+import { PodiumStand, FinalWinners } from "@/components/Podium";
 import type { Story, Tale } from "@/lib/story";
 import type { PlayerLite, EventPhoto } from "@/lib/data";
 
@@ -73,21 +74,16 @@ export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: 
       body: (
         <div className="grid gap-3">
           <div className="text-[13px] font-bold uppercase tracking-[.2em] text-gold">The finals</div>
-          {story.podium.map((p) => {
-            const c = tierColor(p.name);
-            return (
-              <div key={p.name} className="rounded-2xl p-4" style={{ background: `${c}18`, border: `1px solid ${c}45` }}>
-                <div className="text-[12px] font-black uppercase tracking-[.16em]" style={{ color: c }}>{p.name} final</div>
-                {p.winner ? (
-                  <div className="mt-2 grid gap-2">
-                    <div className="flex items-center gap-3"><span className="w-6 text-center text-[20px]">🏆</span><Avatar p={names[p.winner]} size={38} /><span className="text-[21px] font-black">{n(p.winner)}</span></div>
-                    {p.runnerUp && <div className="flex items-center gap-3 text-white/70"><span className="w-6 text-center text-[15px] font-black">2</span><Avatar p={names[p.runnerUp]} size={28} /><span className="text-[16px] font-bold">{n(p.runnerUp)}</span></div>}
-                    {p.third && <div className="flex items-center gap-3 text-white/60"><span className="w-6 text-center text-[15px] font-black">3</span><Avatar p={names[p.third]} size={28} /><span className="text-[16px] font-bold">{n(p.third)}</span></div>}
-                  </div>
-                ) : <div className="mt-1 text-[18px] font-bold">{p.tied.length ? `Tied: ${both(p.tied)}` : "Still playing"}</div>}
-              </div>
-            );
-          })}
+          {story.podium[0]?.winner ? (
+            <div className="mt-3">
+              <PodiumStand size="lg" first={names[story.podium[0].winner]} second={story.podium[0].runnerUp ? names[story.podium[0].runnerUp] : undefined} third={story.podium[0].third ? names[story.podium[0].third] : undefined} />
+            </div>
+          ) : story.podium[0] && <div className="text-[18px] font-bold">{story.podium[0].tied.length ? `Tied: ${both(story.podium[0].tied)}` : "Still playing"}</div>}
+          {story.podium.length > 1 && (
+            <div className="mt-2">
+              <FinalWinners finals={story.podium.slice(1).map((p) => ({ name: p.name, winner: p.winner ? names[p.winner] : undefined, tied: p.tied.length ? `Tied: ${both(p.tied)}` : undefined }))} />
+            </div>
+          )}
         </div>
       ),
     });
