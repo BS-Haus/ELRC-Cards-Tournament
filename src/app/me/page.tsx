@@ -3,8 +3,7 @@ import { MeScreen } from "@/components/MeScreen";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { players } from "@/db/schema";
-import { photoUrl, liveNowId, getEventView, getProfile, getPlayerStats } from "@/lib/data";
-import type { Season } from "@/components/MySeason";
+import { photoUrl, liveNowId, getEventView, getProfile, getSeason } from "@/lib/data";
 import { myCheckIn } from "@/lib/views";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +17,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   const v = liveId ? await getEventView(liveId) : null;
   const today = v && p ? { id: v.event.id, title: v.event.title, state: myCheckIn(v.entries, v.games, p.id), started: v.stages.length > 0 } : null;
   // Every weekend you've played, summarised: rank, numbers, the climb (src/components/MySeason).
-  const [pr, all] = p ? await Promise.all([getProfile(p.id), getPlayerStats()]) : [null, []];
-  const field = all.filter((x) => x.events > 0).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
-  const season: Season | null = pr ? {
-    id: pr.player.id, points: pr.points, stats: pr.stats, titles: pr.tierWins.A ?? 0, events: pr.events,
-    position: field.findIndex((x) => x.id === pr.player.id) + 1, of: field.length,
-  } : null;
+  const pr = p ? await getProfile(p.id) : null;
+  const season = pr ? await getSeason(pr) : null;
   return <MeScreen me={p ? { id: p.id, name: p.name, color: p.color, photo: photoUrl(p) } : null} org={isOrganiser(s)} orgUntil={s?.orgUntil ?? null} next={safeNext} today={today} season={season} />;
 }

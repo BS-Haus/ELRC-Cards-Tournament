@@ -1,61 +1,35 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProfile } from "@/lib/data";
+import { getProfile, getSeason } from "@/lib/data";
 import { getSession } from "@/lib/auth/session";
-import { Header, Section, Avatar, card, tierColor, fmtDate, LevelPill } from "@/components/ui";
+import { Section, Avatar, RankAvatar, card, tierColor, fmtDate } from "@/components/ui";
+import { MySeason } from "@/components/MySeason";
 import { levelFor } from "@/lib/levels";
 
 export const dynamic = "force-dynamic";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className={`${card} p-3.5`}>
-      <div className="text-[11px] font-bold uppercase tracking-[.1em] text-dim">{label}</div>
-      <div className="tnum mt-1 text-[24px] font-black leading-none">{value}</div>
-      {sub && <div className="mt-1 text-[12px] text-muted">{sub}</div>}
-    </div>
-  );
-}
 
 export default async function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
   const [pr, s] = await Promise.all([getProfile(id), getSession()]);
   if (!pr) notFound();
-  const { player, stats, names } = pr;
+  const { player, names } = pr;
   const mine = s?.playerId === id;
-  const pd = stats.gp ? (stats.pf - stats.pa) / stats.gp : 0;
+  const season = await getSeason(pr);
   return (
     <main>
-      <Header eyebrow={mine ? "Your profile" : "Player"} title={player.name} right={<Avatar p={player} size={52} />} />
-      {!player.claimed && <p className="-mt-2 px-5 pb-4 text-[13px] text-dim">Added on the day. Join with this name on the Me tab to make it yours.</p>}
-      {mine && !player.photo && <Link href="/me" className="-mt-2 mb-4 ml-5 inline-block text-[13px] font-bold text-accent">+ Add a profile photo</Link>}
+      {/* The same top as the Me page: photo in the rank ring with the division banner, then the
+          weekends at a glance. Tapping someone's name anywhere lands here. */}
+      <header className="flex flex-col items-center px-5 pt-[calc(22px+env(safe-area-inset-top))] pb-5 text-center">
+        <RankAvatar p={player} rank={levelFor(pr.points).level} />
+        <h1 className="mt-5 text-[26px] font-black leading-tight tracking-[-.02em]">{player.name}</h1>
+        <div className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">{mine ? "Your profile" : "Player"}</div>
+        {!player.claimed && <p className="mt-2 text-[13px] text-dim">Added on the day. Join with this name on the Me tab to make it yours.</p>}
+        {mine && !player.photo && <Link href="/me" className="mt-2 text-[13px] font-bold text-accent">+ Add a profile photo</Link>}
+      </header>
 
-      {(() => {
-        const lv = levelFor(pr.points);
-        return (
-          <div className="px-4 pb-4">
-            <div className={`${card} p-4`}>
-              <div className="flex items-center justify-between">
-                <LevelPill level={lv.level} size="md" />
-                <span className="tnum text-[13px] text-muted">{pr.points} points</span>
-              </div>
-              <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full" style={{ width: `${lv.progress * 100}%`, background: lv.level.color }} />
-              </div>
-              <div className="mt-2 text-[12.5px] text-dim">{lv.next ? `${lv.next.min - pr.points} points to ${lv.next.name}. Every weekend earns points for playing, winning and your finish.` : "Champion III: as high as it goes."}</div>
-            </div>
-          </div>
-        );
-      })()}
-
-      <div className="grid grid-cols-2 gap-2.5 px-4 pb-6">
-        <Tile label="Weekends" value={String(stats.events)} />
-        <Tile label="Games" value={String(stats.gp)} sub={stats.gp ? `${stats.w} won · ${stats.l} lost` : "None yet"} />
-        <Tile label="Win rate" value={stats.gp ? `${Math.round((100 * stats.w) / stats.gp)}%` : "–"} />
-        <Tile label="Points +/−" value={stats.gp ? `${pd > 0 ? "+" : ""}${pd.toFixed(1)}` : "–"} sub="per game" />
-      </div>
+      <MySeason s={season} title="At a glance" more={false} />
 
       {(Object.keys(pr.tierWins).length > 0 || pr.bestPartner) && (
         <Section title="Highlights">
@@ -76,24 +50,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
         </Section>
       )}
 
-      {pr.events.filter((e) => e.w + e.l > 0).length > 1 && (
-        <Section title="Win rate by weekend">
-          <div className={`${card} flex h-36 items-end gap-2 p-4`}>
-            {pr.events.filter((e) => e.w + e.l > 0).slice(0, 10).reverse().map((e) => {
-              const pc = e.w / (e.w + e.l);
-              return (
-                <Link key={e.id} href={`/e/${e.id}/recap?p=${player.id}`} className="flex h-full flex-1 flex-col items-center justify-end gap-1" aria-label={`${e.title}: ${Math.round(100 * pc)}% wins`}>
-                  <span className="tnum text-[10px] font-bold text-muted">{Math.round(100 * pc)}%</span>
-                  <span className="w-full rounded-t-md bg-accent/80" style={{ height: `${Math.max(4, pc * 80)}%` }} />
-                  <span className="text-[10px] text-dim">{fmtDate(e.startsAt, false).split(" ").slice(1).join(" ")}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </Section>
-      )}
-
-      <Section title="Weekends">
+      <Section title="Every weekend">
         {pr.events.length ? (
           <div className={`${card} divide-y divide-white/[.05]`}>
             {pr.events.map((e) => (

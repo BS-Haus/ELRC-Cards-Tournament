@@ -1,30 +1,30 @@
 import Link from "next/link";
-import { card, fmtDate, LevelPill } from "@/components/ui";
+import { card, fmtDate } from "@/components/ui";
 import { levelFor, climb } from "@/lib/levels";
-import type { Line } from "@/lib/cards";
-import type { ProfileEvent } from "@/lib/data";
+import type { ProfileEvent, Season } from "@/lib/data";
 
-export type Season = { id: string; points: number; position: number; of: number; stats: Line & { events: number }; titles: number; events: ProfileEvent[] };
+export type { Season };
 
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 
-/** The Me tab's summary of every weekend you've played: rank, the headline numbers, the climb in
- *  rank points, and your latest weekends. Compact on purpose; the full detail is on your profile. */
-export function MySeason({ s }: { s: Season }) {
+/** A player's weekends at a glance (the Me tab, and the top of a profile): rank, the headline numbers, the climb in
+ *  rank points, and your latest weekends. Compact on purpose; the full detail is further down a profile. */
+export function MySeason({ s, title = "Your weekends", more = true }: { s: Season; title?: string; more?: boolean }) {
   const lv = levelFor(s.points);
   const played = s.events.filter((e) => e.w + e.l > 0);
   const { stats } = s;
   return (
     <section className="px-4 pb-6">
       <div className="mb-2.5 flex items-baseline justify-between gap-3 px-1">
-        <h2 className="text-[12px] font-bold uppercase tracking-[.12em] text-muted">Your weekends</h2>
-        <Link href={`/p/${s.id}`} className="text-[12px] font-bold text-accent">Full profile →</Link>
+        <h2 className="text-[12px] font-bold uppercase tracking-[.12em] text-muted">{title}</h2>
+        {more && <Link href={`/p/${s.id}`} className="text-[12px] font-bold text-accent">Full profile →</Link>}
       </div>
       <div className={`${card} overflow-hidden`}>
         <div className="p-4">
-          <div className="flex items-center justify-between gap-3">
-            <LevelPill level={lv.level} size="md" />
-            <span className="tnum text-[13px] text-muted"><b className="text-fg">{s.points}</b> pts{s.position ? ` · ${ordinal(s.position)} of ${s.of}` : ""}</span>
+          <div className="flex items-baseline justify-between gap-3">
+            {/* The division itself is on the banner round the photo above, so here it's the numbers. */}
+            <span className="tnum text-[13px] text-muted"><b className="text-[22px] font-black text-fg">{s.points}</b> rank points</span>
+            {s.position > 0 && <span className="tnum text-[13px] font-bold" style={{ color: lv.level.color }}>{ordinal(s.position)} of {s.of}</span>}
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
             <div className="h-full rounded-full" style={{ width: `${lv.progress * 100}%`, background: lv.level.color }} />

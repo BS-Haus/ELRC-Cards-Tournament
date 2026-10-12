@@ -177,6 +177,15 @@ export type Profile = {
   points: number;
 };
 
+/** The headline of a player's weekends: rank points and place among everyone who's played, their
+ *  totals, A-final titles and every weekend. Shown on the Me page and at the top of a profile. */
+export type Season = { id: string; points: number; position: number; of: number; stats: Line & { events: number }; titles: number; events: ProfileEvent[] };
+
+export async function getSeason(pr: Profile): Promise<Season> {
+  const field = (await getPlayerStats()).filter((x) => x.events > 0).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+  return { id: pr.player.id, points: pr.points, stats: pr.stats, titles: pr.tierWins.A ?? 0, events: pr.events, position: field.findIndex((x) => x.id === pr.player.id) + 1, of: field.length };
+}
+
 export async function getProfile(id: string): Promise<Profile | null> {
   const { ps, evs, ens, gs } = await everything();
   const me = ps.find((p) => p.id === id);

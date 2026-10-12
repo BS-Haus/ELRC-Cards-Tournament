@@ -93,3 +93,19 @@ export function LevelPill({ level, size = "sm" }: { level: { name: string; icon:
     </span>
   );
 }
+
+/** A player's photo in a ring of their rank's colour, with their division as a banner across the
+ *  bottom: the top of the Me page and of every profile. Elsewhere avatars stay plain. */
+export function RankAvatar({ p, size = 104, rank }: { p: Pick<PlayerLite, "name" | "color"> & { photo?: string | null }; size?: number; rank?: { name: string; icon: string; color: string } }) {
+  if (!rank) return <Avatar p={p} size={size} />;
+  return (
+    <span className="relative inline-block">
+      <span className="block rounded-full p-[4px]" style={{ background: `conic-gradient(from 200deg, ${rank.color}, ${rank.color}55, ${rank.color}, ${rank.color}99, ${rank.color})`, boxShadow: `0 0 28px ${rank.color}40` }}>
+        <span className="block rounded-full bg-bg p-[3px]"><Avatar p={p} size={size} /></span>
+      </span>
+      <span className="absolute -bottom-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full border-[3px] border-bg px-2.5 py-0.5 text-[12px] font-black text-ink" style={{ background: rank.color }}>
+        <span aria-hidden="true">{rank.icon}</span>{rank.name}
+      </span>
+    </span>
+  );
+}
