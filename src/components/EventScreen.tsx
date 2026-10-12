@@ -141,6 +141,8 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
           )}
 
           {done && finals && <Podium groups={finals.groups} people={people} />}
+          {/* On the day, photos are added from Me (the Today card); afterwards they live here. */}
+          {done && <EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} />}
 
           {subAlerts.length > 0 && !done && (
             <Section title="Needs a sub">
@@ -288,7 +290,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
   const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
   const name = (id: string) => people[id]?.name ?? "Someone";
   const both = (ids: string[]) => ids.map(name).join(" & ");
-  if (!me || !day) return <><CheckIn me={me} state={state} eventId={ev.id} started /><EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} /></>;
+  if (!me || !day) return <CheckIn me={me} state={state} eventId={ev.id} started />;
   const [first, ...later] = day.next;
   const myGroup = groups.find((g) => g.table.some((r) => r.id === me));
   const place = myGroup ? myGroup.table.findIndex((r) => r.id === me) + 1 : 0;
@@ -364,7 +366,6 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
         </Section>
       )}
 
-      <EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} />
     </>
   );
 }

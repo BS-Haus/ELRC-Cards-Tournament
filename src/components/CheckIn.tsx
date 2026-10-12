@@ -17,7 +17,7 @@ export function LiveBadge() {
 
 /** Are you coming / here / leaving. Before the draw it's the event page's sign-up; once a tournament
  *  is under way it lives on the Me page (src/app/me), titled with the event. */
-export function CheckIn({ me, state, eventId, started, title }: { me: string | null; state: EntryState | null; eventId: string; started: boolean; title?: string }) {
+export function CheckIn({ me, state, eventId, started, title, children }: { me: string | null; state: EntryState | null; eventId: string; started: boolean; title?: string; children?: React.ReactNode }) {
   const { run, pending, toast } = useAction();
   if (!me) {
     return (
@@ -36,6 +36,28 @@ export function CheckIn({ me, state, eventId, started, title }: { me: string | n
       {started ? <LiveBadge /> : <span className="text-[13px] font-bold text-accent">Open →</span>}
     </Link>
   );
+  const below = children && <div className="mt-4 border-t border-white/[.05] pt-4">{children}</div>;
+  // Once it's under way there are only two answers, so it's a toggle you can see and flip.
+  if (started) {
+    const here = state === "here";
+    return (
+      <div className="px-4 pb-6">
+        {toast}
+        <div className={`${card} p-4`}>
+          {head}
+          <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[.06] bg-panel p-1" role="radiogroup" aria-label="Your check-in">
+            <button role="radio" aria-checked={here} disabled={pending || here} onClick={() => set("here", "Checked in. You'll join the next stage")} className={`spk-press flex h-11 items-center justify-center gap-1.5 rounded-lg text-[14.5px] font-black ${here ? "bg-accent text-ink" : "text-muted"}`}>
+              {here && <span aria-hidden="true">✓</span>}{here ? "Checked in" : "I'm here"}
+            </button>
+            <button role="radio" aria-checked={state === "out"} disabled={pending || state === "out"} onClick={() => set("out", "Marked as left. Your remaining games will get a sub")} className={`spk-press h-11 rounded-lg text-[14.5px] font-black ${state === "out" ? "bg-loss/20 text-loss" : "text-muted"}`}>
+              {state === "out" ? "Left" : "I have to leave"}
+            </button>
+          </div>
+          {below}
+        </div>
+      </div>
+    );
+  }
   const label = state === "here" ? "You're checked in" : state === "going" ? "You're in" : state === "out" ? "You're out" : "Are you coming?";
   // Checked in is the usual state on the day, and its only action is leaving: one line, not a card.
   if (state === "here") {

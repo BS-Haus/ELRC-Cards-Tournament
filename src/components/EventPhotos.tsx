@@ -25,7 +25,8 @@ async function shrink(file: File): Promise<string> {
 }
 
 /** Photos from the day: a strip anyone can add to; the first one leads the tournament story. */
-export function EventPhotos({ eventId, photos, me, org }: { eventId: string; photos: EventPhoto[]; me: string | null; org: boolean }) {
+export function EventPhotos({ eventId, photos, me, org, bare = false }: { eventId: string; photos: EventPhoto[]; me: string | null; org: boolean; bare?: boolean }) {
+  // `bare`: just the row, for sitting inside another card (Me's Today card).
   const { run, pending, toast } = useAction();
   const file = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState<EventPhoto | null>(null);
@@ -46,10 +47,10 @@ export function EventPhotos({ eventId, photos, me, org }: { eventId: string; pho
   const at = open ? photos.findIndex((p) => p.id === open.id) : -1;
   const step = (d: number) => photos.length && setOpen(photos[(at + d + photos.length) % photos.length]);
   return (
-    <div className="px-4 pb-5">
+    <div className={bare ? "" : "px-4 pb-5"}>
       {toast}
       {/* One compact row: a little stack of the photos (tap to browse), and Add. */}
-      <div className={`${card} flex items-center gap-3.5 p-3`}>
+      <div className={`${bare ? "" : `${card} p-3`} flex items-center gap-3.5`}>
         <button onClick={() => photos.length && setOpen(photos[0])} disabled={!photos.length} className="spk-press relative h-14 w-16 shrink-0" aria-label={photos.length ? `Browse ${photos.length} photos` : "No photos yet"}>
           {photos.length ? photos.slice(0, 3).reverse().map((p, i, arr) => {
             const depth = arr.length - 1 - i; // 0 = top of the stack

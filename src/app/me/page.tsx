@@ -15,7 +15,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   // On the day, your check-in lives here, not under the event's tabs: it's about you, not the event.
   const liveId = p ? await liveNowId() : null;
   const v = liveId ? await getEventView(liveId) : null;
-  const today = v && p ? { id: v.event.id, title: v.event.title, state: myCheckIn(v.entries, v.games, p.id), started: v.stages.length > 0 } : null;
+  const today = v && p ? { id: v.event.id, title: v.event.title, state: myCheckIn(v.entries, v.games, p.id), started: v.stages.length > 0, photos: v.photos } : null;
   // Every weekend you've played, summarised: rank, numbers, the climb (src/components/MySeason).
   const pr = p ? await getProfile(p.id) : null;
   const season = pr ? await getSeason(pr) : null;

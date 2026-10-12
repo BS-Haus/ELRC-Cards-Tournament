@@ -11,11 +11,12 @@ import { CheckIn } from "@/components/CheckIn";
 import { PlayerBody } from "@/components/PlayerBody";
 import type { Profile, Season } from "@/lib/data";
 import { levelFor } from "@/lib/levels";
-import type { EntryState } from "@/lib/data";
+import type { EntryState, EventPhoto } from "@/lib/data";
+import { EventPhotos } from "@/components/EventPhotos";
 
 export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
   me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null;
-  today: { id: string; title: string; state: EntryState | null; started: boolean } | null; season: Season | null;
+  today: { id: string; title: string; state: EntryState | null; started: boolean; photos: EventPhoto[] } | null; season: Season | null;
   profile: Pick<Profile, "tierWins" | "bestPartner" | "recent" | "names"> | null;
 }) {
   const router = useRouter();
@@ -75,7 +76,9 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
         {today && (
           <>
             <h2 className="px-5 pb-2.5 text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</h2>
-            <CheckIn me={me.id} state={today.state} eventId={today.id} started={today.started} title={today.title} />
+            <CheckIn me={me.id} state={today.state} eventId={today.id} started={today.started} title={today.title}>
+              <EventPhotos bare eventId={today.id} photos={today.photos} me={me.id} org={org} />
+            </CheckIn>
           </>
         )}
         {season && profile && <PlayerBody season={season} pr={profile} />}
