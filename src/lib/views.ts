@@ -74,10 +74,27 @@ export function myCheckIn(entries: { playerId: string; state: "going" | "here" |
   return raw !== "out" && drawPool(entries, games).includes(me) ? "here" : raw;
 }
 
-/** The Players tab's Today table at a live event: everyone in it (the next draw's pool, plus anyone
- *  who has played today and since left), best day first (win %, then points difference per game),
- *  those yet to play last. `out` is who has left, to show as such. */
-export function todayTable(v: EventView): { rows: Line[]; out: Set<string> } {
+/** Where someone is right now at a live event: their group or final in the latest stage and their
+ *  place in it, and whether they're on a net now or next. */
+export type TodayWhere = { group: string | null; place: number; onNow: boolean; next: boolean };
+
+/** The Players tab's Today table at a live event (it replaced the event page's standings): everyone
+ *  in it (the next draw's pool, plus anyone who has played today and since left), best day first
+ *  (win %, then points difference per game), those yet to play last. `out` is who has left. */
+export function todayTable(v: EventView): { rows: Line[]; out: Set<string>; where: Record<string, TodayWhere> } {
   const ids = new Set([...drawPool(v.entries, v.games), ...v.games.filter(isDone).flatMap((g) => [...g.a, ...g.b].filter((id) => !g.subs.includes(id)))]);
-  return { rows: rank(tally(v.games, ids).values()), out: new Set(v.entries.filter((e) => e.state === "out").map((e) => e.playerId)) };
+  const latest = Math.max(0, ...v.games.map((g) => g.stageNo));
+  const groups = latest ? groupsOf(v, latest) : [];
+  const heads = netQueues(v.games, v.event.nets);
+  const where: Record<string, TodayWhere> = {};
+  for (const id of ids) {
+    const g = groups.find((x) => x.table.some((r) => r.id === id));
+    where[id] = {
+      group: g ? (g.kind === "final" ? `${g.name} final` : `Group ${g.name}`) : null,
+      place: g ? g.table.findIndex((r) => r.id === id) + 1 : 0,
+      onNow: heads.some((q) => !!q[0] && [...q[0].a, ...q[0].b].includes(id)),
+      next: heads.some((q) => !!q[1] && [...q[1].a, ...q[1].b].includes(id)),
+    };
+  }
+  return { rows: rank(tally(v.games, ids).values()), out: new Set(v.entries.filter((e) => e.state === "out").map((e) => e.playerId)), where };
 }

@@ -8,6 +8,7 @@ import { useAction } from "@/components/useAction";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { CheckIn, LiveBadge } from "@/components/CheckIn";
+import { ScoreBoxes } from "@/components/ScoreBoxes";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, eventStandings, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
@@ -66,6 +67,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
   const iPlayed = !!me && games.some((g) => g.status === "done" && [...g.a, ...g.b].includes(me) && !g.subs.includes(me));
   const standings = useMemo(() => eventStandings(view), [view]);
   const openGame = games.find((g) => g.id === open) ?? null;
+  const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
   const live = ev.status === "live";
   const done = ev.status === "done";
   // Once groups are drawn the page has two jobs, so two tabs: the whole event (nets, tables,
@@ -154,10 +156,10 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
           )}
 
           {live && queues.some((q) => q.length) && (
-            <Section title="On the nets" aside="Tap a game to enter the score">
+            <Section title="On the nets" aside="Type the score in, or tap the game for more">
               <div className="grid gap-2.5">
                 {queues.map((q, i) => (
-                  <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} />
+                  <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} to={q[0] ? toFor(q[0]) : 0} canScore={!!me} />
                 ))}
               </div>
             </Section>
@@ -184,9 +186,15 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
 
           {org && !done && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} pool={inPool} />}
 
-          {current && standings.some((r) => r.gp) && (
-            <Section title="Standings" aside="Group stages · win % then +/−">
-              <Standings rows={standings} people={people} me={me} />
+          {live && standings.some((r) => r.gp) && (
+            <Section title="Standings">
+              <Link href="/players" className={`${card} spk-press flex items-center justify-between gap-3 p-4`}>
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex -space-x-2">{standings.filter((r) => r.gp).slice(0, 3).map((r) => <span key={r.id} className="rounded-full ring-2 ring-surface"><Avatar p={people[r.id]} size={26} /></span>)}</span>
+                  <span className="truncate text-[14.5px] font-bold">Everyone&apos;s day so far</span>
+                </span>
+                <span className="shrink-0 text-[13px] font-bold text-accent">Players · Today →</span>
+              </Link>
             </Section>
           )}
 
@@ -226,7 +234,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
 
       {openGame && (
         <ScoreSheet
-          game={openGame} people={people} to={openGame.decider ? DECIDER_TO : openGame.kind === "final" ? ev.finalTo : ev.groupTo} canScore={!!me} org={org}
+          game={openGame} people={people} to={toFor(openGame)} canScore={!!me} org={org}
           candidates={here.filter((id) => ![...openGame.a, ...openGame.b].includes(id) && !out.has(id))} out={out}
           onClose={() => setOpen(null)}
         />
@@ -277,6 +285,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
   groups: GroupView[]; live: boolean; done: boolean; org: boolean; run: Run; pending: boolean; onOpen: (id: string) => void;
 }) {
   const { event: ev, games, people } = view;
+  const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
   const name = (id: string) => people[id]?.name ?? "Someone";
   const both = (ids: string[]) => ids.map(name).join(" & ");
   if (!me || !day) return <><CheckIn me={me} state={state} eventId={ev.id} started /><EventPhotos eventId={ev.id} photos={view.photos} me={me} org={org} /></>;
@@ -305,14 +314,21 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
         <Section title="Up next">
           {first ? (
             <div className="grid gap-2">
-              <button onClick={() => onOpen(first.game.id)} className={`spk-press block w-full rounded-2xl p-4 text-left ${first.ahead === 0 ? "bg-accent text-ink" : `${card}`}`}>
-                <div className={`text-[12px] font-bold uppercase tracking-[.1em] ${first.ahead === 0 ? "opacity-70" : "text-accent"}`}>
-                  Net {first.net} · {first.ahead === 0 ? "you're on now" : first.ahead === 1 ? "you're next" : `${first.ahead} games before yours`}
-                </div>
-                <div className="mt-2 text-[20px] font-black leading-tight">With {name(first.partner)}</div>
-                <div className={`mt-0.5 text-[15px] font-semibold ${first.ahead === 0 ? "opacity-75" : "text-muted"}`}>vs {both(first.opponents)}{first.sub ? " · you're subbing" : ""}</div>
-                {first.ahead === 0 && <div className="mt-3 rounded-xl bg-ink py-2.5 text-center text-[14px] font-black text-accent">Enter score</div>}
-              </button>
+              <div className={`rounded-2xl p-4 ${first.ahead === 0 ? "bg-accent text-ink" : card}`}>
+                <button onClick={() => onOpen(first.game.id)} className="spk-press block w-full text-left">
+                  <div className={`text-[12px] font-bold uppercase tracking-[.1em] ${first.ahead === 0 ? "opacity-70" : "text-accent"}`}>
+                    Net {first.net} · {first.ahead === 0 ? "you're on now" : first.ahead === 1 ? "you're next" : `${first.ahead} games before yours`}
+                  </div>
+                  <div className="mt-2 text-[20px] font-black leading-tight">With {name(first.partner)}</div>
+                  <div className={`mt-0.5 text-[15px] font-semibold ${first.ahead === 0 ? "opacity-75" : "text-muted"}`}>vs {both(first.opponents)}{first.sub ? " · you're subbing" : ""}</div>
+                </button>
+                {first.ahead === 0 && (
+                  <div className="mt-3">
+                    <div className="mb-1.5 grid grid-cols-[1fr_44px_1fr] gap-2 text-center text-[11px] font-bold uppercase tracking-[.1em] opacity-60"><span>You</span><span /><span>Them</span></div>
+                    <ScoreBoxes key={first.game.id} game={first.game} to={toFor(first.game)} canScore onOpen={() => onOpen(first.game.id)} onAccent flip={!first.game.a.includes(me)} />
+                  </div>
+                )}
+              </div>
               {later.length > 0 && (
                 <div className={`${card} divide-y divide-white/[.04]`}>
                   {later.map((x) => (
@@ -401,24 +417,24 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
   )).reduce<React.ReactNode[]>((acc, x, i) => (i ? [...acc, " & ", x] : [x]), []);
 }
 
-function NetCard({ net, now, next, people, out, onOpen }: { net: number; now?: Game; next?: Game; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void }) {
+function NetCard({ net, now, next, people, out, onOpen, to, canScore }: { net: number; now?: Game; next?: Game; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void; to: number; canScore: boolean }) {
   if (!now) return (
     <div className={`${card} p-4 text-[14px] text-muted`}><b className="text-fg">Net {net}</b> · free</div>
   );
   return (
     <div className={`${card} overflow-hidden`}>
-      <button onClick={() => onOpen(now.id)} className="spk-press block w-full p-4 text-left">
-        <div className="flex items-center justify-between text-[12px] font-bold uppercase tracking-[.1em]">
+      <div className="p-4">
+        <button onClick={() => onOpen(now.id)} className="spk-press flex w-full items-center justify-between text-[12px] font-bold uppercase tracking-[.1em]">
           <span className="text-accent">Net {net} · on now</span>
-          <span className="text-dim">{gameLabel(now)} · game {now.seq}</span>
-        </div>
-        <div className="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[16px] font-extrabold leading-tight">
+          <span className="text-dim">{gameLabel(now)} · game {now.seq} ›</span>
+        </button>
+        <div className="mt-2.5 mb-2.5 grid grid-cols-[1fr_44px_1fr] items-center gap-2 text-center text-[15px] font-extrabold leading-tight">
           <span>{teamLine(now.a, people, now.subs, out)}</span>
           <span className="text-[12px] font-bold text-dim">vs</span>
-          <span className="text-right">{teamLine(now.b, people, now.subs, out)}</span>
+          <span>{teamLine(now.b, people, now.subs, out)}</span>
         </div>
-        <div className="mt-3 rounded-xl bg-accent py-2.5 text-center text-[14px] font-black text-ink">Enter score</div>
-      </button>
+        <ScoreBoxes key={now.id} game={now} to={to} canScore={canScore} onOpen={() => onOpen(now.id)} />
+      </div>
       {next && (
         <div className="border-t border-white/[.05] bg-panel px-4 py-2.5 text-[13px] text-muted">
           Next: <span className="text-fg">{teamLine(next.a, people, next.subs, out)}</span> vs <span className="text-fg">{teamLine(next.b, people, next.subs, out)}</span>
@@ -499,34 +515,6 @@ function GameRow({ g, people, out, onOpen }: { g: Game; people: Record<string, P
       </span>
       <span className={`text-right ${fin && !aWon ? "font-bold" : "text-fg/85"}`}>{teamLine(g.b, people, g.subs, out)}</span>
     </button>
-  );
-}
-
-function Standings({ rows, people, me }: { rows: ReturnType<typeof eventStandings>; people: Record<string, PlayerLite>; me: string | null }) {
-  return (
-    <div className={`${card} overflow-hidden`}>
-      <table className="tnum w-full text-[14px]">
-        <thead>
-          <tr className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">
-            <th className="w-8 py-2 pl-4 text-left font-bold">#</th><th className="text-left font-bold">Player</th><th className="px-2 text-right font-bold">W–L</th><th className="px-2 text-right font-bold">Win</th><th className="pr-4 pl-2 text-right font-bold">+/− pg</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.filter((r) => r.gp).map((r, i) => {
-            const pdg = (r.pf - r.pa) / r.gp;
-            return (
-              <tr key={r.id} className={`border-t border-white/[.04] ${r.id === me ? "bg-accent/[.06]" : ""}`}>
-                <td className="py-2 pl-4 font-mono text-[12.5px] text-dim">{i + 1}</td>
-                <td className="py-2"><span className="flex items-center gap-2"><Avatar p={people[r.id]} size={22} /><PlayerLink p={people[r.id]} className="font-semibold" /></span></td>
-                <td className="px-2 text-right text-num">{r.w}–{r.l}</td>
-                <td className="px-2 text-right font-bold">{Math.round((100 * r.w) / r.gp)}%</td>
-                <td className={`pr-4 pl-2 text-right font-mono text-[12.5px] ${pdg > 0 ? "text-win" : pdg < 0 ? "text-loss" : "text-dim"}`}>{(pdg > 0 ? "+" : "") + pdg.toFixed(1)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

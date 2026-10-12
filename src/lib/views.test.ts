@@ -59,7 +59,7 @@ describe("todayTable", () => {
   const [winner] = g.a;
   const absent = ids.find((id) => ![...g.a, ...g.b].includes(id))!;
   const left = new Set([winner, absent]); // one played and then left, one left without playing
-  const v = { entries: ids.map((id) => ({ playerId: id, state: left.has(id) ? "out" : "here", at: 0 })), games: score(games, g.id, 15, 4) } as unknown as EventView;
+  const v = { event: { nets: 2 }, stages: [{ no: 1 }], entries: ids.map((id) => ({ playerId: id, state: left.has(id) ? "out" : "here", at: 0 })), games: score(games, g.id, 15, 4) } as unknown as EventView;
   const t = todayTable(v);
 
   it("puts the day's winners first and those yet to play last", () => {
@@ -71,5 +71,11 @@ describe("todayTable", () => {
     expect(t.rows.map((r) => r.id)).toContain(winner);
     expect(t.rows.map((r) => r.id)).not.toContain(absent);
     expect(t.out.has(winner)).toBe(true);
+  });
+
+  it("says which group each player is in, their place, and who's on a net now", () => {
+    expect(t.where[g.a[0]]).toMatchObject({ group: `Group ${g.groupName}`, place: 1 });
+    const onNow = games.filter((x) => x.id !== g.id).sort((x, y) => x.ord - y.ord).find((x) => x.net === g.net)!;
+    expect([...onNow.a, ...onNow.b].every((id) => !t.where[id] || t.where[id].onNow)).toBe(true);
   });
 });

@@ -295,6 +295,13 @@ export function validScore(a: unknown, b: unknown): boolean {
 /** The winner's score for a loser's score in a game to `to`, win by two. */
 export const winnerScore = (loser: number, to: number) => Math.max(to, loser + 2);
 
+/** A finished score for a game to `to`, win by two: the winner on exactly `to`, or two clear past
+ *  it in a deuce. What typed-in scores are checked against before saving. */
+export function isFinalScore(a: number, b: number, to: number): boolean {
+  if (!validScore(a, b)) return false;
+  return Math.max(a, b) === winnerScore(Math.min(a, b), to);
+}
+
 /** Rough minutes for a stage: the busiest net's games, at ~(to/1.6 + 3) min each. */
 export function stageMinutes(sizes: number[], nets: number, to: number): number {
   const per = new Array(Math.max(1, nets)).fill(0);

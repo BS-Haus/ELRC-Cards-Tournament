@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, finalName, finalWinTitle, type Game } from "./cards";
+import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, finalName, finalWinTitle, isFinalScore, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -221,5 +221,14 @@ describe("final names", () => {
     expect(["Gold", "Silver", "Bronze", "Copper", "A", "B"].map(finalName)).toEqual(["A", "B", "C", "D", "A", "B"]);
     expect(finalWinTitle("A")).toBe("Champion");
     expect(finalWinTitle("B")).toBe("B final winner");
+  });
+});
+
+describe("isFinalScore", () => {
+  it("takes a win on the target, or two clear in a deuce", () => {
+    expect([[15, 9], [9, 15], [15, 13], [17, 15], [22, 20]].every(([a, b]) => isFinalScore(a, b, 15))).toBe(true);
+  });
+  it("refuses short, level, one-point and overshot scores", () => {
+    expect([[14, 9], [15, 15], [15, 14], [16, 9], [18, 15], [1, 0]].some(([a, b]) => isFinalScore(a, b, 15))).toBe(false);
   });
 });

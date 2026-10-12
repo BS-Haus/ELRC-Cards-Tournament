@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getPlayerStats, liveNowId, getEventView, type PlayerStats } from "@/lib/data";
-import { todayTable } from "@/lib/views";
+import { todayTable, type TodayWhere } from "@/lib/views";
 import { Header, Section, Avatar, card, tierColor, RankBadge } from "@/components/ui";
 import { LiveBadge } from "@/components/CheckIn";
 import { levelFor } from "@/lib/levels";
@@ -35,23 +35,40 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   );
 }
 
-function Today({ rows, out, byId, title, eventId }: { rows: Line[]; out: Set<string>; byId: Map<string, PlayerStats>; title: string; eventId: string }) {
+const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
+
+/** Today's table: what the event page's standings used to show (W–L, win %, points difference),
+ *  plus where each person is now (their group or final and place) and who's on a net. */
+function Today({ rows, out, where, byId, title, eventId }: { rows: Line[]; out: Set<string>; where: Record<string, TodayWhere>; byId: Map<string, PlayerStats>; title: string; eventId: string }) {
   return (
     <Section title={`Playing today · ${rows.length}`} aside={<Link href={`/e/${eventId}`} className="font-bold text-accent">{title} →</Link>}>
-      <div className={`${card} divide-y divide-white/[.05]`}>
+      <div className={`${card} overflow-hidden`}>
+        <div className="grid grid-cols-[20px_1fr_44px_44px] items-center gap-x-3 border-b border-white/[.05] px-4 py-2 text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">
+          <span>#</span><span>Player</span><span className="text-right">Win</span><span className="text-right">W–L</span>
+        </div>
         {rows.map((r, i) => {
           const p = byId.get(r.id);
-          const pd = r.pf - r.pa;
+          const pdg = r.gp ? (r.pf - r.pa) / r.gp : 0;
           const left = out.has(r.id);
+          const w = where[r.id];
           return (
-            <Link key={r.id} href={`/p/${r.id}`} className="spk-press flex items-center gap-3 px-4 py-3">
-              <span className="w-5 shrink-0 text-right font-mono text-[12.5px] text-dim">{r.gp ? i + 1 : "–"}</span>
-              <Avatar p={p} size={34} dim={left} />
-              <div className="min-w-0 flex-1">
-                <div className={`flex items-center gap-1.5 truncate text-[15px] font-bold ${left ? "text-dim" : ""}`}>{p?.name}{p && <RankBadge level={levelFor(p.points).level} size={15} />}</div>
-                <div className="text-[12.5px] text-dim">{left ? "Left" : r.gp ? `${r.gp} ${r.gp === 1 ? "game" : "games"} · ${pd > 0 ? "+" : ""}${pd} points` : "Yet to play"}</div>
-              </div>
-              <span className="tnum shrink-0 font-mono text-[16px] font-black">{r.w}–{r.l}</span>
+            <Link key={r.id} href={`/p/${r.id}`} className="spk-press grid grid-cols-[20px_1fr_44px_44px] items-center gap-x-3 border-b border-white/[.03] px-4 py-2.5 last:border-0">
+              <span className="text-right font-mono text-[12.5px] text-dim">{r.gp ? i + 1 : "–"}</span>
+              <span className="flex min-w-0 items-center gap-2.5">
+                <Avatar p={p} size={32} dim={left} />
+                <span className="min-w-0">
+                  <span className={`flex items-center gap-1.5 text-[14.5px] font-bold ${left ? "text-dim" : ""}`}>
+                    <span className="truncate">{p?.name}</span>{p && <RankBadge level={levelFor(p.points).level} size={14} />}
+                    {!left && w?.onNow && <span className="shrink-0 rounded-full bg-accent px-1.5 py-px text-[9.5px] font-black uppercase tracking-[.08em] text-ink">On now</span>}
+                    {!left && !w?.onNow && w?.next && <span className="shrink-0 rounded-full border border-accent/50 px-1.5 py-px text-[9.5px] font-black uppercase tracking-[.08em] text-accent">Next</span>}
+                  </span>
+                  <span className="block truncate text-[12px] text-dim">
+                    {left ? "Left" : [w?.group && w.place ? `${ordinal(w.place)} in ${w.group}` : w?.group, r.gp ? `${pdg > 0 ? "+" : ""}${pdg.toFixed(1)} a game` : "yet to play"].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+              </span>
+              <span className="tnum text-right text-[13px] font-bold text-muted">{r.gp ? `${Math.round((100 * r.w) / r.gp)}%` : "–"}</span>
+              <span className="tnum text-right font-mono text-[15px] font-black">{r.w}–{r.l}</span>
             </Link>
           );
         })}
