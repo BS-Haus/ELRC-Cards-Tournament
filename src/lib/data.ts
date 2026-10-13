@@ -108,16 +108,16 @@ export async function getEventCards(me: string | null): Promise<{ upcoming: Even
 export { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views";
 import { finalsOf, liveEventId } from "@/lib/views";
 import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
-import { rateWeekends, START, PLACING_GAMES } from "@/lib/levels";
+import { xpWeekends } from "@/lib/levels";
 import { buildStory, type Story } from "@/lib/story";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
 
-/** `rating` is the cards rating (src/lib/levels.ts), rounded; `placed` once they've played enough to have a rank. */
-export type PlayerStats = PlayerLite & Line & { events: number; tierWins: Record<string, number>; rating: number; placed: boolean };
+/** `xp` decides their level (src/lib/levels.ts). */
+export type PlayerStats = PlayerLite & Line & { events: number; tierWins: Record<string, number>; xp: number };
 
-/** Each event's games, for the rating (src/lib/levels.ts). */
+/** Each event's games, for XP (src/lib/levels.ts). */
 const byEvent = (evs: { id: string; startsAt: Date }[], gs: (Game & { eventId: string })[]) =>
   evs.map((e) => ({ id: e.id, startsAt: e.startsAt.getTime(), games: gs.filter((g) => g.eventId === e.id) }));
 
@@ -162,12 +162,12 @@ export async function getPlayerStats(): Promise<PlayerStats[]> {
       r[tier] = (r[tier] ?? 0) + 1;
     }
   }
-  const rt = rateWeekends(days);
-  return ps.map((p) => ({ ...lite(p), ...t.get(p.id)!, events: evByPlayer.get(p.id)?.size ?? 0, tierWins: tiers.get(p.id) ?? {}, rating: Math.round(rt.get(p.id)?.rating ?? START), placed: rt.get(p.id)?.placed ?? false }));
+  const rt = xpWeekends(days);
+  return ps.map((p) => ({ ...lite(p), ...t.get(p.id)!, events: evByPlayer.get(p.id)?.size ?? 0, tierWins: tiers.get(p.id) ?? {}, xp: rt.get(p.id)?.xp ?? 0 }));
 }
 
 export type ProfileGame = { id: string; eventId: string; eventTitle: string; at: number; won: boolean; mine: number; theirs: number; partner: string; opponents: string[]; sub: boolean; label: string };
-/** `change` is the rating that weekend moved them by, `after` where it left them (null if no counted games). */
+/** `change` is the XP that weekend earned (or cost) them, `after` where it left them (null if no counted games). */
 export type ProfileEvent = { id: string; title: string; startsAt: number; live: boolean; w: number; l: number; finish: string | null; change: number | null; after: number | null };
 export type Profile = {
   player: PlayerLite;
@@ -177,27 +177,24 @@ export type Profile = {
   events: ProfileEvent[];
   recent: ProfileGame[];
   names: Record<string, PlayerLite>;
-  rating: number;
-  placed: boolean;
-  /** Counted games so far, for "placing: 3 of 5". */
-  games: number;
+  xp: number;
 };
 
-/** The headline of a player's weekends: their rating and place among everyone placed, their
+/** The headline of a player's weekends: their XP and place among everyone who's played, their
  *  totals, A-final titles and every weekend. Shown on the Me page and at the top of a profile. */
-export type Season = { id: string; rating: number; placed: boolean; games: number; position: number; of: number; stats: Line & { events: number }; titles: number; events: ProfileEvent[] };
+export type Season = { id: string; xp: number; position: number; of: number; stats: Line & { events: number }; titles: number; events: ProfileEvent[] };
 
 export async function getSeason(pr: Profile): Promise<Season> {
-  const field = (await getPlayerStats()).filter((x) => x.placed).sort((a, b) => b.rating - a.rating || a.name.localeCompare(b.name));
-  return { id: pr.player.id, rating: pr.rating, placed: pr.placed, games: pr.games, stats: pr.stats, titles: pr.tierWins.A ?? 0, events: pr.events, position: field.findIndex((x) => x.id === pr.player.id) + 1, of: field.length };
+  const field = (await getPlayerStats()).filter((x) => x.events > 0).sort((a, b) => b.xp - a.xp || a.name.localeCompare(b.name));
+  return { id: pr.player.id, xp: pr.xp, stats: pr.stats, titles: pr.tierWins.A ?? 0, events: pr.events, position: field.findIndex((x) => x.id === pr.player.id) + 1, of: field.length };
 }
 
-/** One player's rating change at one weekend, for the event page's You tab (null if none yet). */
-export async function weekendRating(eventId: string, playerId: string): Promise<{ before: number; after: number; placed: boolean } | null> {
+/** One player's XP at one weekend so far, for the event page's You tab (null if none yet). */
+export async function weekendXp(eventId: string, playerId: string): Promise<{ before: number; after: number } | null> {
   const { evs, gs } = await everything();
-  const p = rateWeekends(byEvent(evs, gs).filter((e) => e.startsAt <= (evs.find((x) => x.id === eventId)?.startsAt.getTime() ?? 0))).get(playerId);
+  const p = xpWeekends(byEvent(evs, gs).filter((e) => e.startsAt <= (evs.find((x) => x.id === eventId)?.startsAt.getTime() ?? 0))).get(playerId);
   const wk = p?.weekends.get(eventId);
-  return wk ? { before: Math.round(wk.before), after: Math.round(wk.after), placed: wk.gamesBefore + wk.games >= PLACING_GAMES } : null;
+  return wk ? { before: wk.before, after: wk.after } : null;
 }
 
 export async function getProfile(id: string): Promise<Profile | null> {
@@ -220,7 +217,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
   }
   const bp = [...partners.entries()].filter(([, r]) => r.gp >= 2).sort((x, y) => y[1].w - x[1].w || y[1].gp - x[1].gp)[0];
 
-  const rated = rateWeekends(byEvent(evs, gs)).get(id);
+  const rated = xpWeekends(byEvent(evs, gs)).get(id);
   const evIds = new Set<string>([...counted.map((g) => g.eventId), ...ens.filter((e) => e.playerId === id && e.state === "here").map((e) => e.eventId)]);
   const tierWins: Record<string, number> = {};
   const events: ProfileEvent[] = [...evIds].map((eid) => {
@@ -242,7 +239,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
       }
     }
     const wk = rated?.weekends.get(eid);
-    return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), live: ev.status === "live", w: line.w, l: line.l, finish, change: wk ? Math.round(wk.after) - Math.round(wk.before) : null, after: wk ? Math.round(wk.after) : null };
+    return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), live: ev.status === "live", w: line.w, l: line.l, finish, change: wk ? wk.after - wk.before : null, after: wk ? wk.after : null };
   }).sort((a, b) => b.startsAt - a.startsAt);
 
   const recent: ProfileGame[] = mine
@@ -261,7 +258,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
       };
     });
 
-  return { player: lite(me), stats: { ...stats, events: evIds.size }, tierWins, bestPartner: bp ? { id: bp[0], ...bp[1] } : null, events, recent, names, rating: Math.round(rated?.rating ?? START), placed: rated?.placed ?? false, games: rated?.games ?? 0 };
+  return { player: lite(me), stats: { ...stats, events: evIds.size }, tierWins, bestPartner: bp ? { id: bp[0], ...bp[1] } : null, events, recent, names, xp: rated?.xp ?? 0 };
 }
 
 export const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
@@ -279,8 +276,8 @@ export async function getRecap(eventId: string, playerId: string | null): Promis
   const recap = buildRecap(ev, who, days);
   if (recap.me) {
     // Ratings as they stood after this weekend: replay only the weekends up to and including it.
-    const wk = rateWeekends(days.filter((d) => d.startsAt <= ev.startsAt)).get(recap.me.id)?.weekends.get(ev.id);
-    recap.progress = wk ? { before: Math.round(wk.before), after: Math.round(wk.after), gamesBefore: wk.gamesBefore, games: wk.games } : null;
+    const wk = xpWeekends(days.filter((d) => d.startsAt <= ev.startsAt)).get(recap.me.id)?.weekends.get(ev.id);
+    recap.progress = wk ? { before: wk.before, after: wk.after, parts: wk.parts } : null;
   }
   return { recap, names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])) };
 }

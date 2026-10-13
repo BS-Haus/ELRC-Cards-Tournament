@@ -11,7 +11,7 @@ import { AvatarPicker } from "@/components/AvatarPicker";
 import { CheckIn } from "@/components/CheckIn";
 import { PlayerBody } from "@/components/PlayerBody";
 import type { Profile, Season } from "@/lib/data";
-import { rankFor } from "@/lib/levels";
+import { levelFor } from "@/lib/levels";
 import type { EntryState, EventPhoto } from "@/lib/data";
 import { EventPhotos } from "@/components/EventPhotos";
 
@@ -29,7 +29,7 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
       {toast}
       {me ? (
         <header className="flex flex-col items-center px-5 pt-[calc(22px+env(safe-area-inset-top))] pb-5 text-center">
-          <AvatarPicker me={me} rank={season ? rankFor(season.rating, season.placed).rank : undefined} />
+          <AvatarPicker me={me} rank={season ? levelFor(season.xp).level : undefined} />
           <h1 className="mt-5 text-[26px] font-black leading-tight tracking-[-.02em]">{me.name}</h1>
           <div className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">East London Roundnet</div>
           {next && <Link href={next} className="mt-3 text-[13px] font-bold text-accent">← Back to the event</Link>}
