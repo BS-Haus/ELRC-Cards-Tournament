@@ -76,7 +76,7 @@ function finishes(games: Game[]): Map<string, XpPart> {
     const { winner } = groupWinner(gg);
     if (!winner) continue;
     if (no === nos[0]) {
-      const rest = groupRank(tally(gg, groupMembers(gg)).values()).map((r) => r.id).filter((id) => id !== winner);
+      const rest = groupRank(tally(gg, groupMembers(gg)).values(), gg).map((r) => r.id).filter((id) => id !== winner);
       out.set(winner, { label: "Champion", xp: XP.champion });
       if (rest[0]) out.set(rest[0], { label: `${gg[0].groupName} final, 2nd`, xp: XP.second });
       if (rest[1]) out.set(rest[1], { label: `${gg[0].groupName} final, 3rd`, xp: XP.third });

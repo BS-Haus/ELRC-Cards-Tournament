@@ -10,7 +10,7 @@ export function groupsOf(v: EventView, stageNo: number): GroupView[] {
   return nos.map((groupNo) => {
     const games = gs.filter((g) => g.groupNo === groupNo).sort((a, b) => a.seq - b.seq);
     const live = games.filter((g) => g.status !== "void");
-    const table = groupRank(tally(live, groupMembers(games)).values());
+    const table = groupRank(tally(live, groupMembers(games)).values(), live);
     const { winner, tied, decider } = groupWinner(games);
     return { stageNo, kind: games[0].kind, groupNo, name: games[0].groupName, net: games[0].net, games, table, winner, tied, decider, complete: live.every(isDone) };
   });

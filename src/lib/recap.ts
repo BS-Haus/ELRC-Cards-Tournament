@@ -92,7 +92,7 @@ export function finishOf(games: Game[], id: string): Finish | null {
   for (const g of res.groups) {
     const members = groupMembers(g.games.filter((x) => !x.decider));
     if (!members.includes(id)) continue;
-    const table = groupRank(tally(g.games.filter((x) => x.status !== "void"), members).values()).map((r) => r.id);
+    const table = groupRank(tally(g.games.filter((x) => x.status !== "void"), members).values(), g.games).map((r) => r.id);
     // A decided tie puts the decider's winner first.
     if (g.winner && table[0] !== g.winner) table.splice(table.indexOf(g.winner), 1), table.unshift(g.winner);
     const tierIndex = TIERS.indexOf(g.name) >= 0 ? TIERS.indexOf(g.name) : g.groupNo;
