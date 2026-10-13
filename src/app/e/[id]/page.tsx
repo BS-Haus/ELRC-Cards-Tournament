@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getSession, isOrganiser } from "@/lib/auth/session";
-import { getEventView, allPlayers } from "@/lib/data";
+import { getEventView, allPlayers, weekendRating } from "@/lib/data";
 import { EventScreen } from "@/components/EventScreen";
 
 export const dynamic = "force-dynamic";
@@ -28,5 +28,6 @@ export default async function EventPage({ params }: Props) {
   const [v, s] = await Promise.all([getEventView(id), getSession()]);
   if (!v) notFound();
   const org = isOrganiser(s);
-  return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={org ? await allPlayers() : []} />;
+  const myRating = s?.playerId ? await weekendRating(id, s.playerId) : null;
+  return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={org ? await allPlayers() : []} myRating={myRating} />;
 }

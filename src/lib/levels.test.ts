@@ -1,68 +1,97 @@
 import { describe, expect, it } from "vitest";
-import { planStage, type Game, type StageKind } from "./cards";
-import { eventPoints, levelFor, careerPoints, LEVELS, POINTS, climb } from "./levels";
+import type { Game } from "./cards";
+import { rateWeekends, rankFor, climb, RANKS, START, PLACING_GAMES } from "./levels";
 
-const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
-const num = (id: string) => Number(id.slice(1));
-const stage = (stageNo: number, kind: StageKind): Game[] =>
-  planStage(kind, ids(8), 2).flatMap((g) => g.games.map((x) => {
-    const aWon = Math.min(...x.a.map(num)) < Math.min(...x.b.map(num));
-    return { id: `${stageNo}-${g.groupNo}-${x.seq}`, stageNo, kind, groupNo: g.groupNo, groupName: g.name, seq: x.seq, ord: x.ord, net: g.net, a: x.a, b: x.b, subs: [], scoreA: aWon ? 15 : 9, scoreB: aWon ? 9 : 15, status: "done" as const };
-  }));
-const day = [...stage(1, "random"), ...stage(2, "final")];
+let n = 0;
+/** One finished game: a beat b by the score given (a's score first). */
+const game = (a: [string, string], b: [string, string], sa: number, sb: number, extra: Partial<Game> = {}): Game =>
+  ({ id: `g${++n}`, stageNo: 1, kind: "random", groupNo: 0, groupName: "A", seq: n, ord: n, net: 1, a, b, subs: [], scoreA: sa, scoreB: sb, status: "done", ...extra });
+const weekend = (id: string, startsAt: number, games: Game[]) => ({ id, startsAt, games });
+const rating = (m: ReturnType<typeof rateWeekends>, id: string) => m.get(id)?.rating ?? START;
 
-describe("points and levels", () => {
-  it("pays for turning up, games, wins and the finish", () => {
-    const e = eventPoints(day, "p0");
-    expect(e.parts.map((p) => p.label)).toContain("Champion");
-    expect(e.total).toBe(e.parts.reduce((n, p) => n + p.points, 0));
-    expect(e.total).toBeGreaterThan(POINTS.showedUp + POINTS.champion[0]);
+describe("rating", () => {
+  it("moves winners up and losers down by the same amount", () => {
+    const r = rateWeekends([weekend("w1", 1, [game(["a", "b"], ["c", "d"], 15, 9)])]);
+    expect(rating(r, "a")).toBeGreaterThan(START);
+    expect(rating(r, "c")).toBeLessThan(START);
+    expect(rating(r, "a") - START).toBeCloseTo(START - rating(r, "c"), 5);
   });
-  it("gives the champion more than the B final winner, and nothing to someone who didn't play", () => {
-    expect(eventPoints(day, "p0").total).toBeGreaterThan(eventPoints(day, "p4").total);
-    expect(eventPoints(day, "p4").parts.map((p) => p.label)).toContain("B final winner");
-    expect(eventPoints(day, "nobody")).toEqual({ total: 0, parts: [] });
+
+  it("pays more for a bigger margin", () => {
+    const close = rateWeekends([weekend("w", 1, [game(["a", "b"], ["c", "d"], 15, 13)])]);
+    const big = rateWeekends([weekend("w", 1, [game(["a", "b"], ["c", "d"], 15, 2)])]);
+    expect(rating(big, "a")).toBeGreaterThan(rating(close, "a"));
   });
-  it("puts a podium on the A final: 3rd earns more than 4th, and only there", () => {
-    const aFinal = day.filter((g) => g.kind === "final" && g.groupNo === 0);
-    const order = [...new Set(aFinal.flatMap((g) => [...g.a, ...g.b]))].sort((x, y) => eventPoints(day, y).total - eventPoints(day, x).total);
-    const third = order.find((id) => eventPoints(day, id).parts.some((p) => p.label === "A final, 3rd"));
-    expect(third).toBeDefined();
-    expect(eventPoints(day, third!).parts.find((p) => p.label === "A final, 3rd")!.points).toBe(POINTS.third);
-    expect(day.flatMap((g) => [...g.a, ...g.b]).some((id) => eventPoints(day, id).parts.some((p) => p.label === "B final, 3rd"))).toBe(false);
+
+  it("can go down as well as up: a strong player who starts losing drops", () => {
+    const wins = Array.from({ length: 6 }, () => game(["s", "x"], ["y", "z"], 15, 5));
+    const losses = Array.from({ length: 6 }, () => game(["s", "x"], ["y", "z"], 5, 15));
+    const r = rateWeekends([weekend("w1", 1, wins), weekend("w2", 2, losses)]);
+    const after1 = r.get("s")!.weekends.get("w1")!.after;
+    expect(after1).toBeGreaterThan(START);
+    expect(rating(r, "s")).toBeLessThan(after1);
   });
-  it("turns points into five ranks of three divisions", () => {
-    expect(levelFor(0).level.name).toBe("Bronze I");
-    expect(levelFor(150).level.name).toBe("Gold I");
-    expect(levelFor(299).level.name).toBe("Gold III");
-    expect([...new Set(LEVELS.map((l) => l.tier))]).toEqual(["Bronze", "Silver", "Gold", "Diamond", "Champion"]);
-    expect(LEVELS).toHaveLength(15);
-    expect(LEVELS.at(-1)!.name).toBe("Champion III");
-    expect(levelFor(LEVELS[1].min).level.name).toBe(LEVELS[1].name);
-    const mid = levelFor((LEVELS[2].min + LEVELS[3].min) / 2);
-    expect(mid.level.name).toBe(LEVELS[2].name);
-    expect(mid.progress).toBeCloseTo(0.5);
-    expect(levelFor(99999).next).toBeNull();
+
+  it("rewards beating a stronger pair more than a weaker one, and costs less to lose to one", () => {
+    const build = Array.from({ length: 8 }, () => game(["s1", "s2"], ["f1", "f2"], 15, 3)); // s1, s2 get strong
+    const vsStrong = rateWeekends([weekend("w1", 1, build), weekend("w2", 2, [game(["u1", "u2"], ["s1", "s2"], 15, 13)])]);
+    const vsWeak = rateWeekends([weekend("w1", 1, build), weekend("w2", 2, [game(["u1", "u2"], ["f1", "f2"], 15, 13)])]);
+    expect(rating(vsStrong, "u1")).toBeGreaterThan(rating(vsWeak, "u1"));
+    const lossToStrong = rateWeekends([weekend("w1", 1, build), weekend("w2", 2, [game(["u1", "u2"], ["s1", "s2"], 13, 15)])]);
+    const lossToWeak = rateWeekends([weekend("w1", 1, build), weekend("w2", 2, [game(["u1", "u2"], ["f1", "f2"], 13, 15)])]);
+    expect(rating(lossToStrong, "u1")).toBeGreaterThan(rating(lossToWeak, "u1"));
   });
-  it("adds up a career, only counting weekends up to a date", () => {
-    const evs = [{ id: "a", startsAt: 1, games: day }, { id: "b", startsAt: 2, games: day }];
-    expect(careerPoints(evs, "p0")).toBe(2 * eventPoints(day, "p0").total);
-    expect(careerPoints(evs, "p0", 1)).toBe(eventPoints(day, "p0").total);
+
+  it("lets a close loss to a far stronger pair gain a little", () => {
+    const build = Array.from({ length: 20 }, () => game(["s1", "s2"], ["f1", "f2"], 15, 0));
+    const r = rateWeekends([weekend("w1", 1, build), weekend("w2", 2, [game(["f1", "f2"], ["s1", "s2"], 13, 15)])]);
+    const w2 = r.get("f1")!.weekends.get("w2")!;
+    expect(w2.after).toBeGreaterThan(w2.before);
+  });
+
+  it("always gives a winner something, even a narrow win as heavy favourites", () => {
+    const build = Array.from({ length: 10 }, () => game(["s1", "s2"], ["f1", "f2"], 15, 0));
+    const r = rateWeekends([weekend("w1", 1, build), weekend("w2", 2, [game(["s1", "s2"], ["f1", "f2"], 15, 13)])]);
+    const w2 = r.get("s1")!.weekends.get("w2")!;
+    expect(w2.after).toBeGreaterThan(w2.before);
+  });
+
+  it("places you after a handful of games, and moves you less once placed", () => {
+    const games = Array.from({ length: PLACING_GAMES + 1 }, () => game(["a", "b"], ["c", "d"], 15, 9));
+    const r = rateWeekends([weekend("w", 1, games.slice(0, PLACING_GAMES - 1))]);
+    expect(r.get("a")!.placed).toBe(false);
+    const all = rateWeekends([weekend("w", 1, games)]);
+    expect(all.get("a")!.placed).toBe(true);
+  });
+
+  it("ignores deciders and never moves a sub", () => {
+    const r = rateWeekends([weekend("w", 1, [game(["a", "b"], ["c", "d"], 11, 5, { decider: true }), game(["a", "sub"], ["c", "d"], 15, 5, { subs: ["sub"] })])]);
+    expect(r.get("sub")).toBeUndefined();
+    expect(r.get("a")!.games).toBe(1);
+  });
+
+  it("records each weekend's before and after", () => {
+    const r = rateWeekends([weekend("w2", 2, [game(["a", "b"], ["c", "d"], 9, 15)]), weekend("w1", 1, [game(["a", "b"], ["c", "d"], 15, 9)])]);
+    const a = r.get("a")!;
+    expect(a.weekends.get("w1")!.before).toBe(START);
+    expect(a.weekends.get("w2")!.before).toBeCloseTo(a.weekends.get("w1")!.after, 5);
   });
 });
 
-describe("climb", () => {
-  it("adds the weekends up and marks the ranks passed and the next one", () => {
-    const c = climb([10, 35, 64]);
-    expect(c.totals).toEqual([10, 45, 109]);
-    expect(c.marks.map((m) => `${m.tier} ${m.min}`)).toEqual(["Silver 60", "Gold 150"]);
+describe("ranks", () => {
+  it("uses the ranked app's ten ranks on the same scale, and Fresh Meat while placing", () => {
+    expect(RANKS).toHaveLength(10);
+    expect(rankFor(800, true).rank.name).toBe("Pocket Sniper");
+    expect(rankFor(799, true).rank.name).toBe("Roll-Shot Rascal");
+    expect(rankFor(1450, true).rank.name).toBe("Scotty Beeks");
+    expect(rankFor(1450, true).next).toBeNull();
+    expect(rankFor(1200, false).rank.name).toBe("Fresh Meat");
+    expect(rankFor(850, true).progress).toBeCloseTo(0.5, 5);
   });
 
-  it("leaves out a next rank that's still far off", () => {
-    expect(climb([100, 50]).marks.map((m) => m.tier)).toEqual(["Silver", "Gold"]);
-  });
-
-  it("has nothing to draw before a first weekend, but still shows the first rank to reach", () => {
-    expect(climb([])).toEqual({ totals: [], marks: [expect.objectContaining({ tier: "Silver", min: 60 })] });
+  it("draws the rank lines a climb (or a dip) crosses", () => {
+    expect(climb([]).marks).toEqual([]);
+    expect(climb([780, 830, 910]).marks.map((m) => m.name)).toEqual(["Pocket Sniper", "Spike Lee"]);
+    expect(climb([760, 690]).marks.map((m) => m.name)).toEqual(["Roll-Shot Rascal", "Pocket Sniper"]);
   });
 });

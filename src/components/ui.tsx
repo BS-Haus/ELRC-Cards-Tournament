@@ -56,7 +56,7 @@ export const btnQuiet = `${btn} text-muted`;
 export const input = "min-h-12 w-full rounded-xl border border-white/[.08] bg-panel px-3.5 text-[16px] text-fg placeholder:text-dimmer focus:border-accent/60 focus:outline-none";
 
 // Finals are lettered and coloured off the app's own palette, not metals, so they can't be
-// mistaken for the Bronze…Champion ranks.
+// mistaken for the ranks (src/lib/levels.ts).
 export const tierColor = (name: string) => ({ A: "#CBFB4F", B: "#C4CDD6", C: "#9AA3AD", D: "#7C8590" } as Record<string, string>)[name] ?? "#CBFB4F";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

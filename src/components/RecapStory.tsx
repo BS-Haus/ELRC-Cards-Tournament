@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { StoryReel, CountUp, type Slide } from "@/components/StoryReel";
 import { finalWinTitle } from "@/lib/cards";
 import { Avatar, tierColor, fmtDate, LevelPill, RankBadge } from "@/components/ui";
-import { levelFor } from "@/lib/levels";
+import { rankFor, PLACING_GAMES } from "@/lib/levels";
 import type { Recap, Moment, Finish } from "@/lib/recap";
 import type { PlayerLite } from "@/lib/data";
 
@@ -90,31 +90,29 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
       });
     }
 
-    if (recap.progress && recap.progress.earned.total > 0) {
+    // Your rating: what the day did to it, up or down, and any change of rank.
+    if (recap.progress && recap.progress.games > 0) {
       const pr = recap.progress;
-      const from = levelFor(pr.before), to = levelFor(pr.after);
-      const levelledUp = to.level.name !== from.level.name;
-      const newTier = to.level.tier !== from.level.tier;
+      const placedBefore = pr.gamesBefore >= PLACING_GAMES;
+      const placedAfter = pr.gamesBefore + pr.games >= PLACING_GAMES;
+      const from = rankFor(pr.before, placedBefore), to = rankFor(pr.after, placedAfter);
+      const change = pr.after - pr.before;
+      const moved = placedAfter && to.rank.name !== from.rank.name;
+      const up = moved && (!placedBefore || to.rank.min > from.rank.min);
       slides.push({
-        key: "points", bg: levelledUp ? "from-[#2a2208] to-[#0c0e10]" : "from-[#14201a] to-[#0c0e10]", confetti: levelledUp,
+        key: "rating", bg: up ? "from-[#16260c] to-[#0c0e10]" : moved ? "from-[#2a1212] to-[#0c0e10]" : "from-[#14201a] to-[#0c0e10]", confetti: up,
         body: (
           <div className="grid gap-5">
-            <div className="text-[13px] font-bold uppercase tracking-[.2em] text-white/50">Points earned</div>
-            <div className="tnum text-[88px] font-black leading-none tracking-[-.03em] text-accent"><CountUp to={pr.earned.total} prefix="+" /></div>
-            <div className="grid gap-1.5">
-              {pr.earned.parts.map((p, i) => (
-                <div key={p.label} className="spk-up flex justify-between text-[16px]" style={{ animationDelay: `${0.25 + i * 0.15}s` }}>
-                  <span className="text-white/70">{p.label}</span><span className="tnum font-bold">+{p.points}</span>
-                </div>
-              ))}
-            </div>
-            {levelledUp && (
-              <div className="spk-crown flex items-center gap-3 text-[26px] font-black" style={{ color: to.level.color }}>
-                <RankBadge level={to.level} size={44} />
-                <span>{newTier ? "Promoted!" : "Rank up!"} {to.level.name}</span>
+            <div className="text-[13px] font-bold uppercase tracking-[.2em] text-white/50">Your rating</div>
+            <div className={`tnum text-[88px] font-black leading-none tracking-[-.03em] ${change >= 0 ? "text-accent" : "text-loss"}`}><CountUp to={Math.abs(change)} prefix={change >= 0 ? "+" : "−"} /></div>
+            <div className="tnum text-[18px] text-white/70">{pr.before} → <b className="text-white">{pr.after}</b></div>
+            {moved && (
+              <div className="spk-crown flex items-center gap-3 text-[24px] font-black" style={{ color: up ? to.rank.color : "#FF6B6B" }}>
+                <RankBadge level={to.rank} size={40} />
+                <span>{!placedBefore ? `Placed: ${to.rank.name}` : up ? `Up to ${to.rank.name}` : `Down to ${to.rank.name}`}</span>
               </div>
             )}
-            <LevelBar before={pr.before} after={pr.after} />
+            <RatingBar rating={pr.after} placed={placedAfter} games={pr.gamesBefore + pr.games} />
           </div>
         ),
       });
@@ -369,21 +367,20 @@ function FieldBar({ label, s, fmt }: { label: string; s: { you: number; min: num
   );
 }
 
-/** Progress through your level, sliding from where you started the day to where you ended it. */
-function LevelBar({ before, after }: { before: number; after: number }) {
-  const end = levelFor(after);
-  const start = levelFor(before);
-  const fromPct = start.level.name === end.level.name ? start.progress : 0;
-  const [pct, setPct] = useState(fromPct);
-  useEffect(() => { const t = setTimeout(() => setPct(end.progress), 500); return () => clearTimeout(t); }, [end.progress]);
+/** Where your rating sits in your rank, or how close you are to getting one. */
+function RatingBar({ rating, placed, games }: { rating: number; placed: boolean; games: number }) {
+  const r = rankFor(rating, placed);
+  const target = placed ? r.progress : Math.min(1, games / PLACING_GAMES);
+  const [pct, setPct] = useState(0);
+  useEffect(() => { const t = setTimeout(() => setPct(target), 500); return () => clearTimeout(t); }, [target]);
   return (
     <div className="mt-2">
       <div className="mb-2 flex items-center justify-between">
-        <LevelPill level={end.level} size="md" />
-        <span className="tnum text-[13px] text-white/60">{after} pts{end.next ? ` · ${end.next.min - after} to ${end.next.name}` : " · top rank"}</span>
+        <LevelPill level={r.rank} size="md" />
+        <span className="tnum text-[13px] text-white/60">{!placed ? `${games} of ${PLACING_GAMES} placing games` : r.next ? `${r.next.min - rating} to ${r.next.name}` : "top rank"}</span>
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full rounded-full" style={{ width: `${pct * 100}%`, background: end.level.color, transition: "width 1.1s cubic-bezier(.2,.8,.2,1)" }} />
+        <div className="h-full rounded-full" style={{ width: `${pct * 100}%`, background: r.rank.color, transition: "width 1.1s cubic-bezier(.2,.8,.2,1)" }} />
       </div>
     </div>
   );

@@ -37,6 +37,16 @@ async function requireOrganiser(): Promise<Result | null> {
 // ---------------------------------------------------------------------------------------------
 // Accounts: a name and a 4-digit code. No email.
 
+/** Step one of joining or signing in, which are the same thing: is this name someone coming back,
+ *  a walk-in an organiser added (to claim with a code), or someone new? Names are public on the
+ *  Players tab already, so this gives nothing away. */
+export async function whoIs(nameIn: string): Promise<{ ok: true; kind: "back" | "claim" | "new"; name: string } | { ok: false; error: string }> {
+  const name = cleanName(nameIn);
+  if (name.length < 2 || name.length > 24) return { ok: false, error: "Use a name between 2 and 24 characters." };
+  const [p] = await db.select({ name: players.name, pinHash: players.pinHash }).from(players).where(eq(players.handle, handleOf(name)));
+  return { ok: true, kind: !p ? "new" : p.pinHash ? "back" : "claim", name: p?.name ?? name };
+}
+
 export async function signUp(nameIn: string, pin: string): Promise<Result> {
   const name = cleanName(nameIn);
   if (name.length < 2 || name.length > 24) return fail("Use a name between 2 and 24 characters.");
