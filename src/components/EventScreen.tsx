@@ -13,12 +13,12 @@ import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, eventStandings, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
-import { eventPoints } from "@/lib/levels";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 
 const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded: "Seeded groups", final: "Finals" };
 
-export function EventScreen({ view, me, org, roster }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[] }) {
+/** `myXp`: your XP either side of this weekend so far (src/lib/levels.ts), loaded on the server. */
+export function EventScreen({ view, me, org, roster, myXp = null }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number } | null }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [open, setOpen] = useState<string | null>(null); // game id in the score sheet
@@ -231,7 +231,7 @@ export function EventScreen({ view, me, org, roster }: { view: EventView; me: st
       {started && tab === "you" && (
         <YouTab
           view={view} me={me} state={myEntry} day={mine} iPlayed={iPlayed} waiting={!!me && waiting.includes(me)}
-          groups={curGroups} live={live} done={done} org={org} run={run} pending={pending} onOpen={setOpen}
+          groups={curGroups} live={live} done={done} org={org} run={run} pending={pending} onOpen={setOpen} xp={myXp}
         />
       )}
 
@@ -283,9 +283,10 @@ function Tabs({ tab, setTab, done, nudge }: { tab: "event" | "you"; setTab: (t: 
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 
 /** Your own day: are you in, what's next for you and where, how it's gone so far, and the photos. */
-function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, org, run, pending, onOpen }: {
+function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, org, run, pending, onOpen, xp }: {
   view: EventView; me: string | null; state: EntryState | null; day: MyDay | null; iPlayed: boolean; waiting: boolean;
   groups: GroupView[]; live: boolean; done: boolean; org: boolean; run: Run; pending: boolean; onOpen: (id: string) => void;
+  xp: { before: number; after: number } | null;
 }) {
   const { event: ev, games, people } = view;
   const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
@@ -295,7 +296,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
   const [first, ...later] = day.next;
   const myGroup = groups.find((g) => g.table.some((r) => r.id === me));
   const place = myGroup ? myGroup.table.findIndex((r) => r.id === me) + 1 : 0;
-  const pts = eventPoints(games, me).total;
+  const moved = xp ? xp.after - xp.before : 0;
   const pd = day.line.pf - day.line.pa;
   return (
     <>
@@ -307,7 +308,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
             </span>
             <span className="min-w-0">
               <span className="block text-[17px] font-black">Watch your review</span>
-              <span className="block text-[13px] font-semibold opacity-70">Every game, your partners, the points you earned</span>
+              <span className="block text-[13px] font-semibold opacity-70">Every game, your partners, the XP you earned</span>
             </span>
           </Link>
         </div>
@@ -355,7 +356,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
         <Section title="Your games" aside={myGroup && place ? `${ordinal(place)} in ${myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}` : undefined}>
           <div className={`${card} overflow-hidden`}>
             <div className="grid grid-cols-3 border-b border-white/[.05] text-center">
-              {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], [`+${pts}`, "rank points"]] as const).map(([v, l]) => (
+              {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "XP today"]] as const).map(([v, l]) => (
                 <div key={l} className="py-3">
                   <div className="tnum text-[20px] font-black">{v}</div>
                   <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">{l}</div>

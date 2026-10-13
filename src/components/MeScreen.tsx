@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signUp, signIn, signOut, unlockOrganiser, lockOrganiser } from "@/app/actions";
+import { signOut, unlockOrganiser, lockOrganiser } from "@/app/actions";
+import { JoinFlow } from "@/components/JoinFlow";
 import { useAction } from "@/components/useAction";
 import { Header, Section, card, btnPrimary, btnGhost, btnQuiet, input, fmtTime } from "@/components/ui";
 import { AvatarPicker } from "@/components/AvatarPicker";
@@ -21,9 +22,6 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
 }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
-  const [mode, setMode] = useState<"join" | "in">("join");
-  const [name, setName] = useState("");
-  const [pin, setPin] = useState("");
   const go = () => { if (next) router.push(next); };
 
   return (
@@ -31,7 +29,7 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
       {toast}
       {me ? (
         <header className="flex flex-col items-center px-5 pt-[calc(22px+env(safe-area-inset-top))] pb-5 text-center">
-          <AvatarPicker me={me} rank={season ? levelFor(season.points).level : undefined} />
+          <AvatarPicker me={me} rank={season ? levelFor(season.xp).level : undefined} />
           <h1 className="mt-5 text-[26px] font-black leading-tight tracking-[-.02em]">{me.name}</h1>
           <div className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">East London Roundnet</div>
           {next && <Link href={next} className="mt-3 text-[13px] font-bold text-accent">← Back to the event</Link>}
@@ -43,34 +41,7 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
       <OrganiserRow org={org} orgUntil={orgUntil} run={run} pending={pending} />
 
       {!me ? (
-        <Section title={mode === "join" ? "Make a profile" : "Sign in"}>
-          <form
-            className={`${card} grid gap-3 p-4`}
-            onSubmit={(e) => {
-              e.preventDefault();
-              run(() => (mode === "join" ? signUp(name, pin) : signIn(name, pin)), mode === "join" ? "Welcome! You're all set" : "Signed in", (r) => r.ok && go());
-            }}
-          >
-            <p className="text-[14px] leading-relaxed text-muted">
-              {mode === "join"
-                ? "No email, no password rules. Your name and a 4-digit code you'll remember, so your games and stats follow you from week to week."
-                : "Your name and the 4-digit code you picked when you joined."}
-            </p>
-            <label className="grid gap-1 text-[12.5px] font-semibold text-muted">
-              Your name
-              <input className={input} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="e.g. Sam K" maxLength={24} required />
-            </label>
-            <label className="grid gap-1 text-[12.5px] font-semibold text-muted">
-              {mode === "join" ? "Pick a 4-digit code" : "Your 4-digit code"}
-              <input className={`${input} tnum font-mono tracking-[.5em]`} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" type="password" autoComplete={mode === "join" ? "new-password" : "current-password"} placeholder="••••" required />
-            </label>
-            <button disabled={pending || name.trim().length < 2 || pin.length !== 4} className={`${btnPrimary} h-12`}>{pending ? "…" : mode === "join" ? "Join" : "Sign in"}</button>
-            <button type="button" onClick={() => setMode(mode === "join" ? "in" : "join")} className={btnQuiet}>
-              {mode === "join" ? "Already joined? Sign in" : "New here? Make a profile"}
-            </button>
-            {mode === "join" && <p className="text-[12.5px] text-dim">If an organiser added you on the day, join with the same name and your games carry over.</p>}
-          </form>
-        </Section>
+        <JoinFlow onDone={go} />
       ) : (
         <>
         {today && (

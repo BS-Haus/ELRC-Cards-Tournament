@@ -58,7 +58,7 @@ function Today({ rows, out, where, byId, title, eventId }: { rows: Line[]; out: 
                 <Avatar p={p} size={32} dim={left} />
                 <span className="min-w-0">
                   <span className={`flex items-center gap-1.5 text-[14.5px] font-bold ${left ? "text-dim" : ""}`}>
-                    <span className="truncate">{p?.name}</span>{p && <RankBadge level={levelFor(p.points).level} size={14} />}
+                    <span className="truncate">{p?.name}</span>{p && <RankBadge level={levelFor(p.xp).level} size={14} />}
                     {!left && w?.onNow && <span className="shrink-0 rounded-full bg-accent px-1.5 py-px text-[9.5px] font-black uppercase tracking-[.08em] text-ink">On now</span>}
                     {!left && !w?.onNow && w?.next && <span className="shrink-0 rounded-full border border-accent/50 px-1.5 py-px text-[9.5px] font-black uppercase tracking-[.08em] text-accent">Next</span>}
                   </span>
@@ -97,8 +97,8 @@ function Overall({ all }: { all: PlayerStats[] }) {
             <Link key={p.id} href={`/p/${p.id}`} className="spk-press flex items-center gap-3 px-4 py-3">
               <Avatar p={p} size={34} />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 truncate text-[15px] font-bold">{p.name}<RankBadge level={levelFor(p.points).level} size={16} /></div>
-                <div className="text-[12.5px] text-dim">{levelFor(p.points).level.name} · {p.points} pts · {p.events} {p.events === 1 ? "weekend" : "weekends"}</div>
+                <div className="flex items-center gap-1.5 truncate text-[15px] font-bold">{p.name}<RankBadge level={levelFor(p.xp).level} size={16} /></div>
+                <div className="text-[12.5px] text-dim">Level {levelFor(p.xp).level.level} · {levelFor(p.xp).level.name} · {p.events} {p.events === 1 ? "weekend" : "weekends"}</div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {Object.entries(p.tierWins).sort(([x], [y]) => x.localeCompare(y)).map(([t, n]) => (

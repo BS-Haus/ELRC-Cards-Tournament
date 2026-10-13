@@ -22,7 +22,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
       {/* The same page as Me, for anyone: photo in the rank ring with the division banner, then
           PlayerBody. Tapping a name anywhere lands here. */}
       <header className="flex flex-col items-center px-5 pt-[calc(22px+env(safe-area-inset-top))] pb-5 text-center">
-        <RankAvatar p={player} rank={levelFor(pr.points).level} />
+        <RankAvatar p={player} rank={levelFor(pr.xp).level} />
         <h1 className="mt-5 text-[26px] font-black leading-tight tracking-[-.02em]">{player.name}</h1>
         <div className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">{mine ? "Your profile" : "Player"}</div>
         {!player.claimed && <p className="mt-2 text-[13px] text-dim">Added on the day. Join with this name on the Me tab to make it yours.</p>}

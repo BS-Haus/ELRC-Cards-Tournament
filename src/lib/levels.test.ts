@@ -1,68 +1,82 @@
 import { describe, expect, it } from "vitest";
-import { planStage, type Game, type StageKind } from "./cards";
-import { eventPoints, levelFor, careerPoints, LEVELS, POINTS, climb } from "./levels";
+import type { Game } from "./cards";
+import { xpWeekends, levelFor, climb, winXp, lossXp, LEVELS, XP } from "./levels";
 
-const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
-const num = (id: string) => Number(id.slice(1));
-const stage = (stageNo: number, kind: StageKind): Game[] =>
-  planStage(kind, ids(8), 2).flatMap((g) => g.games.map((x) => {
-    const aWon = Math.min(...x.a.map(num)) < Math.min(...x.b.map(num));
-    return { id: `${stageNo}-${g.groupNo}-${x.seq}`, stageNo, kind, groupNo: g.groupNo, groupName: g.name, seq: x.seq, ord: x.ord, net: g.net, a: x.a, b: x.b, subs: [], scoreA: aWon ? 15 : 9, scoreB: aWon ? 9 : 15, status: "done" as const };
-  }));
-const day = [...stage(1, "random"), ...stage(2, "final")];
+let n = 0;
+/** One finished game: a's score first. */
+const game = (a: [string, string], b: [string, string], sa: number, sb: number, extra: Partial<Game> = {}): Game =>
+  ({ id: `g${++n}`, stageNo: 1, kind: "random", groupNo: 0, groupName: "A", seq: n, ord: n, net: 1, a, b, subs: [], scoreA: sa, scoreB: sb, status: "done", ...extra });
+const weekend = (id: string, startsAt: number, games: Game[]) => ({ id, startsAt, games });
+const xp = (m: ReturnType<typeof xpWeekends>, id: string) => m.get(id)?.xp ?? 0;
 
-describe("points and levels", () => {
-  it("pays for turning up, games, wins and the finish", () => {
-    const e = eventPoints(day, "p0");
-    expect(e.parts.map((p) => p.label)).toContain("Champion");
-    expect(e.total).toBe(e.parts.reduce((n, p) => n + p.points, 0));
-    expect(e.total).toBeGreaterThan(POINTS.showedUp + POINTS.champion[0]);
+describe("XP", () => {
+  it("starts everyone at the bottom, Level 1, Fresh Meat", () => {
+    expect(levelFor(0).level).toMatchObject({ level: 1, name: "Fresh Meat" });
+    expect(LEVELS).toHaveLength(11);
+    expect(LEVELS.at(-1)!.name).toBe("Scotty Beeks");
   });
-  it("gives the champion more than the B final winner, and nothing to someone who didn't play", () => {
-    expect(eventPoints(day, "p0").total).toBeGreaterThan(eventPoints(day, "p4").total);
-    expect(eventPoints(day, "p4").parts.map((p) => p.label)).toContain("B final winner");
-    expect(eventPoints(day, "nobody")).toEqual({ total: 0, parts: [] });
+
+  it("pays for turning up and winning, more for a bigger margin, and costs something to lose", () => {
+    const r = xpWeekends([weekend("w", 1, [game(["a", "b"], ["c", "d"], 15, 4)])]);
+    expect(xp(r, "a")).toBe(XP.showedUp + winXp(11));
+    expect(winXp(11)).toBeGreaterThan(winXp(2));
+    expect(winXp(15)).toBeLessThanOrEqual(XP.winMax);
+    expect(xp(r, "c")).toBe(XP.showedUp + XP.loss);
+    expect(lossXp(2)).toBe(XP.closeLoss);
   });
-  it("puts a podium on the A final: 3rd earns more than 4th, and only there", () => {
-    const aFinal = day.filter((g) => g.kind === "final" && g.groupNo === 0);
-    const order = [...new Set(aFinal.flatMap((g) => [...g.a, ...g.b]))].sort((x, y) => eventPoints(day, y).total - eventPoints(day, x).total);
-    const third = order.find((id) => eventPoints(day, id).parts.some((p) => p.label === "A final, 3rd"));
-    expect(third).toBeDefined();
-    expect(eventPoints(day, third!).parts.find((p) => p.label === "A final, 3rd")!.points).toBe(POINTS.third);
-    expect(day.flatMap((g) => [...g.a, ...g.b]).some((id) => eventPoints(day, id).parts.some((p) => p.label === "B final, 3rd"))).toBe(false);
+
+  it("can drop you a level after a bad weekend", () => {
+    const good = Array.from({ length: 4 }, () => game(["a", "b"], ["c", "d"], 15, 3)); // 62 XP: Level 3
+    const bad = Array.from({ length: 6 }, () => game(["a", "b"], ["c", "d"], 3, 15));
+    const r = xpWeekends([weekend("w1", 1, good), weekend("w2", 2, bad)]);
+    const w1 = r.get("a")!.weekends.get("w1")!, w2 = r.get("a")!.weekends.get("w2")!;
+    expect(levelFor(w2.after).level.level).toBeLessThan(levelFor(w1.after).level.level);
   });
-  it("turns points into five ranks of three divisions", () => {
-    expect(levelFor(0).level.name).toBe("Bronze I");
-    expect(levelFor(150).level.name).toBe("Gold I");
-    expect(levelFor(299).level.name).toBe("Gold III");
-    expect([...new Set(LEVELS.map((l) => l.tier))]).toEqual(["Bronze", "Silver", "Gold", "Diamond", "Champion"]);
-    expect(LEVELS).toHaveLength(15);
-    expect(LEVELS.at(-1)!.name).toBe("Champion III");
-    expect(levelFor(LEVELS[1].min).level.name).toBe(LEVELS[1].name);
-    const mid = levelFor((LEVELS[2].min + LEVELS[3].min) / 2);
-    expect(mid.level.name).toBe(LEVELS[2].name);
-    expect(mid.progress).toBeCloseTo(0.5);
-    expect(levelFor(99999).next).toBeNull();
+
+  it("climbs for someone who turns up and wins half their games", () => {
+    const half = Array.from({ length: 6 }, (_, i) => (i % 2 ? game(["a", "b"], ["c", "d"], 15, 9) : game(["a", "b"], ["c", "d"], 9, 15)));
+    const r = xpWeekends([weekend("w1", 1, half), weekend("w2", 2, half)]);
+    expect(xp(r, "a")).toBeGreaterThan(xp(xpWeekends([weekend("w1", 1, half)]), "a"));
   });
-  it("adds up a career, only counting weekends up to a date", () => {
-    const evs = [{ id: "a", startsAt: 1, games: day }, { id: "b", startsAt: 2, games: day }];
-    expect(careerPoints(evs, "p0")).toBe(2 * eventPoints(day, "p0").total);
-    expect(careerPoints(evs, "p0", 1)).toBe(eventPoints(day, "p0").total);
+
+  it("never goes below zero", () => {
+    const r = xpWeekends([weekend("w", 1, Array.from({ length: 8 }, () => game(["a", "b"], ["c", "d"], 0, 15)))]);
+    expect(xp(r, "a")).toBe(0);
+  });
+
+  it("ignores deciders and never counts a game for the sub", () => {
+    const r = xpWeekends([weekend("w", 1, [game(["a", "b"], ["c", "d"], 11, 5, { decider: true }), game(["a", "sub"], ["c", "d"], 15, 5, { subs: ["sub"] })])]);
+    expect(r.get("sub")).toBeUndefined();
+    expect(r.get("a")!.games).toBe(1);
+  });
+
+  it("pays the A final's podium and other finals' winners, once the final is done", () => {
+    const fin = (g: Game, groupNo: number) => ({ ...g, kind: "final" as const, stageNo: 2, groupNo, groupName: groupNo ? "B" : "A" });
+    // A final: p1 wins all three, p2 two-ish, etc. Every pairing once, p1 always on the winning side.
+    const a = [fin(game(["p1", "p2"], ["p3", "p4"], 15, 5), 0), fin(game(["p1", "p3"], ["p2", "p4"], 15, 7), 0), fin(game(["p1", "p4"], ["p2", "p3"], 15, 9), 0)];
+    const b = [fin(game(["q1", "q2"], ["q3", "q4"], 15, 5), 1), fin(game(["q1", "q3"], ["q2", "q4"], 15, 7), 1), fin(game(["q1", "q4"], ["q2", "q3"], 15, 9), 1)];
+    const r = xpWeekends([weekend("w", 1, [...a, ...b])]);
+    const parts = (id: string) => r.get(id)!.weekends.get("w")!.parts.map((p) => p.label);
+    expect(parts("p1")).toContain("Champion");
+    expect(parts("q1")).toContain("B final winner");
+    expect(["p2", "p3", "p4"].filter((id) => parts(id).includes("A final, 2nd"))).toHaveLength(1);
+    expect(["p2", "p3", "p4"].filter((id) => parts(id).includes("A final, 3rd"))).toHaveLength(1);
+    const unfinished = xpWeekends([weekend("w", 1, [...a.slice(0, 2), { ...a[2], status: "todo" as const, scoreA: null, scoreB: null }])]);
+    expect(unfinished.get("p1")!.weekends.get("w")!.parts.map((p) => p.label)).not.toContain("Champion");
   });
 });
 
-describe("climb", () => {
-  it("adds the weekends up and marks the ranks passed and the next one", () => {
-    const c = climb([10, 35, 64]);
-    expect(c.totals).toEqual([10, 45, 109]);
-    expect(c.marks.map((m) => `${m.tier} ${m.min}`)).toEqual(["Silver 60", "Gold 150"]);
+describe("levels", () => {
+  it("unlocks levels in order and knows how far to the next", () => {
+    expect(levelFor(19).level.level).toBe(1);
+    expect(levelFor(20).level).toMatchObject({ level: 2, name: "Whiff Merchant" });
+    expect(levelFor(1200).next).toBeNull();
+    expect(levelFor(80).progress).toBeCloseTo((80 - 60) / (110 - 60), 5);
   });
 
-  it("leaves out a next rank that's still far off", () => {
-    expect(climb([100, 50]).marks.map((m) => m.tier)).toEqual(["Silver", "Gold"]);
-  });
-
-  it("has nothing to draw before a first weekend, but still shows the first rank to reach", () => {
-    expect(climb([])).toEqual({ totals: [], marks: [expect.objectContaining({ tier: "Silver", min: 60 })] });
+  it("draws the lines a climb crossed, a few at most, and the next one up", () => {
+    expect(climb([]).marks).toEqual([]);
+    expect(climb([20, 70]).marks.map((m) => m.name)).toEqual(["Whiff Merchant", "Tacky Boomer", "Soft Touch"]);
+    expect(climb([10, 400]).marks).toHaveLength(4);
   });
 });
