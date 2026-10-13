@@ -94,17 +94,36 @@ export function LevelPill({ level, size = "sm" }: { level: { name: string; icon:
   );
 }
 
-/** A player's photo in a ring of their rank's colour, with their division as a banner across the
- *  bottom: the top of the Me page and of every profile. Elsewhere avatars stay plain. */
-export function RankAvatar({ p, size = 104, rank }: { p: Pick<PlayerLite, "name" | "color"> & { photo?: string | null }; size?: number; rank?: { name: string; icon: string; color: string } }) {
+/** A player's photo in a ring of their level's colour, with the level as a banner across the
+ *  bottom: the top of the Me page and of every profile. Elsewhere avatars stay plain. The higher
+ *  the level, the more it does: a coloured ring (3+), a glow (5+), a slowly turning ring and a
+ *  shine across the banner (7+), a halo and sparkles (9+), and a crown at the very top (11). */
+export function RankAvatar({ p, size = 104, rank }: { p: Pick<PlayerLite, "name" | "color"> & { photo?: string | null }; size?: number; rank?: { name: string; icon: string; color: string; level?: number } }) {
   if (!rank) return <Avatar p={p} size={size} />;
+  const lv = rank.level ?? 1, c = rank.color;
+  const ring = lv >= 7
+    ? `conic-gradient(from 0deg, ${c}, #ffffff, ${c}, ${c}55, ${c}, #ffffff, ${c})`
+    : lv >= 5 ? `conic-gradient(from 200deg, ${c}, ${c}55, ${c}, ${c}99, ${c})`
+    : lv >= 3 ? c : "#3a3f45";
+  const pad = lv >= 5 ? 5 : lv >= 3 ? 4 : 3;
+  const glow = lv >= 9 ? `0 0 0 6px ${c}22, 0 0 44px ${c}80` : lv >= 7 ? `0 0 36px ${c}66` : lv >= 5 ? `0 0 24px ${c}40` : "none";
   return (
-    <span className="relative inline-block">
-      <span className="block rounded-full p-[4px]" style={{ background: `conic-gradient(from 200deg, ${rank.color}, ${rank.color}55, ${rank.color}, ${rank.color}99, ${rank.color})`, boxShadow: `0 0 28px ${rank.color}40` }}>
-        <span className="block rounded-full bg-bg p-[3px]"><Avatar p={p} size={size} /></span>
+    <span className="relative inline-flex flex-col items-center">
+      <span className="relative flex items-center justify-center rounded-full" style={{ width: size + 6 + pad * 2, height: size + 6 + pad * 2, boxShadow: glow }}>
+        {/* The ring sits behind the photo so it can turn without turning the photo. Its size is set
+            outright: taken from the layout it came out wider than tall, and a turning oval shows. */}
+        <span className={`absolute inset-0 rounded-full ${lv >= 7 ? "spk-spin" : ""}`} style={{ background: ring }} aria-hidden="true" />
+        {lv >= 11 && <span className="spk-crown absolute -top-7 left-1/2 z-10 -translate-x-1/2 text-[34px]" aria-hidden="true">👑</span>}
+        {lv >= 9 && [[-6, 18], [92, 8], [100, 70], [-10, 78], [46, -8]].map(([x, y], i) => (
+          <span key={i} className="spk-twinkle absolute z-10 h-2 w-2 rounded-full" style={{ left: `${x}%`, top: `${y}%`, background: i % 2 ? "#fff" : c, animationDelay: `${i * 0.35}s` }} aria-hidden="true" />
+        ))}
+        <span className="relative flex rounded-full bg-bg p-[3px]"><Avatar p={p} size={size} /></span>
       </span>
-      <span className="absolute -bottom-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full border-[3px] border-bg px-2.5 py-0.5 text-[12px] font-black text-ink" style={{ background: rank.color }}>
-        <span aria-hidden="true">{rank.icon}</span>{rank.name}
+      <span
+        className={`absolute -bottom-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1 overflow-hidden whitespace-nowrap rounded-full border-[3px] border-bg px-2.5 py-0.5 text-[12px] font-black ${lv >= 3 ? "text-ink" : "text-fg"} ${lv >= 7 ? "spk-shine" : ""}`}
+        style={{ background: lv >= 3 ? c : "#2a2f35" }}
+      >
+        <span className="opacity-60">Lv {lv}</span><span aria-hidden="true">{rank.icon}</span>{rank.name}
       </span>
     </span>
   );

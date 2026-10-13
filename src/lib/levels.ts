@@ -24,19 +24,23 @@ export const XP = {
 
 export type Level = { level: number; name: string; icon: string; color: string; min: number };
 
-/** Level 1 is where everyone starts; then the ranked app's ten, in order. `min` is the XP to unlock. */
+/** Level 1 is where everyone starts; then the ranked app's ten, in order. `min` is the XP to unlock.
+ *  Tuned by simulating seasons of 12 players of mixed strength (scratch script, not in the repo):
+ *  everyone unlocks Level 2 on their first Saturday and an average player Level 3 by their second;
+ *  an average player reaches about Level 7 over a 30-Saturday season, and the top levels take a
+ *  season of winning, so they still mean something. The steps widen as you go up. */
 export const LEVELS: Level[] = [
   { level: 1, min: 0, name: "Fresh Meat", icon: "🐣", color: "#8A9196" },
-  { level: 2, min: 25, name: "Whiff Merchant", icon: "💨", color: "#FF6B6B" },
+  { level: 2, min: 20, name: "Whiff Merchant", icon: "💨", color: "#FF6B6B" },
   { level: 3, min: 60, name: "Tacky Boomer", icon: "📠", color: "#E0935A" },
-  { level: 4, min: 100, name: "Soft Touch", icon: "🧈", color: "#E0B15A" },
-  { level: 5, min: 150, name: "Lob Goblin", icon: "👺", color: "#A8B05A" },
-  { level: 6, min: 210, name: "Roll-Shot Rascal", icon: "🌀", color: "#B7C0C8" },
-  { level: 7, min: 280, name: "Pocket Sniper", icon: "🎯", color: "#C4CDD6" },
-  { level: 8, min: 360, name: "Spike Lee", icon: "🎬", color: "#F4F5F6" },
-  { level: 9, min: 450, name: "Tomahawk", icon: "🪓", color: "#5CD37D" },
-  { level: 10, min: 560, name: "Block-ness Monster", icon: "🦕", color: "#FFCF5C" },
-  { level: 11, min: 700, name: "Scotty Beeks", icon: "🐐", color: "#CBFB4F" },
+  { level: 4, min: 110, name: "Soft Touch", icon: "🧈", color: "#E0B15A" },
+  { level: 5, min: 180, name: "Lob Goblin", icon: "👺", color: "#A8B05A" },
+  { level: 6, min: 270, name: "Roll-Shot Rascal", icon: "🌀", color: "#B7C0C8" },
+  { level: 7, min: 380, name: "Pocket Sniper", icon: "🎯", color: "#C4CDD6" },
+  { level: 8, min: 520, name: "Spike Lee", icon: "🎬", color: "#F4F5F6" },
+  { level: 9, min: 700, name: "Tomahawk", icon: "🪓", color: "#5CD37D" },
+  { level: 10, min: 920, name: "Block-ness Monster", icon: "🦕", color: "#FFCF5C" },
+  { level: 11, min: 1200, name: "Scotty Beeks", icon: "🐐", color: "#CBFB4F" },
 ];
 
 /** Your level for an XP total, the next one, and how far towards it you are (0–1). */

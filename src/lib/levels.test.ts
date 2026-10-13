@@ -26,7 +26,7 @@ describe("XP", () => {
   });
 
   it("can drop you a level after a bad weekend", () => {
-    const good = Array.from({ length: 3 }, () => game(["a", "b"], ["c", "d"], 15, 3));
+    const good = Array.from({ length: 4 }, () => game(["a", "b"], ["c", "d"], 15, 3)); // 62 XP: Level 3
     const bad = Array.from({ length: 6 }, () => game(["a", "b"], ["c", "d"], 3, 15));
     const r = xpWeekends([weekend("w1", 1, good), weekend("w2", 2, bad)]);
     const w1 = r.get("a")!.weekends.get("w1")!, w2 = r.get("a")!.weekends.get("w2")!;
@@ -68,10 +68,10 @@ describe("XP", () => {
 
 describe("levels", () => {
   it("unlocks levels in order and knows how far to the next", () => {
-    expect(levelFor(24).level.level).toBe(1);
-    expect(levelFor(25).level).toMatchObject({ level: 2, name: "Whiff Merchant" });
-    expect(levelFor(700).next).toBeNull();
-    expect(levelFor(80).progress).toBeCloseTo((80 - 60) / (100 - 60), 5);
+    expect(levelFor(19).level.level).toBe(1);
+    expect(levelFor(20).level).toMatchObject({ level: 2, name: "Whiff Merchant" });
+    expect(levelFor(1200).next).toBeNull();
+    expect(levelFor(80).progress).toBeCloseTo((80 - 60) / (110 - 60), 5);
   });
 
   it("draws the lines a climb crossed, a few at most, and the next one up", () => {
