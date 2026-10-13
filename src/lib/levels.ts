@@ -118,13 +118,3 @@ export function xpWeekends(events: { id: string; startsAt: number; games: Game[]
   }
   return out;
 }
-
-/** The Me tab's chart: XP after each weekend (oldest first), and the level lines it crossed, plus
- *  the next one up, so a drop below a line shows as clearly as a climb above one. */
-export function climb(after: number[]): { values: number[]; marks: Level[] } {
-  if (!after.length) return { values: [], marks: [] };
-  const hi = Math.max(...after);
-  const next = levelFor(hi).next;
-  const crossed = LEVELS.filter((l) => l.min > 0 && l.min >= Math.min(...after) && l.min <= hi).slice(-3); // a few, not a ladder
-  return { values: after, marks: next ? [...crossed, next] : crossed };
-}
