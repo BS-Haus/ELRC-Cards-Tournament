@@ -231,7 +231,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
       const myGroup = fin.filter((g) => g.stageNo === last && [...g.a, ...g.b].includes(id) && !g.subs.includes(id));
       if (myGroup.length) {
         const gg = fin.filter((g) => g.stageNo === last && g.groupNo === myGroup[0].groupNo);
-        const table = groupRank(tally(gg.filter((g) => g.status !== "void"), groupMembers(gg)).values());
+        const table = groupRank(tally(gg.filter((g) => g.status !== "void"), groupMembers(gg)).values(), gg);
         const pos = table.findIndex((r) => r.id === id) + 1;
         const { winner } = groupWinner(gg);
         if (winner === id) tierWins[gg[0].groupName] = (tierWins[gg[0].groupName] ?? 0) + 1;
