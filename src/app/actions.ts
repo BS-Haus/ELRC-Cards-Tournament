@@ -8,7 +8,7 @@ import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
 import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
-import { getEventView, groupsOf } from "@/lib/data";
+import { getEventView, groupsOf, myMoments, type Moments } from "@/lib/data";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -507,5 +507,25 @@ export async function subIn(gameId: string, fromId: string, subId: string, allRe
     await db.update(games).set({ a1: next.a[0], a2: next.a[1], b1: next.b[0], b2: next.b[1], subs: next.subs, updatedAt: new Date() }).where(eq(games.id, t.id));
   }
   refresh(g.eventId);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Level moments
+
+/** Your games scored since you last looked, as story slides; null when there's nothing new (or
+ *  you're not signed in). Polled by every signed-in phone, so the empty case is one small query. */
+export async function checkMoments(): Promise<Moments | null> {
+  const s = await me(); if (!s) return null;
+  try { return await myMoments(s.playerId!); } catch { return null; }
+}
+
+/** Mark everything up to `upTo` (ms) as seen. Never moves backwards. */
+export async function seenMoments(upTo: number): Promise<Result> {
+  const s = await me(); if (!s) return fail("Sign in first.");
+  if (!Number.isFinite(upTo) || upTo <= 0) return fail("Nothing to mark.");
+  // +1 ms: the database keeps microseconds, the phone only had milliseconds.
+  const at = new Date(Math.min(upTo + 1, Date.now() + 60_000));
+  await db.update(players).set({ xpSeenAt: sql`greatest(${players.xpSeenAt}, ${at.toISOString()}::timestamptz)` }).where(eq(players.id, s.playerId!));
   return { ok: true };
 }

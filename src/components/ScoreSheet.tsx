@@ -1,5 +1,6 @@
 "use client";
 
+import { pingMoments } from "@/components/LevelMoments";
 import { useState } from "react";
 import Link from "next/link";
 import { enterScore, clearScore, setSkipped, subIn } from "@/app/actions";
@@ -29,7 +30,7 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
   const label = gameLabel(game);
   const save = () => {
     if (scoreA == null || scoreB == null) return;
-    run(() => enterScore(game.id, scoreA, scoreB), "Score saved", (r) => r.ok && onClose());
+    run(() => enterScore(game.id, scoreA, scoreB), "Score saved", (r) => { if (r.ok) { onClose(); pingMoments(); } });
   };
 
   return (

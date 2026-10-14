@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
 import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle } from "@/lib/cards";
@@ -110,6 +110,7 @@ import { finalsOf, liveEventId } from "@/lib/views";
 import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
 import { xpWeekends } from "@/lib/levels";
 import { buildStory, type Story } from "@/lib/story";
+import { buildMoments, type MomentSlide } from "@/lib/moments";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
@@ -289,4 +290,24 @@ export async function getStory(eventId: string): Promise<{ story: Story; names: 
   const ev = days.find((d) => d.id === eventId);
   if (!ev) return null;
   return { story: buildStory(ev, days), names: Object.fromEntries(ps.map((p) => [p.id, lite(p)])), photos: await eventPhotosOf(eventId) };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Level moments: your games scored since you last looked, as a story (src/lib/moments.ts).
+
+export type Moments = { slides: MomentSlide[]; upTo: number; names: Record<string, PlayerLite>; me: PlayerLite };
+
+export async function myMoments(playerId: string): Promise<Moments | null> {
+  const [p] = await db.select().from(players).where(eq(players.id, playerId));
+  if (!p) return null;
+  // Cheap check first (this runs every few seconds per signed-in phone): anything new at all?
+  const [hit] = await db.select({ id: games.id }).from(games)
+    .where(and(eq(games.status, "done"), gt(games.updatedAt, p.xpSeenAt), or(eq(games.a1, playerId), eq(games.a2, playerId), eq(games.b1, playerId), eq(games.b2, playerId))))
+    .limit(1);
+  if (!hit) return null;
+  const { ps, evs, gs } = await everything();
+  const events = evs.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.getTime(), games: gs.filter((g) => g.eventId === e.id) }));
+  const { slides, upTo } = buildMoments(events, playerId, p.xpSeenAt.getTime());
+  if (!slides.length) return null;
+  return { slides, upTo, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(p) };
 }
