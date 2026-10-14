@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider } from "@/app/actions";
+import { setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider, swapPlayers, movePlayer, redrawStage } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
@@ -11,7 +11,7 @@ import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { ScoreBoxes } from "@/components/ScoreBoxes";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
+import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, eventStandings, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 
@@ -575,6 +575,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
             {waiting.length > 0 && current ? ` ${waiting.length} waiting to join.` : ""}
           </p>
           <p className="mt-1 text-[13px] text-dim">{plan}</p>
+          {current?.kind === "random" && <p className="mt-1 text-[13px] text-dim">Finals are seeded by where people finished in their own group: every group winner first, then every runner-up, and so on. Ties go to win %, then points per game, so a group of 5 has no edge over a group of 4.</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {!current && <button disabled={pending || here < 4} onClick={() => run(() => drawStage(ev.id, "random"), "Groups drawn")} className={btnPrimary}>Draw random groups</button>}
             {/* Two stages is the format: random groups, then A / B finals. A middle
@@ -589,6 +590,8 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
             {current && <button disabled={pending} onClick={() => twice("finish", () => run(() => finishEvent(ev.id), "Event finished"))} className={btnQuiet}>{confirm === "finish" ? "Tap again to finish" : "Finish event"}</button>}
           </div>
         </div>
+
+        {current && <EditGroups view={view} run={run} pending={pending} pool={pool} />}
 
         <div className="border-t border-white/[.05] pt-4">
           <div className="text-[15px] font-extrabold">Check-in</div>
@@ -632,6 +635,86 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
         </div>
       </div>
     </Section>
+  );
+}
+
+/**
+ * Organiser: change who's in which group mid-stage. Tap a player to pick them up, then tap someone
+ * in another group to swap, or a group's "Move here", or take them out. Played games never change.
+ */
+function EditGroups({ view, run, pending, pool }: { view: EventView; run: Run; pending: boolean; pool: Set<string> }) {
+  const { event: ev, stages, games, people } = view;
+  const current = stages.at(-1)!;
+  const [open, setOpen] = useState(false);
+  const [sel, setSel] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const name = (id: string) => people[id]?.name ?? "Someone";
+  const inStage = games.filter((g) => g.stageNo === current.no);
+  const groups = [...new Set(inStage.map((g) => g.groupNo))].sort((a, b) => a - b).map((no) => {
+    const gs = inStage.filter((g) => g.groupNo === no);
+    const first = gs[0];
+    return { no, members: currentMembers(inStage, no), label: first.kind === "final" ? `${finalName(first.groupName)} final` : `Group ${first.groupName}`, net: first.net };
+  });
+  const groupOf = (id: string | null) => (id ? groups.find((g) => g.members.includes(id))?.no ?? null : null);
+  const inAny = new Set(groups.flatMap((g) => g.members));
+  const waiting = [...pool].filter((id) => !inAny.has(id));
+  const selGroup = groupOf(sel);
+
+  const tap = (id: string) => {
+    if (!sel || sel === id) return setSel(sel === id ? null : id);
+    const a = groupOf(sel), b = groupOf(id);
+    if (a === b) return setSel(id); // same group (or both waiting): just pick the other one
+    run(() => swapPlayers(ev.id, sel, id), a !== null && b !== null ? `${name(sel)} and ${name(id)} swapped` : `${a === null ? name(sel) : name(id)} is in for ${a === null ? name(id) : name(sel)}`, (r) => r.ok && setSel(null));
+  };
+  const chip = (id: string) => (
+    <button key={id} disabled={pending} onClick={() => tap(id)} aria-pressed={sel === id}
+      className={`spk-press inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-[13.5px] font-semibold ${sel === id ? "bg-accent text-ink" : "border border-white/[.08] bg-raised"}`}>
+      <Avatar p={people[id]} size={24} />{name(id)}
+    </button>
+  );
+
+  return (
+    <div className="border-t border-white/[.05] pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[15px] font-extrabold">Edit groups</div>
+        <button onClick={() => { setOpen(!open); setSel(null); }} className="spk-press text-[13px] font-bold text-accent">{open ? "Done" : "Change groups"}</button>
+      </div>
+      {!open ? (
+        <p className="mt-1 text-[13px] text-muted">Swap players between groups, move someone, take them out, or redraw. Scores already entered never change.</p>
+      ) : (
+        <div className="mt-2 grid gap-3">
+          <p className="text-[13px] leading-relaxed text-muted">
+            {sel
+              ? <>Tap someone in another group to swap with <b className="text-fg">{name(sel)}</b>, or use <b className="text-fg">Move here</b>.</>
+              : "Tap a player to pick them up."}
+          </p>
+          {groups.map((g) => (
+            <div key={g.no} className="rounded-xl border border-white/[.06] bg-panel p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-[13px] font-bold">{g.label} <span className="font-semibold text-dim">· Net {g.net} · {g.members.length}</span></span>
+                {sel && selGroup !== g.no && (
+                  <button disabled={pending} onClick={() => run(() => movePlayer(ev.id, sel, g.no), `${name(sel)} moved to ${g.label}`, (r) => r.ok && setSel(null))} className="spk-press rounded-full bg-accent px-3 py-1 text-[12.5px] font-black text-ink">Move here</button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">{g.members.map(chip)}</div>
+            </div>
+          ))}
+          {waiting.length > 0 && (
+            <div className="rounded-xl border border-dashed border-white/[.1] p-3">
+              <div className="mb-2 text-[13px] font-bold text-muted">Not in a group</div>
+              <div className="flex flex-wrap gap-2">{waiting.map(chip)}</div>
+            </div>
+          )}
+          {sel && selGroup !== null && (
+            <button disabled={pending} onClick={() => run(() => movePlayer(ev.id, sel, null), `${name(sel)} is out of this stage`, (r) => r.ok && setSel(null))} className={btnGhost}>Take {name(sel)} out of this stage</button>
+          )}
+          <p className="text-[12.5px] leading-relaxed text-dim">Games already played keep their scores. Only games still to play change, including one on a net right now, so enter finished scores first. Moving someone redraws the rest of both groups so nobody repeats a partner.</p>
+          <button disabled={pending} onClick={() => { if (confirm) { setConfirm(false); run(() => redrawStage(ev.id), "Groups redrawn"); } else { setConfirm(true); setTimeout(() => setConfirm(false), 3500); } }} className={btnQuiet}>
+            {confirm ? "Tap again to redraw" : "Redraw all groups (scores so far still count)"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

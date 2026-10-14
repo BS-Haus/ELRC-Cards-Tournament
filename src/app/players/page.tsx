@@ -63,7 +63,7 @@ function Today({ rows, out, where, byId, title, eventId }: { rows: Line[]; out: 
                     {!left && !w?.onNow && w?.next && <span className="shrink-0 rounded-full border border-accent/50 px-1.5 py-px text-[9.5px] font-black uppercase tracking-[.08em] text-accent">Next</span>}
                   </span>
                   <span className="block truncate text-[12px] text-dim">
-                    {left ? "Left" : [w?.group && w.place ? `${ordinal(w.place)} in ${w.group}` : w?.group, r.gp ? `${pd > 0 ? "+" : ""}${pd} pts` : "yet to play"].filter(Boolean).join(" · ")}
+                    {left ? "Left" : [w?.group && w.place ? `${ordinal(w.place)} in ${w.group}` : w?.group, r.gp ? `${pd > 0 ? "+" : ""}${(pd / r.gp).toFixed(1)} pts a game` : "yet to play"].filter(Boolean).join(" · ")}
                   </span>
                 </span>
               </span>

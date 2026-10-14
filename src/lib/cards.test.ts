@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, finalName, finalWinTitle, isFinalScore, type Game } from "./cards";
+import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, finalName, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -230,5 +230,79 @@ describe("isFinalScore", () => {
   });
   it("refuses short, level, one-point and overshot scores", () => {
     expect([[14, 9], [15, 15], [15, 14], [16, 9], [18, 15], [1, 0]].some(([a, b]) => isFinalScore(a, b, 15))).toBe(false);
+  });
+});
+
+describe("placementOrder and finals seeding after uneven groups", () => {
+  // Group A has 5 (4 games each), group B has 4 (3 games each).
+  const five = ["a1", "a2", "a3", "a4", "a5"], four = ["b1", "b2", "b3", "b4"];
+  const mk = (groupNo: number, ids: string[], best: string): Game[] =>
+    groupGames(ids).map((x, i) => ({
+      id: `${groupNo}-${i}`, stageNo: 1, kind: "random" as const, groupNo, groupName: "AB"[groupNo], seq: i + 1, ord: i, net: groupNo + 1,
+      a: x.a, b: x.b, subs: [], status: "done" as const,
+      // `best` wins every game by 15–5; everything else is 15–13 to side a.
+      scoreA: x.a.includes(best) ? 15 : x.b.includes(best) ? 5 : 15, scoreB: x.a.includes(best) ? 5 : x.b.includes(best) ? 15 : 13,
+    }));
+  const games = [...mk(0, five, "a1"), ...mk(1, four, "b1")];
+
+  it("puts every group winner ahead of every runner-up, whatever the group size", () => {
+    const order = placementOrder(games);
+    expect(order.slice(0, 2).sort()).toEqual(["a1", "b1"]);
+    expect(order).toHaveLength(9);
+    expect(order.at(-1)).toMatch(/^a/); // only group A has a 5th place
+  });
+
+  it("seeds the finals by placement after a random stage", () => {
+    const order = seedOrder(games, [...five, ...four], "final");
+    expect(order.slice(0, 2).sort()).toEqual(["a1", "b1"]);
+  });
+});
+
+describe("currentMembers and remainingGames", () => {
+  it("adds a late player to a group of 4 so everyone ends up with a fair number of games", () => {
+    const four = ["p0", "p1", "p2", "p3"];
+    const played: Game[] = groupGames(four).slice(0, 1).map((x, i) => ({
+      id: `g${i}`, stageNo: 1, kind: "random" as const, groupNo: 0, groupName: "A", seq: 1, ord: 0, net: 1,
+      a: x.a, b: x.b, subs: [], status: "done" as const, scoreA: 15, scoreB: 10,
+    }));
+    const members = [...four, "late"];
+    const rest = remainingGames(members, played);
+    const all = [...played.map((g) => ({ a: g.a, b: g.b })), ...rest];
+    const count = (id: string) => all.filter((g) => [...g.a, ...g.b].includes(id)).length;
+    expect(count("late")).toBeGreaterThanOrEqual(3);
+    for (const id of four) expect(count(id)).toBeGreaterThanOrEqual(3);
+    const pairs = new Map<string, number>();
+    for (const g of all) for (const t of [g.a, g.b]) { const k = [...t].sort().join("+"); pairs.set(k, (pairs.get(k) ?? 0) + 1); }
+    expect(Math.max(...pairs.values())).toBe(1);
+  });
+
+  it("plans nothing for a group too small to play", () => {
+    expect(remainingGames(["x", "y", "z"], [])).toEqual([]);
+  });
+
+  it("reads members from games still to play", () => {
+    const g = (status: "todo" | "done", a: [string, string], b: [string, string]): Game => ({ id: a.join(), stageNo: 1, kind: "random", groupNo: 0, groupName: "A", seq: 1, ord: 0, net: 1, a, b, subs: [], status, scoreA: status === "done" ? 15 : null, scoreB: status === "done" ? 9 : null });
+    const stage = [g("done", ["old", "p1"], ["p2", "p3"]), g("todo", ["new", "p1"], ["p2", "p3"]), { ...g("todo", ["old", "q1"], ["q2", "q3"]), id: "other", groupNo: 1, ord: 1 }];
+    expect(currentMembers(stage, 0).sort()).toEqual(["new", "p1", "p2", "p3"]);
+    expect(currentMembers(stage, 1)).toContain("old");
+  });
+});
+
+describe("placementOrder after a mid-stage move", () => {
+  it("places a moved player once, in the group they ended up in", () => {
+    const G = (id: string, groupNo: number, status: "todo" | "done", a: [string, string], b: [string, string]): Game => ({ id, stageNo: 1, kind: "random", groupNo, groupName: "AB"[groupNo], seq: 1, ord: 0, net: groupNo + 1, a, b, subs: [], status, scoreA: status === "done" ? 15 : null, scoreB: status === "done" ? 10 : null });
+    const games = [
+      G("1", 0, "done", ["mover", "a1"], ["a2", "a3"]), // mover played one game in A, then moved to B
+      G("2", 0, "todo", ["a4", "a1"], ["a2", "a3"]),
+      G("3", 1, "done", ["b1", "b2"], ["b3", "b4"]),
+      G("4", 1, "todo", ["mover", "b1"], ["b2", "b3"]),
+    ];
+    const order = placementOrder(games);
+    expect(order.filter((id) => id === "mover")).toHaveLength(1);
+    expect(order).not.toContain("a4"); // hasn't played yet: no record to place
+    // Once everything's played, the mover still belongs to group B (their latest game).
+    const finished = games.map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 10, ord: g.id === "4" ? 9 : g.ord }));
+    expect(currentMembers(finished, 1)).toContain("mover");
+    expect(currentMembers(finished, 0)).not.toContain("mover");
   });
 });
