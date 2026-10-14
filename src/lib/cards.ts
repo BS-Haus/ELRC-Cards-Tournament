@@ -62,11 +62,23 @@ export function groupGames(ids: string[], rnd: () => number = Math.random): Plan
 }
 
 /** Local search for groups of 6+: one net, `rounds` games, no repeat partners, even sit-outs. */
-export function searchSchedule(ids: string[], rounds: number, rnd: () => number = Math.random): Planned[] {
+export function searchSchedule(ids: string[], rounds: number, rnd: () => number = Math.random, history: Planned[] = []): Planned[] {
   const N = ids.length;
+  const at = new Map(ids.map((id, i) => [id, i]));
+  const k = (x: number, y: number) => (x < y ? `${x}-${y}` : `${y}-${x}`);
+  // Games already played in this group: their partnerships count against repeats, and whoever
+  // has played least is first in line for the games still to come.
+  const P0 = new Map<string, number>(), O0 = new Map<string, number>(), played0 = new Array(N).fill(0);
+  for (const g of history) {
+    const ix = [...g.a, ...g.b].map((id) => at.get(id));
+    ix.forEach((x) => { if (x != null) played0[x]++; });
+    const [p, q, r, t] = ix;
+    if (p != null && q != null) P0.set(k(p, q), (P0.get(k(p, q)) ?? 0) + 1);
+    if (r != null && t != null) P0.set(k(r, t), (P0.get(k(r, t)) ?? 0) + 1);
+    for (const x of [p, q]) for (const y of [r, t]) if (x != null && y != null) O0.set(k(x, y), (O0.get(k(x, y)) ?? 0) + 1);
+  }
   const cost = (R: number[][]) => {
-    const P = new Map<string, number>(), O = new Map<string, number>();
-    const k = (x: number, y: number) => (x < y ? `${x}-${y}` : `${y}-${x}`);
+    const P = new Map(P0), O = new Map(O0);
     for (const g of R) {
       for (const [x, y] of [[g[0], g[1]], [g[2], g[3]]]) P.set(k(x, y), (P.get(k(x, y)) ?? 0) + 1);
       for (const x of [g[0], g[1]]) for (const y of [g[2], g[3]]) O.set(k(x, y), (O.get(k(x, y)) ?? 0) + 1);
@@ -76,10 +88,11 @@ export function searchSchedule(ids: string[], rounds: number, rnd: () => number 
     for (const v of O.values()) c += Math.max(0, v - 2);
     return c;
   };
+  if (N < 4 || rounds < 1) return [];
   let best: number[][] = [], bestC = Infinity;
   for (let restart = 0; restart < 40 && bestC > 0; restart++) {
     // Rest rotates to whoever has played least so far; ties broken at random each restart.
-    const played = new Array(N).fill(0);
+    const played = played0.slice();
     const R: number[][] = [];
     for (let r = 0; r < rounds; r++) {
       const order = [...Array(N).keys()].map((x) => [x, rnd()] as const).sort((x, y) => played[x[0]] - played[y[0]] || x[1] - y[1]).map((x) => x[0]);
@@ -196,11 +209,84 @@ export function drawPool(entries: { playerId: string; state: string }[], games: 
 }
 
 /**
+ * Who's in which group of a stage right now. Someone's group is where their games still to play
+ * are; once they have none left, it's the group of the last game they played. So a player moved
+ * mid-stage counts once, in the group they ended up in, before and after the stage finishes.
+ * (Edits put rearranged games after everything else in the stage, so "last" is the latest.)
+ */
+export function stageMembers(stageGames: Game[]): Map<number, string[]> {
+  const where = new Map<string, { todo: boolean; ord: number; group: number }>();
+  for (const g of stageGames) {
+    if (g.status === "void" || g.decider) continue;
+    const todo = g.status === "todo";
+    for (const id of players(g)) {
+      if (g.subs.includes(id)) continue;
+      const cur = where.get(id);
+      const better = !cur || (todo && !cur.todo) || (todo === cur.todo && g.ord > cur.ord);
+      if (better) where.set(id, { todo, ord: g.ord, group: g.groupNo });
+    }
+  }
+  const out = new Map<number, string[]>();
+  for (const no of [...new Set(stageGames.map((g) => g.groupNo))].sort((x, y) => x - y)) out.set(no, []);
+  for (const [id, w] of where) out.get(w.group)?.push(id);
+  return out;
+}
+
+/** Who's in one group now (see stageMembers), given all the games of its stage. */
+export const currentMembers = (stageGames: Game[], groupNo: number): string[] => stageMembers(stageGames).get(groupNo) ?? [];
+
+/**
+ * The rest of a group's games after its line-up changed (someone moved in or out). Games already
+ * played stay as they were; this plans enough new ones that everyone gets about as many games as a
+ * normal group of this size, the people who've played least go first, and partnerships already
+ * played aren't repeated where it can be helped.
+ */
+export function remainingGames(members: string[], played: Game[], rnd: () => number = Math.random): Planned[] {
+  const n = members.length;
+  if (n < 4) return [];
+  const done = played.filter((g) => isDone(g) && !g.decider);
+  const t = tally(done, members);
+  const target = gamesEachForSize(n);
+  const need = members.reduce((sum, id) => sum + Math.max(0, target - (t.get(id)?.gp ?? 0)), 0);
+  const count = Math.min(gamesForSize(n) + 2, Math.ceil(need / 4));
+  if (!count) return [];
+  return searchSchedule(shuffle(members, rnd), count, rnd, done.map((g) => ({ a: g.a, b: g.b })));
+}
+
+/**
+ * The draw order after a random stage, by where you finished in your own group: every group
+ * winner, then every runner-up, and so on. Within the same place it's win %, then points
+ * difference per game. Comparing people only with the group they actually played means a group
+ * of 5 (4 games each) can't crowd out a group of 4 (3 games), and a tough group doesn't sink you.
+ */
+export function placementOrder(stageGames: Game[]): string[] {
+  const nos = [...new Set(stageGames.map((g) => g.groupNo))].sort((a, b) => a - b);
+  // Each person's whole record in this stage, so someone moved between groups mid-stage is judged
+  // on all their games, and placed once: in the group they ended up in.
+  const lines = tally(stageGames.filter((g) => g.status !== "void"));
+  const membersOf = stageMembers(stageGames);
+  const rows: { line: Line; place: number }[] = [];
+  for (const no of nos) {
+    const gs = stageGames.filter((g) => g.groupNo === no);
+    const members = (membersOf.get(no) ?? []).filter((id) => lines.has(id));
+    // Win %, then points per game: the same order as wins then difference when everyone in the
+    // group played the same number of games, and still fair when an edit left them uneven.
+    const table = rank(members.map((id) => lines.get(id)!));
+    const { winner } = groupWinner(gs);
+    const wi = winner ? table.findIndex((r) => r.id === winner) : -1;
+    if (wi > 0) table.unshift(...table.splice(wi, 1));
+    table.forEach((line, place) => rows.push({ line, place }));
+  }
+  const across = new Map(rank(rows.map((r) => r.line)).map((l, i) => [l.id, i]));
+  return rows.sort((x, y) => x.place - y.place || across.get(x.line.id)! - across.get(y.line.id)!).map((r) => r.line.id);
+}
+
+/**
  * The order a seeded stage or the finals draws from: best first, so group A / the A final gets the top.
  * After a seeded stage it's by group finish (everyone in group A above everyone in group B), so a
- * 4–0 in the weaker group can't jump into the A final over someone who went 2–2 among the best. After a
- * random stage it's the group-stage table (win %, then +/− per game). Someone with no games yet (a
- * late arrival) goes mid-table for a seeded stage, where they'll be sorted out, but to the bottom
+ * 4–0 in the weaker group can't jump into the A final over someone who went 2–2 among the best. After
+ * random groups it's by finishing place in your own group (placementOrder): winners, then runners-up.
+ * Someone with no games yet (a late arrival) goes mid-table for a seeded stage, where they'll be sorted out, but to the bottom
  * for the finals: the A final is for people who've shown they belong there.
  */
 export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final"): string[] {
@@ -218,6 +304,11 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
     // Anyone who played earlier stages but not the last one (rare): after them, by the table.
     const rest = rank(tally(groupStages).values()).filter((r) => r.gp > 0).map((r) => r.id);
     played = [...new Set([...played, ...rest])];
+  } else if (new Set(last.map((g) => g.groupNo)).size > 1) {
+    // After random groups: by finishing place in your own group (placementOrder), then anyone
+    // from earlier stages who didn't play this one, by the table.
+    const rest = rank(tally(groupStages).values()).filter((r) => r.gp > 0).map((r) => r.id);
+    played = [...new Set([...placementOrder(last), ...rest])];
   } else {
     played = rank(tally(groupStages).values()).filter((r) => r.gp > 0).map((r) => r.id);
   }

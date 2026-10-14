@@ -7,7 +7,7 @@ import { players, events, entries, stages, games, eventPhotos } from "@/db/schem
 import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin";
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
-import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, type StageKind } from "@/lib/cards";
+import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
 import { getEventView, groupsOf } from "@/lib/data";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
@@ -300,6 +300,106 @@ export async function drawStage(eventId: string, kind: StageKind): Promise<Resul
   });
   refresh(eventId);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Editing the groups of the stage in play. Scores already entered never change: only games still
+// to play are rearranged. (A game someone is mid-way through counts as still to play, so enter
+// its score first if it has finished.)
+
+async function latestStage(eventId: string) {
+  if (!isUuid(eventId)) return null;
+  const v = await getEventView(eventId);
+  const stage = v?.stages.at(-1);
+  if (!v || !stage) return null;
+  if (v.event.status === "done") return null;
+  const inStage = v.games.filter((g) => g.stageNo === stage.no);
+  const groupNos = [...new Set(inStage.map((g) => g.groupNo))].sort((a, b) => a - b);
+  const groups = groupNos.map((no) => {
+    const gs = inStage.filter((g) => g.groupNo === no);
+    return { no, games: gs, members: currentMembers(inStage, no), first: gs[0] };
+  });
+  // Rearranged games go after everything else in the stage (see stageMembers).
+  const nextOrd = Math.max(0, ...inStage.map((g) => g.ord)) + 1;
+  return { v, stage, inStage, groups, nextOrd };
+}
+
+/** Organiser: two players trade places in the games still to play. One of them can be someone
+ *  not in this stage yet (a late arrival), who then takes the other's place. */
+export async function swapPlayers(eventId: string, x: string, y: string): Promise<Result> {
+  const no = await requireOrganiser(); if (no) return no;
+  if (!isUuid(x) || !isUuid(y) || x === y) return fail("Pick two different players.");
+  const st = await latestStage(eventId); if (!st) return fail("There's no stage in play to change.");
+  const gx = st.groups.find((g) => g.members.includes(x)), gy = st.groups.find((g) => g.members.includes(y));
+  if (!gx && !gy) return fail("Neither of them is in a group right now.");
+  if (gx && gy && gx.no === gy.no) return fail("They're already in the same group.");
+  const swap = (id: string) => (id === x ? y : id === y ? x : id);
+  const todo = st.inStage.filter((g) => g.status === "todo");
+  await db.transaction(async (tx) => {
+    for (const g of todo) {
+      const four = [...g.a, ...g.b];
+      if (!four.includes(x) && !four.includes(y)) continue;
+      const [a1, a2, b1, b2] = four.map(swap);
+      // Same order among themselves, but after everything already in the stage.
+      await tx.update(games).set({ a1, a2, b1, b2, subs: g.subs.map(swap), ord: g.ord + st.nextOrd, updatedAt: new Date() }).where(eq(games.id, g.id));
+    }
+  });
+  refresh(eventId);
+  return { ok: true };
+}
+
+/**
+ * Organiser: move someone into another group, or take them out of this stage (toGroup = null).
+ * Each group that changes keeps its played games and has the rest redrawn for its new line-up.
+ */
+export async function movePlayer(eventId: string, playerId: string, toGroup: number | null): Promise<Result> {
+  const no = await requireOrganiser(); if (no) return no;
+  if (!isUuid(playerId) || (toGroup !== null && !Number.isInteger(toGroup))) return fail("Pick a player and a group.");
+  const st = await latestStage(eventId); if (!st) return fail("There's no stage in play to change.");
+  const from = st.groups.find((g) => g.members.includes(playerId)) ?? null;
+  const to = toGroup === null ? null : st.groups.find((g) => g.no === toGroup);
+  if (toGroup !== null && !to) return fail("Unknown group.");
+  if ((from?.no ?? null) === (to?.no ?? null)) return fail(to ? "They're already in that group." : "They're not in a group right now.");
+  const changes: { group: (typeof st.groups)[number]; members: string[] }[] = [];
+  if (from) changes.push({ group: from, members: from.members.filter((id) => id !== playerId) });
+  if (to) changes.push({ group: to, members: [...to.members, playerId] });
+  for (const c of changes) {
+    if (c.members.length > 0 && c.members.length < 4) {
+      return fail(`Group ${c.group.first.groupName} would be down to ${c.members.length}. Swap someone in instead, or redraw the stage.`);
+    }
+  }
+  const G = st.groups.length;
+  const ord = st.nextOrd;
+  await db.transaction(async (tx) => {
+    for (const { group, members } of changes) {
+      const kept: Game[] = group.games.filter((g) => g.status !== "todo" || g.decider);
+      const drop = group.games.filter((g) => g.status === "todo" && !g.decider).map((g) => g.id);
+      if (drop.length) await tx.delete(games).where(inArray(games.id, drop));
+      const plan = remainingGames(members, kept);
+      const seq0 = Math.max(0, ...kept.map((g) => g.seq));
+      if (plan.length) {
+        await tx.insert(games).values(plan.map((x, i) => ({
+          eventId, stageId: st.stage.id, groupNo: group.no, groupName: group.first.groupName,
+          seq: seq0 + i + 1, ord: ord + i * G + group.no, net: group.first.net,
+          a1: x.a[0], a2: x.a[1], b1: x.b[0], b2: x.b[1],
+        })));
+      }
+    }
+  });
+  refresh(eventId);
+  return { ok: true };
+}
+
+/**
+ * Organiser: fresh groups for the stage in play, from everyone in the tournament now. If nothing
+ * in it has a score yet it's simply drawn again; otherwise the scores so far stay (as an earlier
+ * stage, still counting in the standings) and a new stage of the same kind is drawn.
+ */
+export async function redrawStage(eventId: string): Promise<Result> {
+  const no = await requireOrganiser(); if (no) return no;
+  const st = await latestStage(eventId); if (!st) return fail("There's no stage in play to redraw.");
+  if (!st.inStage.some((g) => g.status === "done")) await db.delete(stages).where(eq(stages.id, st.stage.id));
+  return drawStage(eventId, st.stage.kind);
 }
 
 /**
