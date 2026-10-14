@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
+import { LevelMoments } from "@/components/LevelMoments";
 
 const geistSans = localFont({ src: "./fonts/geist-latin.woff2", variable: "--font-geist-sans", weight: "400 900", display: "swap" });
 const geistMono = localFont({ src: "./fonts/geist-mono-latin.woff2", variable: "--font-geist-mono", weight: "400 700", display: "swap" });
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <div className="mx-auto min-h-dvh max-w-[480px] bg-bg pb-[calc(84px+env(safe-area-inset-bottom))]">{children}</div>
         <Nav />
+        <LevelMoments />
       </body>
     </html>
   );

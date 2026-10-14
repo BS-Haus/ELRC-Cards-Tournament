@@ -1,5 +1,6 @@
 "use client";
 
+import { pingMoments } from "@/components/LevelMoments";
 import { useState } from "react";
 import { enterScore } from "@/app/actions";
 import { useAction } from "@/components/useAction";
@@ -17,7 +18,7 @@ export function ScoreBoxes({ game, to, canScore, onOpen, onAccent = false, flip 
   const nb = b === "" ? null : Number(b);
   const both = na !== null && nb !== null;
   const ready = both && isFinalScore(na, nb, to);
-  const save = () => run(() => enterScore(game.id, flip ? nb! : na!, flip ? na! : nb!), "Score saved", (r) => { if (r.ok) { setA(""); setB(""); } });
+  const save = () => run(() => enterScore(game.id, flip ? nb! : na!, flip ? na! : nb!), "Score saved", (r) => { if (r.ok) { setA(""); setB(""); pingMoments(); } });
   const box = (v: string, set: (x: string) => void, who: string) =>
     canScore ? (
       <input

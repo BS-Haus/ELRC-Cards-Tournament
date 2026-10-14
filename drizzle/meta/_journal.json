@@ -29,6 +29,13 @@
       "when": 1791748699151,
       "tag": "0003_event_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792010046004,
+      "tag": "0004_level_moments",
+      "breakpoints": true
     }
   ]
 }

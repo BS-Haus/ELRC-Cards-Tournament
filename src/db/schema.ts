@@ -12,6 +12,9 @@ export const players = pgTable("players", {
   avatar: text("avatar"),
   avatarAt: timestamp("avatar_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // When they last saw how their games moved their level (src/lib/moments.ts). Anything scored
+  // after this pops up as a story next time they're in the app.
+  xpSeenAt: timestamp("xp_seen_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // A weekend session people sign up for: "Sunday cards, Victoria Park".
