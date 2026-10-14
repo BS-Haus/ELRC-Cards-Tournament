@@ -19,7 +19,7 @@ export type Game = {
   scoreA: number | null;
   scoreB: number | null;
   status: GameStatus;
-  /** One of the two tie-break games (decideTie): settles who tops the group, counts for nothing else. */
+  /** The tie-break game (decideTie): settles who tops the group, counts for nothing else. */
   decider?: boolean;
 };
 

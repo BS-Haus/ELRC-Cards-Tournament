@@ -403,9 +403,9 @@ export async function redrawStage(eventId: string): Promise<Result> {
 }
 
 /**
- * Organiser: settle a tie at the top of a group with two decider games (decideTie): the tied pair
- * on opposite sides, swapping partners between the next two in the table. They go on the group's
- * net, next in line, and count for nothing but who tops the group.
+ * Organiser: settle a tie at the top of a group with one decider game (decideTie): the tied pair
+ * on opposite sides, each partnered with one of the next two in the table. It goes on the group's
+ * net, next in line, and counts for nothing but who tops the group.
  */
 export async function addDecider(eventId: string, stageNo: number, groupNo: number): Promise<Result> {
   const no = await requireOrganiser(); if (no) return no;
