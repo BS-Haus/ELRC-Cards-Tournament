@@ -129,3 +129,29 @@ function pushLevelChange(slides: MomentSlide[], before: number, after: number, s
   if (b.level.level > a.level) slides.push({ kind: "levelUp", level: b.level, next: b.next, toNext, xp: after, cheer: pick(upLines(b.level), seed) });
   else slides.push({ kind: "levelDown", level: b.level, next: b.next, toNext, xp: after, cheer: pick(downLines, seed) });
 }
+
+/**
+ * The story of one game you've already played, for tapping it in your recent games: the same
+ * slides it popped up with, worked out as things stood when it was scored (anything scored after
+ * it counts as not played yet). No slides if it wasn't a counted game of yours.
+ */
+export function gameMoments(events: MomentEvent[], me: string, gameId: string): MomentSlide[] {
+  const target = events.flatMap((e) => e.games).find((g) => g.id === gameId);
+  if (!target || !counted(target) || !involves(target, me)) return [];
+  const t = target.updatedAt;
+  const asThen = events.map((e) => ({
+    ...e,
+    games: e.games.map((g) => (g.id !== gameId && g.updatedAt >= t ? { ...g, status: "todo" as const, scoreA: null, scoreB: null } : g)),
+  }));
+  return buildMoments(asThen, me, t - 1).slides;
+}
+
+/** What each game did to your XP (the number on its story's first slide), by game id. */
+export function gameXps(events: MomentEvent[], me: string, gameIds: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const id of gameIds) {
+    const s = gameMoments(events, me, id).find((x) => x.kind === "game");
+    if (s?.kind === "game") out.set(id, s.xp);
+  }
+  return out;
+}

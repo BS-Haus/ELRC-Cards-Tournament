@@ -110,7 +110,7 @@ import { finalsOf, liveEventId } from "@/lib/views";
 import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
 import { xpWeekends } from "@/lib/levels";
 import { buildStory, type Story } from "@/lib/story";
-import { buildMoments, type MomentSlide } from "@/lib/moments";
+import { buildMoments, gameMoments, gameXps, type MomentSlide } from "@/lib/moments";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
@@ -167,7 +167,7 @@ export async function getPlayerStats(): Promise<PlayerStats[]> {
   return ps.map((p) => ({ ...lite(p), ...t.get(p.id)!, events: evByPlayer.get(p.id)?.size ?? 0, tierWins: tiers.get(p.id) ?? {}, xp: rt.get(p.id)?.xp ?? 0 }));
 }
 
-export type ProfileGame = { id: string; eventId: string; eventTitle: string; at: number; won: boolean; mine: number; theirs: number; partner: string; opponents: string[]; sub: boolean; label: string };
+export type ProfileGame = { id: string; eventId: string; eventTitle: string; at: number; won: boolean; mine: number; theirs: number; partner: string; opponents: string[]; sub: boolean; label: string; xp: number | null };
 /** `change` is the XP that weekend earned (or cost) them, `after` where it left them (null if no counted games). */
 export type ProfileEvent = { id: string; title: string; startsAt: number; live: boolean; w: number; l: number; finish: string | null; change: number | null; after: number | null };
 export type Profile = {
@@ -243,9 +243,9 @@ export async function getProfile(id: string): Promise<Profile | null> {
     return { id: eid, title: ev.title, startsAt: ev.startsAt.getTime(), live: ev.status === "live", w: line.w, l: line.l, finish, change: wk ? wk.after - wk.before : null, after: wk ? wk.after : null };
   }).sort((a, b) => b.startsAt - a.startsAt);
 
-  const recent: ProfileGame[] = mine
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 30)
+  const latest = mine.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 30);
+  const xps = gameXps(momentEvents(evs, gs), id, latest.filter((g) => !g.subs.includes(id) && !g.decider).map((g) => g.id));
+  const recent: ProfileGame[] = latest
     .map((g) => {
       const onA = g.a.includes(id);
       const side = onA ? g.a : g.b, other = onA ? g.b : g.a;
@@ -256,6 +256,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
         mine: onA ? g.scoreA! : g.scoreB!, theirs: onA ? g.scoreB! : g.scoreA!,
         partner: side[0] === id ? side[1] : side[0], opponents: [...other], sub: g.subs.includes(id),
         label: g.kind === "final" ? `${g.groupName} final` : `Group ${g.groupName}`,
+        xp: xps.get(g.id) ?? null,
       };
     });
 
@@ -306,8 +307,23 @@ export async function myMoments(playerId: string): Promise<Moments | null> {
     .limit(1);
   if (!hit) return null;
   const { ps, evs, gs } = await everything();
-  const events = evs.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.getTime(), games: gs.filter((g) => g.eventId === e.id) }));
-  const { slides, upTo } = buildMoments(events, playerId, p.xpSeenAt.getTime());
+  const { slides, upTo } = buildMoments(momentEvents(evs, gs), playerId, p.xpSeenAt.getTime());
   if (!slides.length) return null;
   return { slides, upTo, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(p) };
+}
+
+type Everything = Awaited<ReturnType<typeof everything>>;
+const momentEvents = (evs: Everything["evs"], gs: Everything["gs"]) =>
+  evs.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.getTime(), games: gs.filter((g) => g.eventId === e.id) }));
+
+/** The story of one of a player's past games, for tapping it on their profile (null if it isn't
+ *  a counted game of theirs). */
+export async function gameStory(playerId: string, gameId: string): Promise<Moments | null> {
+  const { ps, evs, gs } = await everything();
+  const p = ps.find((x) => x.id === playerId);
+  const g = gs.find((x) => x.id === gameId);
+  if (!p || !g) return null;
+  const slides = gameMoments(momentEvents(evs, gs), playerId, gameId);
+  if (!slides.length) return null;
+  return { slides, upTo: g.updatedAt, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(p) };
 }

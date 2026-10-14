@@ -58,7 +58,8 @@ export function LevelMoments() {
   return <Reel m={m} onClose={close} />;
 }
 
-function Reel({ m, onClose }: { m: Moments; onClose: () => void }) {
+/** The story itself, also used to replay a past game from a profile (`title`, `done`). */
+export function Reel({ m, onClose, title = "Your results", done = "Back to it" }: { m: Moments; onClose: () => void; title?: string; done?: string }) {
   const slides = m.slides;
   const [at, setAt] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -108,7 +109,7 @@ function Reel({ m, onClose }: { m: Moments; onClose: () => void }) {
   const party = s.kind === "levelUp" || s.kind === "finish";
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Your latest results" className="fixed inset-0 z-[60] mx-auto flex max-w-[480px] flex-col bg-[#0c0e10] text-fg">
+    <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-[60] mx-auto flex max-w-[480px] flex-col bg-[#0c0e10] text-fg">
       <div className={`absolute inset-0 bg-gradient-to-b ${bg}`} />
       {party && <Confetti key={at} />}
       <div className="relative z-10 flex gap-1 px-3 pt-[calc(10px+env(safe-area-inset-top))]">
@@ -119,7 +120,7 @@ function Reel({ m, onClose }: { m: Moments; onClose: () => void }) {
         ))}
       </div>
       <div className="relative z-10 flex items-center justify-between px-4 pt-3">
-        <span className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.16em] text-white/50"><Avatar p={m.me} size={20} />Your results</span>
+        <span className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.16em] text-white/50"><Avatar p={m.me} size={20} />{title}</span>
         <button onClick={onClose} className="spk-press -mr-2 p-2 text-white/70" aria-label="Close">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
         </button>
@@ -132,7 +133,7 @@ function Reel({ m, onClose }: { m: Moments; onClose: () => void }) {
       </div>
       <div className="relative z-10 px-7 pb-[calc(28px+env(safe-area-inset-bottom))]">
         {last
-          ? <button onClick={onClose} className="spk-press h-14 w-full rounded-2xl bg-accent text-[16px] font-black text-ink">Back to it</button>
+          ? <button onClick={onClose} className="spk-press h-14 w-full rounded-2xl bg-accent text-[16px] font-black text-ink">{done}</button>
           : <p className="text-center text-[12.5px] text-white/40">Tap to continue</p>}
       </div>
     </div>
