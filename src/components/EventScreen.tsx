@@ -567,7 +567,8 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
   return (
     <Section title="Organiser">
       <div className={`${card} grid gap-4 p-4`}>
-        <div>
+        <GameLength view={view} run={run} pending={pending} />
+        <div className="border-t border-white/[.05] pt-4">
           <div className="text-[15px] font-extrabold">{current ? "Next step" : "Start the tournament"}</div>
           <p className="mt-1 text-[13.5px] leading-relaxed text-muted">
             {current ? (left ? `${left} game${left === 1 ? "" : "s"} left in this stage. Drawing the next stage skips them.` : "This stage is finished.") : "Check people in below as they arrive, then draw. "}
@@ -631,6 +632,31 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
         </div>
       </div>
     </Section>
+  );
+}
+
+/** One tap to change how long games are, mid-tournament. Scores already entered stay as they are. */
+function GameLength({ view, run, pending }: { view: EventView; run: Run; pending: boolean }) {
+  const e = view.event;
+  const set = (k: "groupTo" | "finalTo", to: number) =>
+    run(() => updateEvent(e.id, { title: e.title, startsAt: new Date(e.startsAt).toISOString(), location: e.location, notes: e.notes, nets: e.nets, groupTo: k === "groupTo" ? to : e.groupTo, finalTo: k === "finalTo" ? to : e.finalTo }), `${k === "groupTo" ? "Group" : "Finals"} games now to ${to}`);
+  const row = (k: "groupTo" | "finalTo", label: string) => (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-[13.5px] font-semibold text-muted">{label}</span>
+      <div className="flex rounded-lg border border-white/[.06] bg-panel p-0.5 text-[13px] font-bold">
+        {[7, 9, 11, 15, 21].map((n) => (
+          <button key={n} disabled={pending || e[k] === n} onClick={() => set(k, n)} aria-pressed={e[k] === n} className={`tnum min-w-9 rounded-md px-2 py-1.5 ${e[k] === n ? "bg-accent text-ink" : "text-muted"}`}>{n}</button>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div className="grid gap-2">
+      <div className="text-[15px] font-extrabold">Game length</div>
+      {row("groupTo", "Groups to")}
+      {row("finalTo", "Finals to")}
+      <p className="text-[12.5px] text-dim">Win by 2. Changes apply to games from now on, on every phone. Scores already entered stay as they are.</p>
+    </div>
   );
 }
 
