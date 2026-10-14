@@ -9,11 +9,14 @@ export type Story = {
   champion: { id: string; line: Line; titles: number } | null;
   /** Every final (or group, before finals): winner and runner-up. */
   /** `third` only for the A final: it has a podium, the other finals have a winner. */
-  podium: { name: string; winner: string | null; runnerUp: string | null; third: string | null; tied: string[] }[];
+  podium: { name: string; winner: string | null; runnerUp: string | null; third: string | null; tied: string[]; table: Standing[] }[];
   stories: Tale[];
   records: Record[];
   numbers: { players: number; games: number; points: number; deuces: number; nets: number };
 };
+
+/** One row of a final's (or group's) table, in finishing order: the winner first. */
+export type Standing = { id: string; w: number; l: number; diff: number };
 
 /** One short headline about the day, with who it's about and the number that makes it. */
 export type Tale = { kind: "unbeaten" | "streak" | "climber" | "partnership" | "blowout" | "deuce" | "points" | "firstTitle"; title: string; ids: string[]; stat: string; detail: string };
@@ -74,10 +77,16 @@ export function buildStory(ev: DayEvent, history: DayEvent[]): Story {
 
   const podium = (res?.groups ?? []).map((g, i) => {
     const members = groupMembers(g.games.filter((x) => !x.decider));
-    const table = rank(tally(g.games.filter((x) => x.status !== "void"), members).values()).map((r) => r.id);
+    const lines = rank(tally(g.games.filter((x) => x.status !== "void" && !x.decider), members).values());
+    // The winner tops the table even when a decider, not the numbers, put them there.
+    const ordered = g.winner ? [...lines.filter((l) => l.id === g.winner), ...lines.filter((l) => l.id !== g.winner)] : lines;
+    const table = ordered.map((l) => l.id);
     const rest = g.winner ? table.filter((id) => id !== g.winner) : [];
     const third = res!.kind === "final" && i === 0 ? rest[1] ?? null : null;
-    return { name: res!.kind === "final" ? g.name : `Group ${g.name}`, winner: g.winner, runnerUp: rest[0] ?? null, third, tied: g.tied };
+    return {
+      name: res!.kind === "final" ? g.name : `Group ${g.name}`, winner: g.winner, runnerUp: rest[0] ?? null, third, tied: g.tied,
+      table: ordered.map((l) => ({ id: l.id, w: l.w, l: l.l, diff: l.pf - l.pa })),
+    };
   });
 
   // Stories: the few things people will talk about. Strongest first, at most five.

@@ -80,7 +80,7 @@ export function PlayerBody({ season, pr, mine = false }: { season: Season; pr: P
         </section>
       )}
 
-      {story && <Reel m={story} onClose={() => setStory(null)} title={mine ? "Replay" : `${story.me.name}'s game`} done="Done" />}
+      {story && <Reel m={story} onClose={() => setStory(null)} title={mine ? "Replay" : `${story.me.name}'s game`} done="Done" self={mine} />}
     </>
   );
 }

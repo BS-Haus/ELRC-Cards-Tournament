@@ -59,7 +59,7 @@ export function LevelMoments() {
 }
 
 /** The story itself, also used to replay a past game from a profile (`title`, `done`). */
-export function Reel({ m, onClose, title = "Your results", done = "Back to it" }: { m: Moments; onClose: () => void; title?: string; done?: string }) {
+export function Reel({ m, onClose, title = "Your results", done = "Back to it", self = true }: { m: Moments; onClose: () => void; title?: string; done?: string; self?: boolean }) {
   const slides = m.slides;
   const [at, setAt] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -126,12 +126,12 @@ export function Reel({ m, onClose, title = "Your results", done = "Back to it" }
         </button>
       </div>
       <div
-        className="spk-noselect relative z-10 flex flex-1 touch-manipulation select-none items-center px-7"
+        className="spk-noselect relative z-10 flex min-h-0 flex-1 touch-manipulation select-none flex-col px-6"
         onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => setPaused(false)} onContextMenu={(e) => e.preventDefault()}
       >
-        <div key={at} className="spk-up w-full"><Body s={s} m={m} /></div>
+        <div key={at} className="flex min-h-0 w-full flex-1 flex-col"><Body s={s} m={m} self={self} /></div>
       </div>
-      <div className="relative z-10 px-7 pb-[calc(28px+env(safe-area-inset-bottom))]">
+      <div className="relative z-10 px-6 pb-[calc(28px+env(safe-area-inset-bottom))]">
         {last
           ? <button onClick={onClose} className="spk-press h-14 w-full rounded-2xl bg-accent text-[16px] font-black text-ink">{done}</button>
           : <p className="text-center text-[12.5px] text-white/40">Tap to continue</p>}
@@ -142,92 +142,172 @@ export function Reel({ m, onClose, title = "Your results", done = "Back to it" }
 
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}`;
 
+/** Arrives `n` beats into the slide. */
+const beat = (n: number) => ({ animationDelay: `${n * 140}ms` });
+
 function LevelBar({ from, to, level, next, toNext, delta }: { from: number; to: number; level: Level; next: Level | null; toNext: number; delta?: number }) {
   const [w, setW] = useState(from);
-  useEffect(() => { const t = setTimeout(() => setW(to), 250); return () => clearTimeout(t); }, [to]);
+  useEffect(() => { const t = setTimeout(() => setW(to), 450); return () => clearTimeout(t); }, [to]);
   return (
     <div className="grid gap-2">
-      <div className="flex items-center justify-between text-[14px] font-bold">
-        <span className="flex items-center gap-2"><span className="text-[20px]">{level.icon}</span>{level.name}</span>
-        <span className="text-white/50">Level {level.level}</span>
+      <div className="flex items-center justify-between text-[13.5px] font-bold">
+        <span className="flex items-center gap-2"><span className="text-[18px]">{level.icon}</span>{level.name}</span>
+        <span className="text-white/45">Lv {level.level}</span>
       </div>
-      <div className="h-3 overflow-hidden rounded-full bg-white/10">
+      <div className="h-2.5 overflow-hidden rounded-full bg-white/10">
         <div className="h-full rounded-full transition-[width] duration-1000 ease-out" style={{ width: `${Math.max(2, w * 100)}%`, background: delta !== undefined && delta < 0 ? "#8A9196" : level.color === "#8A9196" ? "#CBFB4F" : level.color }} />
       </div>
-      <div className="text-[13px] text-white/55">{next ? `${toNext} XP to ${next.icon} ${next.name}` : "Top level. Legend status."}</div>
+      <div className="text-[12.5px] text-white/50">{next ? `${toNext} XP to ${next.icon} ${next.name}` : "Top level. Legend status."}</div>
     </div>
   );
 }
 
-function Body({ s, m }: { s: MomentSlide; m: Moments }) {
-  const name = (id: string) => m.names[id]?.name ?? "someone";
+/** One side of the net: two faces overlapping, two names, and their score underneath. */
+function Side({ ids, score, lead, m, align, self = false }: { ids: string[]; score: number; lead: boolean; m: Moments; align: "left" | "right"; self?: boolean }) {
+  const right = align === "right";
+  return (
+    <div className={`flex min-w-0 flex-1 flex-col ${right ? "items-end text-right" : "items-start"}`}>
+      <div className={`flex ${right ? "flex-row-reverse" : ""}`}>
+        {ids.map((id, i) => (
+          <span key={id} className={`rounded-full ring-[3px] ring-[#0c0e10] ${i ? (right ? "-mr-3" : "-ml-3") : ""}`}><Avatar p={id === m.me.id ? m.me : m.names[id]} size={46} dim={!lead} /></span>
+        ))}
+      </div>
+      <div className={`mt-2 w-full truncate text-[13.5px] font-bold ${lead ? "text-fg" : "text-white/50"}`}>{ids.map((id) => (id === m.me.id && self ? "You" : (id === m.me.id ? m.me : m.names[id])?.name ?? "?")).join(" & ")}</div>
+      <div className={`tnum mt-1 font-mono text-[76px] font-black leading-[.9] tracking-[-.05em] ${lead ? "text-fg" : "text-white/30"}`}><CountUp to={score} /></div>
+    </div>
+  );
+}
+
+function Body({ s, m, self }: { s: MomentSlide; m: Moments; self: boolean }) {
   if (s.kind === "game") {
+    const gamePart = s.xp - (s.turnedUp ? 10 : 0);
     return (
-      <div className="grid gap-6">
-        <div>
-          <div className="text-[12.5px] font-bold uppercase tracking-[.18em] text-white/45">{s.eventTitle} · {s.label}</div>
-          <div className={`mt-2 text-[44px] font-black leading-none tracking-[-.02em] ${s.won ? "text-accent" : "text-fg"}`}>{s.won ? "Win" : "Loss"}</div>
-          <div className="tnum mt-1 font-mono text-[64px] font-black leading-none tracking-[-.04em]">{s.mine}<span className="text-white/30">–</span>{s.theirs}</div>
-          <div className="mt-3 flex items-center gap-2 text-[16px] text-white/70">
-            <Avatar p={m.names[s.partner]} size={26} />with <b className="text-fg">{name(s.partner)}</b> vs {name(s.opponents[0])} &amp; {name(s.opponents[1])}
+      <div className="relative flex flex-1 flex-col justify-between py-5">
+        {/* The result as a word bigger than the screen, behind everything. */}
+        <div aria-hidden="true" className={`spk-fade pointer-events-none absolute -right-8 top-6 select-none text-[150px] font-black uppercase leading-none tracking-[-.06em] ${s.won ? "text-accent/[.10]" : "text-white/[.05]"}`}>{s.won ? "Win" : "Loss"}</div>
+
+        <div className="spk-rise relative flex items-center gap-2" style={beat(0)}>
+          <span className={`rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-[.14em] ${s.won ? "bg-accent text-ink" : "bg-white/12 text-fg"}`}>{s.won ? "Win" : "Loss"}</span>
+          <span className="truncate text-[12px] font-bold uppercase tracking-[.14em] text-white/45">{s.eventTitle} · {s.label}</span>
+        </div>
+
+        <div className="spk-rise relative" style={beat(1)}>
+          <div className="flex items-end gap-3">
+            <Side ids={[m.me.id, s.partner]} score={s.mine} lead={s.won} m={m} align="left" self={self} />
+            <span className="pb-4 text-[13px] font-black uppercase tracking-[.2em] text-white/30">vs</span>
+            <Side ids={s.opponents} score={s.theirs} lead={!s.won} m={m} align="right" />
           </div>
         </div>
-        <div className="flex items-baseline gap-3">
-          <span className={`tnum text-[40px] font-black leading-none ${s.xp >= 0 ? "text-accent" : "text-white/70"}`}>{s.xp >= 0 ? "+" : "−"}<CountUp to={Math.abs(s.xp)} /> XP</span>
-          {s.turnedUp && <span className="text-[13px] font-semibold text-white/55">incl. +10 for turning up 👋</span>}
+
+        <p className="spk-rise relative text-[24px] font-black leading-[1.15] tracking-[-.01em]" style={beat(3)}>{s.cheer}</p>
+
+        <div className="spk-rise relative rounded-3xl border border-white/10 bg-white/[.05] p-4" style={beat(4)}>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5 text-[12px] font-bold">
+              <span className="rounded-full bg-white/[.08] px-2.5 py-1 text-white/70">{signed(gamePart)} {s.won ? "win" : "loss"}</span>
+              {s.turnedUp && <span className="rounded-full bg-white/[.08] px-2.5 py-1 text-white/70">+10 turning up 👋</span>}
+            </div>
+            <span className={`spk-stamp tnum shrink-0 rounded-2xl px-3 py-1.5 text-[30px] font-black leading-none ${s.xp >= 0 ? "bg-accent text-ink" : "bg-white/15 text-fg"}`} style={beat(5)}>
+              {s.xp >= 0 ? "+" : "−"}<CountUp to={Math.abs(s.xp)} /><span className="ml-1 text-[15px]">XP</span>
+            </span>
+          </div>
+          <LevelBar from={s.progressFrom} to={s.progressTo} level={s.to} next={s.next} toNext={s.toNext} delta={s.xp} />
         </div>
-        <LevelBar from={s.progressFrom} to={s.progressTo} level={s.to} next={s.next} toNext={s.toNext} delta={s.xp} />
-        <p className="text-[19px] font-bold leading-snug">{s.cheer}</p>
       </div>
     );
   }
   if (s.kind === "finish") {
+    const champ = s.label === "Champion";
     return (
-      <div className="grid gap-6 text-center">
-        <div className="spk-crown text-[88px] leading-none">{s.label === "Champion" ? "🏆" : "🎉"}</div>
-        <div className="text-[34px] font-black leading-tight">{s.label}</div>
-        <div className="tnum text-[40px] font-black text-accent">+<CountUp to={s.xp} /> XP</div>
-        <p className="text-[19px] font-bold">{s.cheer}</p>
+      <div className="flex flex-1 flex-col items-center justify-center gap-7 text-center">
+        <div className="relative grid place-items-center">
+          <span aria-hidden="true" className="spk-spin absolute h-[220px] w-[220px] rounded-full opacity-60" style={{ background: "conic-gradient(from 0deg, transparent, #CBFB4F55, transparent 30%, #FFCF5C55, transparent 60%, #CBFB4F55, transparent)" }} />
+          <span className="absolute h-[150px] w-[150px] rounded-full bg-accent/10 blur-2xl" />
+          <span className="spk-crown relative text-[110px] leading-none">{champ ? "🏆" : "🎉"}</span>
+        </div>
+        <div className="spk-rise" style={beat(2)}>
+          <div className="text-[12px] font-black uppercase tracking-[.28em] text-white/50">{champ ? "Top of the A final" : "Finals finish"}</div>
+          <div className="mt-2 text-[40px] font-black leading-none tracking-[-.02em]">{s.label}</div>
+        </div>
+        <span className="spk-stamp tnum rounded-2xl bg-accent px-4 py-2 text-[34px] font-black leading-none text-ink" style={beat(4)}>+<CountUp to={s.xp} /> XP</span>
+        <p className="spk-rise max-w-[300px] text-[18px] font-bold leading-snug text-white/80" style={beat(6)}>{s.cheer}</p>
       </div>
     );
   }
   if (s.kind === "levelUp") {
+    const c = s.level.color === "#8A9196" ? "#CBFB4F" : s.level.color;
     return (
-      <div className="grid justify-items-center gap-5 text-center">
-        <div className="text-[13px] font-black uppercase tracking-[.24em] text-accent">Level up!</div>
-        <div className="spk-crown text-[104px] leading-none">{s.level.icon}</div>
-        <div>
-          <div className="text-[38px] font-black leading-tight" style={{ color: s.level.color === "#8A9196" ? undefined : s.level.color }}>{s.level.name}</div>
-          <div className="mt-1 text-[16px] font-bold text-white/60">Level {s.level.level}</div>
+      <div className="flex flex-1 flex-col justify-between py-5">
+        <div className="spk-rise flex items-center gap-3 text-[13px] font-black uppercase tracking-[.24em]" style={{ color: c, ...beat(0) }}>
+          <span className="h-px flex-1" style={{ background: `${c}55` }} />Level up<span className="h-px flex-1" style={{ background: `${c}55` }} />
         </div>
-        <p className="max-w-[300px] text-[19px] font-bold leading-snug">{s.cheer}</p>
-        {s.next && <p className="text-[13.5px] text-white/50">Next up: {s.next.icon} {s.next.name}, {s.toNext} XP away</p>}
+        <div className="flex flex-col items-center text-center">
+          <div className="relative grid place-items-center">
+            <span aria-hidden="true" className="spk-spin absolute h-[210px] w-[210px] rounded-full" style={{ background: `conic-gradient(from 0deg, ${c}, transparent 25%, ${c}88 50%, transparent 75%, ${c})`, mask: "radial-gradient(circle, transparent 62%, #000 63%)", WebkitMask: "radial-gradient(circle, transparent 62%, #000 63%)" }} />
+            <span className="grid h-[170px] w-[170px] place-items-center rounded-full" style={{ background: `radial-gradient(circle, ${c}30, transparent 70%)` }}>
+              <span className="spk-crown text-[96px] leading-none">{s.level.icon}</span>
+            </span>
+          </div>
+          <div className="spk-rise mt-6 text-[44px] font-black leading-none tracking-[-.02em]" style={{ color: c, ...beat(2) }}>{s.level.name}</div>
+          <div className="spk-rise tnum mt-3 flex items-center gap-2 text-[15px] font-black" style={beat(3)}>
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/50">Lv {s.level.level - 1}</span>
+            <span className="text-white/40">→</span>
+            <span className="rounded-full px-2.5 py-1 text-ink" style={{ background: c }}>Lv {s.level.level}</span>
+          </div>
+        </div>
+        <div className="spk-rise grid gap-2 text-center" style={beat(5)}>
+          <p className="text-[20px] font-bold leading-snug">{s.cheer}</p>
+          {s.next && <p className="text-[13px] text-white/50">Next: {s.next.icon} {s.next.name}, {s.toNext} XP away</p>}
+        </div>
       </div>
     );
   }
   if (s.kind === "levelDown") {
     return (
-      <div className="grid justify-items-center gap-5 text-center">
-        <div className="text-[13px] font-black uppercase tracking-[.24em] text-white/55">Rank change</div>
-        <div className="text-[88px] leading-none opacity-90">{s.level.icon}</div>
-        <div>
-          <div className="text-[32px] font-black leading-tight">Back to {s.level.name}</div>
-          <div className="mt-1 text-[15px] font-bold text-white/55">Level {s.level.level}{s.next ? ` · ${s.toNext} XP to climb back` : ""}</div>
+      <div className="flex flex-1 flex-col justify-center gap-8 py-5">
+        <div className="spk-rise text-[12px] font-black uppercase tracking-[.24em] text-white/45" style={beat(0)}>Rank change</div>
+        <div className="flex items-center gap-5">
+          <span className="spk-sink grid h-[104px] w-[104px] shrink-0 place-items-center rounded-[28px] bg-white/[.06] text-[64px] leading-none">{s.level.icon}</span>
+          <div className="spk-rise min-w-0" style={beat(2)}>
+            <div className="tnum flex items-center gap-1.5 text-[14px] font-black text-white/45">Lv {s.level.level + 1} <span aria-hidden="true">↓</span> Lv {s.level.level}</div>
+            <div className="mt-1 text-[32px] font-black leading-[1.05]">Back to {s.level.name}</div>
+          </div>
         </div>
-        <p className="max-w-[300px] text-[19px] font-bold leading-snug">{s.cheer}</p>
+        {s.next && (
+          <div className="spk-rise flex items-baseline gap-3 border-l-2 border-accent/60 pl-4" style={beat(3)}>
+            <span className="tnum text-[38px] font-black leading-none text-accent">{s.toNext}</span>
+            <span className="text-[15px] font-bold text-white/60">XP to climb back to {s.next.icon} {s.next.name}</span>
+          </div>
+        )}
+        <p className="spk-rise text-[19px] font-bold leading-snug text-white/80" style={beat(4)}>{s.cheer}</p>
       </div>
     );
   }
-  // summary
+  // summary: the session as tiles
+  const losses = s.games - s.wins;
   return (
-    <div className="grid gap-6">
-      <div className="text-[13px] font-bold uppercase tracking-[.2em] text-accent">Since you last looked</div>
-      <div className="flex items-end gap-5">
-        <div className="tnum text-[72px] font-black leading-none tracking-[-.04em]"><CountUp to={s.wins} /><span className="text-white/30">–</span><CountUp to={s.games - s.wins} /></div>
-        <div className={`tnum pb-2 text-[30px] font-black ${s.xp >= 0 ? "text-accent" : "text-white/70"}`}>{signed(s.xp)} XP</div>
+    <div className="flex flex-1 flex-col justify-center gap-4 py-5">
+      <div className="spk-rise mb-1 text-[13px] font-black uppercase tracking-[.2em] text-accent" style={beat(0)}>Since you last looked</div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="spk-rise rounded-3xl bg-accent p-4 text-ink" style={beat(1)}>
+          <div className="tnum text-[64px] font-black leading-none tracking-[-.04em]"><CountUp to={s.wins} /></div>
+          <div className="mt-1 text-[12px] font-black uppercase tracking-[.14em]">{s.wins === 1 ? "Win" : "Wins"}</div>
+        </div>
+        <div className="spk-rise rounded-3xl bg-white/[.07] p-4" style={beat(2)}>
+          <div className="tnum text-[64px] font-black leading-none tracking-[-.04em] text-white/70"><CountUp to={losses} /></div>
+          <div className="mt-1 text-[12px] font-black uppercase tracking-[.14em] text-white/50">{losses === 1 ? "Loss" : "Losses"}</div>
+        </div>
+        <div className="spk-rise col-span-2 flex items-center justify-between rounded-3xl border border-white/10 p-4" style={beat(3)}>
+          <div className="flex gap-1.5" aria-label={`${s.wins} wins, ${losses} losses`}>
+            {Array.from({ length: s.games }, (_, i) => <span key={i} className={`h-3 w-3 rounded-full ${i < s.wins ? "bg-accent" : "bg-white/20"}`} />)}
+          </div>
+          <span className={`tnum text-[30px] font-black leading-none ${s.xp >= 0 ? "text-accent" : "text-white/70"}`}>{signed(s.xp)} XP</span>
+        </div>
+        <div className="spk-rise col-span-2 rounded-3xl bg-white/[.04] p-4" style={beat(4)}>
+          <LevelBar from={s.progress} to={s.progress} level={s.level} next={s.next} toNext={s.toNext} />
+        </div>
       </div>
-      <LevelBar from={s.progress} to={s.progress} level={s.level} next={s.next} toNext={s.toNext} />
-      <p className="text-[20px] font-bold leading-snug">{s.cheer}</p>
+      <p className="spk-rise mt-2 text-[21px] font-black leading-snug" style={beat(5)}>{s.cheer}</p>
     </div>
   );
 }
