@@ -82,3 +82,9 @@ button:disabled { cursor: default; }
 @keyframes spkDeal { 0% { opacity: 0; transform: translate(-40px, -70px) rotate(-14deg) scale(.6); } 70% { opacity: 1; transform: translate(0, 4px) rotate(2deg) scale(1.04); } 100% { opacity: 1; transform: none; } }
 .spk-deal { animation: spkDeal .5s cubic-bezier(.2,.9,.3,1.1) both; }
 @media (prefers-reduced-motion: reduce) { .spk-deal { animation: none; } }
+/* Sparklines draw themselves in (kit.tsx). */
+@keyframes spkDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.spk-draw { stroke-dasharray: 1; animation: spkDraw .7s cubic-bezier(.22,1,.36,1) both; }
+@media (prefers-reduced-motion: reduce) { .spk-draw { animation: none; } }
+/* Score rail (ScoreEntry.tsx): a horizontal dial, no scrollbar. */
+.spk-rail::-webkit-scrollbar { display: none; }

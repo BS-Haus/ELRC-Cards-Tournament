@@ -28,6 +28,6 @@ export default async function EventPage({ params }: Props) {
   const [v, s] = await Promise.all([getEventView(id), getSession()]);
   if (!v) notFound();
   const org = isOrganiser(s);
-  const myXp = s?.playerId ? await weekendXp(id, s.playerId) : null;
-  return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={org ? await allPlayers() : []} myXp={myXp} />;
+  const [myXp, roster] = await Promise.all([s?.playerId ? weekendXp(id, s.playerId) : null, org ? allPlayers() : []]);
+  return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} myXp={myXp} />;
 }
