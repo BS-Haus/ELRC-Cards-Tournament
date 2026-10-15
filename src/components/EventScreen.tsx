@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider, swapPlayers, movePlayer, redrawStage } from "@/app/actions";
 import { useAction } from "@/components/useAction";
+import { pingMoments } from "@/components/LevelMoments";
+import { Shuffle } from "@/components/DrawSlides";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { CheckIn, LiveBadge } from "@/components/CheckIn";
@@ -22,7 +24,9 @@ const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded
 
 /** `myXp`: your rating either side of this weekend so far, and your games in all (src/lib/standings.ts),
  *  loaded on the server. */
-export function EventScreen({ view, me, org, roster, myXp = null }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number; games: number } | null }) {
+/** `drawPending`: you're in the newest stage but haven't watched its draw story yet, so its groups,
+ *  nets and your next game stay hidden: the story is how you find out. */
+export function EventScreen({ view, me, org, roster, myXp = null, drawPending = false }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number; games: number } | null; drawPending?: boolean }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [open, setOpen] = useState<string | null>(null); // game id in the score sheet
@@ -34,6 +38,14 @@ export function EventScreen({ view, me, org, roster, myXp = null }: { view: Even
     const t = setInterval(() => { if (!document.hidden && !open) router.refresh(); }, 5000);
     return () => clearInterval(t);
   }, [ev.status, open, router]);
+
+  // Once the draw story's been watched (LevelMoments says so), fetch the page again to reveal it.
+  useEffect(() => {
+    if (!drawPending) return;
+    const reveal = () => router.refresh();
+    window.addEventListener("cards:drawseen", reveal);
+    return () => window.removeEventListener("cards:drawseen", reveal);
+  }, [drawPending, router]);
 
   const p = (id: string) => people[id];
   // Who's in the tournament right now: checked in, plus everyone from the last stage not marked
@@ -161,7 +173,9 @@ export function EventScreen({ view, me, org, roster, myXp = null }: { view: Even
             </Section>
           )}
 
-          {live && queues.some((q) => q.length) && (
+          {drawPending && <DrawVeil kind={current?.kind} />}
+
+          {!drawPending && live && queues.some((q) => q.length) && (
             <Section title="On the nets" aside="Tap the winners, slide the score">
               <div className="grid gap-2.5">
                 {queues.map((q, i) => (
@@ -171,7 +185,7 @@ export function EventScreen({ view, me, org, roster, myXp = null }: { view: Even
             </Section>
           )}
 
-          {current && (
+          {current && !drawPending && (
             <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`}>
               <div className="grid gap-3">
                 {curGroups.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
@@ -222,7 +236,7 @@ export function EventScreen({ view, me, org, roster, myXp = null }: { view: Even
       {started && tab === "you" && (
         <YouTab
           view={view} me={me} state={myEntry} day={mine} iPlayed={iPlayed} waiting={!!me && waiting.includes(me)}
-          groups={curGroups} live={live} done={done} org={org} run={run} pending={pending} onOpen={setOpen} xp={myXp}
+          groups={curGroups} live={live} done={done} org={org} run={run} pending={pending} onOpen={setOpen} xp={myXp} veiled={drawPending}
         />
       )}
 
@@ -274,10 +288,11 @@ function Tabs({ tab, setTab, done, nudge }: { tab: "event" | "you"; setTab: (t: 
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 
 /** Your own day: are you in, what's next for you and where, how it's gone so far, and the photos. */
-function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, org, run, pending, onOpen, xp }: {
+function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, org, run, pending, onOpen, xp, veiled }: {
   view: EventView; me: string | null; state: EntryState | null; day: MyDay | null; iPlayed: boolean; waiting: boolean;
   groups: GroupView[]; live: boolean; done: boolean; org: boolean; run: Run; pending: boolean; onOpen: (id: string) => void;
   xp: { before: number; after: number; games: number } | null;
+  veiled: boolean;
 }) {
   const { event: ev, games, people } = view;
   const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
@@ -305,11 +320,13 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
         </div>
       )}
 
-      {live && (
+      {veiled && <DrawVeil kind={view.stages.at(-1)?.kind} />}
+
+      {live && !veiled && (
         <Section title="Up next">
           {first ? (
             <div className="grid gap-2">
-              <div className={`rounded-2xl p-4 ${first.ahead === 0 ? "bg-accent text-ink" : card}`}>
+              <div className={`min-w-0 rounded-2xl p-4 ${first.ahead === 0 ? "bg-accent text-ink" : card}`}>
                 <button onClick={() => onOpen(first.game.id)} className="spk-press block w-full text-left">
                   <div className={`text-[12px] font-bold uppercase tracking-[.1em] ${first.ahead === 0 ? "opacity-70" : "text-accent"}`}>
                     Net {first.net} · {first.ahead === 0 ? "you're on now" : first.ahead === 1 ? "you're next" : `${first.ahead} games before yours`}
@@ -343,7 +360,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
       )}
 
       {day.played.length > 0 && (
-        <Section title="Your games" aside={myGroup && place ? `${ordinal(place)} in ${myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}` : undefined}>
+        <Section title="Your games" aside={!veiled && myGroup && place ? `${ordinal(place)} in ${myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}` : undefined}>
           <div className={`${card} overflow-hidden`}>
             <div className="grid grid-cols-3 text-center">
               {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], xp && xp.games < PROV_N ? [`${xp.games}/${PROV_N}`, "placing"] : [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "rating today"]] as const).map(([v, l]) => (
@@ -372,6 +389,25 @@ function MyGameRow({ x, name, onOpen }: { x: MyGame; name: (id: string) => strin
       </span>
       <span className="tnum shrink-0 font-mono text-[13px] font-bold">{x.score![0]}–{x.score![1]}</span>
     </button>
+  );
+}
+
+/** In place of a stage you haven't seen drawn yet: the draw story is how you find out your group,
+ *  so this asks for it (it also pops up on its own within a few seconds). */
+function DrawVeil({ kind }: { kind?: StageKind }) {
+  const what = kind === "final" ? "finals" : "groups";
+  return (
+    <div className="px-4 pb-6">
+      <motion.button
+        onClick={pingMoments} whileTap={{ scale: 0.98 }}
+        className="relative flex w-full flex-col items-center gap-3 overflow-hidden rounded-[18px] border border-accent/30 bg-accent/[.06] px-5 py-8 text-center"
+      >
+        <Shuffle n={10} compact />
+        <span className="text-[19px] font-black">The {what} are drawn</span>
+        <span className="max-w-[30ch] text-[13.5px] text-muted">Watch the draw to find out your {kind === "final" ? "final" : "group"}, your net and your first game.</span>
+        <span className="mt-1 rounded-full bg-accent px-5 py-2.5 text-[14px] font-extrabold text-ink">Watch the draw</span>
+      </motion.button>
+    </div>
   );
 }
 

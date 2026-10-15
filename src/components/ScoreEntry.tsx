@@ -65,8 +65,10 @@ export function ScoreEntry({ a, b, people, to, value, onChange, onAccent = false
       </motion.button>
     );
   };
+  // min-w-0 all the way down: the dial is far wider than the screen, and inside a grid or flex
+  // item it would otherwise push the whole card (and page) out to its full width.
   return (
-    <div>
+    <div className="w-full min-w-0">
       <div className="flex items-center gap-1.5">
         {half("a")}
         <span className={`font-mono text-[20px] font-bold ${onAccent ? "text-ink/30" : "text-[#3A4046]"}`}>:</span>
@@ -134,12 +136,12 @@ function ScoreRail({ value, onChange, onAccent }: { value: number; onChange: (v:
   };
   const endDrag = (e: React.PointerEvent<HTMLDivElement>) => { const d = drag.current; if (!d || d.id !== e.pointerId) return; drag.current = null; if (d.moving) pick(nearest()); };
   return (
-    <div className="relative">
+    <div className="relative w-full min-w-0">
       <div className={`absolute left-1/2 top-[-2px] z-[2] h-1.5 w-0.5 -translate-x-1/2 rounded ${onAccent ? "bg-ink" : "bg-accent"}`} />
       <div
         ref={ref} onScroll={() => { if (!settling.current) commit(nearest()); }} onTouchStart={() => { settling.current = false; }}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}
-        className="spk-rail spk-noselect flex cursor-grab overflow-x-auto overflow-y-hidden"
+        className="spk-rail spk-noselect flex w-full min-w-0 cursor-grab overflow-x-auto overflow-y-hidden"
         style={{ scrollbarWidth: "none", scrollSnapType: "x mandatory", touchAction: "pan-x", padding: `6px calc(50% - ${RAIL_TICK / 2}px)`, maskImage: "linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent)", WebkitMaskImage: "linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent)" }}
       >
         {Array.from({ length: RAIL_MAX + 1 }, (_, n) => {

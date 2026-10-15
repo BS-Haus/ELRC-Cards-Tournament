@@ -67,7 +67,8 @@ export function LevelMoments() {
       const at = draw.story.createdAt;
       setDraw(null);
       showing.current = false;
-      seenDraw(at).catch(() => {});
+      // Tell the event page, which keeps the new groups hidden until the story's been seen.
+      seenDraw(at).catch(() => {}).finally(() => { try { window.dispatchEvent(new Event("cards:drawseen")); } catch {} });
     };
     return <DrawReel key={draw.story.createdAt} feed={draw} onClose={close} />;
   }
