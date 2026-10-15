@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getSession, isOrganiser } from "@/lib/auth/session";
-import { getEventView, allPlayers, weekendXp } from "@/lib/data";
+import { getEventView, allPlayers, weekendXp, drawPending } from "@/lib/data";
 import { EventScreen } from "@/components/EventScreen";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +28,6 @@ export default async function EventPage({ params }: Props) {
   const [v, s] = await Promise.all([getEventView(id), getSession()]);
   if (!v) notFound();
   const org = isOrganiser(s);
-  const [myXp, roster] = await Promise.all([s?.playerId ? weekendXp(id, s.playerId) : null, org ? allPlayers() : []]);
-  return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} myXp={myXp} />;
+  const [myXp, roster, hidden] = await Promise.all([s?.playerId ? weekendXp(id, s.playerId) : null, org ? allPlayers() : [], s?.playerId ? drawPending(id, s.playerId) : false]);
+  return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} myXp={myXp} drawPending={hidden} />;
 }

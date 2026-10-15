@@ -28,7 +28,7 @@ export function ScoreBoxes({ game, to, canScore, onOpen, people, onAccent = fals
     return <button type="button" onClick={onOpen} className={`spk-press h-11 w-full rounded-xl text-[13.5px] font-bold ${onAccent ? "bg-ink/10" : "bg-raised text-muted"}`}>Sign in to enter the score</button>;
   }
   return (
-    <div>
+    <div className="min-w-0">
       {toast}
       <ScoreEntry a={left} b={right} people={people} to={to} value={pick} onChange={setPick} onAccent={onAccent} />
       {/* The save button only appears once there's a result to save, so an unscored card stays short. */}

@@ -383,6 +383,20 @@ export async function myDrawStory(playerId: string): Promise<DrawFeed | null> {
   return { story, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(p) };
 }
 
+/** True while `playerId` is in this event's newest stage but hasn't seen its draw story yet: the
+ *  event page keeps that stage's groups (and their games) under wraps until they have, so the
+ *  story is how they find out. */
+export async function drawPending(eventId: string, playerId: string): Promise<boolean> {
+  const [p] = await db.select({ seen: players.stageSeenAt }).from(players).where(eq(players.id, playerId));
+  if (!p) return false;
+  const [st] = await db.select({ id: stages.id, at: stages.createdAt }).from(stages).where(eq(stages.eventId, eventId)).orderBy(desc(stages.no)).limit(1);
+  if (!st || st.at <= p.seen) return false;
+  const [hit] = await db.select({ id: games.id }).from(games)
+    .where(and(eq(games.stageId, st.id), or(eq(games.a1, playerId), eq(games.a2, playerId), eq(games.b1, playerId), eq(games.b2, playerId))))
+    .limit(1);
+  return !!hit;
+}
+
 type Everything = Awaited<ReturnType<typeof everything>>;
 const momentEvents = (evs: Everything["evs"], gs: Everything["gs"]) =>
   evs.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.getTime(), games: gs.filter((g) => g.eventId === e.id) }));
