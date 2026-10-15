@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, headToHead, finalName, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
+import { finalsCut, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, headToHead, finalName, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -309,5 +309,20 @@ describe("placementOrder after a mid-stage move", () => {
     const finished = games.map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 10, ord: g.id === "4" ? 9 : g.ord }));
     expect(currentMembers(finished, 1)).toContain("mover");
     expect(currentMembers(finished, 0)).not.toContain("mover");
+  });
+});
+
+describe("finalsCut", () => {
+  it("two groups of 5: top 2 of each, plus the best 3rd, make the A final of 5", () => {
+    expect(finalsCut(10, 2)).toEqual({ sure: 2, extra: 1, aSize: 5 });
+  });
+  it("two groups of 4: the top 2 of each, exactly", () => {
+    expect(finalsCut(8, 2)).toEqual({ sure: 2, extra: 0, aSize: 4 });
+  });
+  it("three groups of 4: each winner, plus the best runner-up", () => {
+    expect(finalsCut(12, 3)).toEqual({ sure: 1, extra: 1, aSize: 4 });
+  });
+  it("too few for two finals: no line", () => {
+    expect(finalsCut(7, 1)).toBeNull();
   });
 });

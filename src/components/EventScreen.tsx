@@ -13,7 +13,7 @@ import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { ScoreBoxes } from "@/components/ScoreBoxes";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
+import { finalsCut, netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
@@ -188,7 +188,7 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
           {current && !drawPending && (
             <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`}>
               <div className="grid gap-3">
-                {curGroups.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
+                {curGroups.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} cut={current.kind === "random" ? finalsCut(here.length, curGroups.length) : null} />)}
               </div>
             </Section>
           )}
@@ -469,7 +469,9 @@ function NetCard({ net, now, next, people, out, onOpen, to, canScore }: { net: n
   );
 }
 
-function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: { g: GroupView; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string }) {
+/** `cut`: where the A final's line falls in a random group's table (finalsCut): the top `sure` are
+ *  in, and with `extra` places left over, the next one might be. */
+function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, cut = null }: { g: GroupView; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string; cut?: { sure: number; extra: number } | null }) {
   const final = g.kind === "final";
   const tint = final ? tierColor(g.name) : "#CBFB4F";
   const name = (id: string) => people[id]?.name ?? "Someone";
@@ -506,10 +508,13 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: {
           <span>#</span><span>Player</span><span className="text-right">Pts</span><span className="text-right">W–L</span><span className="text-right">+/−</span>
         </div>
         <LayoutGroup id={`group-${g.stageNo}-${g.groupNo}`}>
-          {g.table.map((r, i) => {
+          {g.table.flatMap((r, i) => {
             const pd = r.pf - r.pa;
-            return (
-              <motion.div key={r.id} layout="position" transition={SOFT} className={`grid grid-cols-[28px_1fr_36px_44px_44px] items-center border-t border-white/[.04] px-4 py-2 ${r.id === me ? "bg-accent/[.06]" : ""}`}>
+            const inA = !!cut && i < cut.sure, maybe = !!cut && cut.extra > 0 && i === cut.sure;
+            const row = (
+              <motion.div key={r.id} layout="position" transition={SOFT}
+                className={`grid grid-cols-[28px_1fr_36px_44px_44px] items-center border-t border-white/[.04] px-4 py-2 ${r.id === me ? "bg-accent/[.06]" : ""}`}
+                style={inA ? { boxShadow: "inset 3px 0 0 #CBFB4F" } : maybe ? { boxShadow: "inset 3px 0 0 rgba(203,251,79,.35)" } : undefined}>
                 <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
                 <span className="flex min-w-0 items-center gap-2"><Avatar p={people[r.id]} size={22} dim={out.has(r.id)} /><PlayerLink p={people[r.id]} className={`truncate font-semibold ${out.has(r.id) ? "text-dim" : ""}`} />{out.has(r.id) && <span className="text-[11px] text-dim">left</span>}</span>
                 <AnimatedNumber value={r.w} className="text-right font-black" />
@@ -517,6 +522,15 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: {
                 <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
               </motion.div>
             );
+            // The A final's line, under the last place that's sure of it.
+            if (!cut || i !== cut.sure - 1 || i === g.table.length - 1) return [row];
+            return [row, (
+              <motion.div key="cut" layout="position" transition={SOFT} className="flex items-center gap-2 px-4 py-1" aria-label="A final cut-off">
+                <span className="h-px flex-1 border-t border-dashed border-accent/70" />
+                <span className="text-[10px] font-extrabold uppercase tracking-[.1em] text-accent">↑ A final{cut.extra ? ` · plus best ${ordinal(cut.sure + 1)}` : ""}</span>
+                <span className="h-px w-3 border-t border-dashed border-accent/70" />
+              </motion.div>
+            )];
           })}
         </LayoutGroup>
       </div>
