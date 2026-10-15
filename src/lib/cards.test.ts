@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, finalName, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
+import { splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, headToHead, finalName, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -172,47 +172,52 @@ describe("seedOrder", () => {
   });
 });
 
-describe("decider", () => {
-  // A group of 4 where p0, p1 and p3 all go 2–1, +5: the top two are level.
-  const base = asGames(planStage("random", ids(4), 1));
-  const wins = (g: Game, side: "a" | "b") => ({ ...g, status: "done" as const, scoreA: side === "a" ? 15 : 10, scoreB: side === "a" ? 10 : 15 });
-  // Games: (p0,p1 v p2,p3), (p0,p2 v p1,p3), (p0,p3 v p1,p2). p0+p1 win, then p1+p3 win, then p0+p3 win.
-  const tiedGroup = [wins(base[0], "a"), wins(base[1], "b"), wins(base[2], "a")];
-  const d = (x: Game, i: number, plan: { a: [string, string]; b: [string, string] }, sa: number, sb: number): Game =>
-    ({ ...x, id: `d${i}`, seq: 4 + i, a: plan.a, b: plan.b, decider: true, status: "done", scoreA: sa, scoreB: sb });
+describe("ties and the decider", () => {
+  const mk = (seq: number, a: [string, string], b: [string, string], sa: number, sb: number): Game =>
+    ({ id: `g${seq}`, stageNo: 1, kind: "random", groupNo: 0, groupName: "A", seq, ord: seq, net: 1, a, b, subs: [], scoreA: sa, scoreB: sb, status: "done" });
+  // p0 and p1 both 2–1, +6, 40 points scored, and 1–1 against each other; p2 and p3 behind.
+  const twoWay = [mk(1, ["p0", "p1"], ["p2", "p3"], 15, 9), mk(2, ["p0", "p2"], ["p1", "p3"], 15, 10), mk(3, ["p0", "p3"], ["p1", "p2"], 10, 15)];
+  // Every game 15–10: p0, p1 and p2 all 2–1, +5, 40 scored.
+  const threeWay = [mk(1, ["p0", "p1"], ["p2", "p3"], 15, 10), mk(2, ["p0", "p2"], ["p1", "p3"], 15, 10), mk(3, ["p0", "p3"], ["p1", "p2"], 10, 15)];
+  const line = (id: string, w: number, pf: number, pa: number) => ({ id, gp: 3, w, l: 3 - w, pf, pa });
 
-  it("reports the tie, then pairs the tied two against each other with swapped partners", () => {
-    const w = groupWinner(tiedGroup);
+  it("ranks on wins, then points difference, then points scored", () => {
+    expect(groupRank([line("x", 2, 40, 35), line("y", 2, 42, 37)]).map((r) => r.id)).toEqual(["y", "x"]);
+    expect(groupRank([line("x", 2, 40, 33), line("y", 2, 42, 37)]).map((r) => r.id)).toEqual(["x", "y"]);
+  });
+
+  it("then on head to head: who won more of their games against each other", () => {
+    const g = [mk(1, ["x", "a"], ["y", "b"], 15, 10), mk(2, ["x", "b"], ["y", "a"], 15, 12), mk(3, ["x", "y"], ["a", "b"], 15, 3)];
+    expect(headToHead(g, "x", "y")).toBe(1);
+    expect(headToHead(g, "y", "x")).toBe(-1);
+    expect(headToHead(twoWay, "p0", "p1")).toBe(0);
+    expect(groupRank([line("y", 2, 40, 35), line("x", 2, 40, 35)], g).map((r) => r.id)).toEqual(["x", "y"]);
+  });
+
+  it("goes to a one-game decider when two are still level, tied two on opposite sides", () => {
+    const w = groupWinner(twoWay);
     expect(w.winner).toBeNull();
-    expect(w.tied).toHaveLength(2);
-    const table = groupRank(tally(tiedGroup, ids(4)).values());
-    const plan = decideTie(table, [w.tied[0], w.tied[1]]);
-    expect(plan).toHaveLength(2);
-    const [x, y] = w.tied;
-    // Opposite sides in both games, and each partners each of the other two exactly once.
-    for (const g of plan) expect(g.a.includes(x) && g.b.includes(y)).toBe(true);
-    expect(new Set([plan[0].a[1], plan[1].a[1]]).size).toBe(2);
-    expect(plan[0].a[1]).toBe(plan[1].b[1]);
+    expect([...w.tied].sort()).toEqual(["p0", "p1"]);
+    const plan = decideTie(groupRank(tally(twoWay, ids(4)).values(), twoWay), [w.tied[0], w.tied[1]], () => 0.2);
+    expect(plan).toHaveLength(1);
+    expect(plan[0].a.includes(w.tied[0]) && plan[0].b.includes(w.tied[1])).toBe(true);
+    expect([plan[0].a[1], plan[0].b[1]].sort()).toEqual(["p2", "p3"]);
   });
 
-  it("decides on total points across both games, and never changes anyone's record", () => {
-    const w = groupWinner(tiedGroup);
-    const table = groupRank(tally(tiedGroup, ids(4)).values());
-    const plan = decideTie(table, [w.tied[0], w.tied[1]]);
-    const games = [...tiedGroup, d(base[0], 0, plan[0], 11, 9), d(base[0], 1, plan[1], 8, 11)];
-    const r = groupWinner(games);
-    expect(r.decider).toBe("decided");
-    expect(r.winner).toBe(w.tied[1]); // y: 9 + 11 = 20 beats x: 11 + 8 = 19
-    expect(tally(games).get("p0")).toEqual(tally(tiedGroup).get("p0"));
+  it("gives the group to whoever's side wins the decider, and never changes anyone's record", () => {
+    const w = groupWinner(twoWay);
+    const [plan] = decideTie(groupRank(tally(twoWay, ids(4)).values(), twoWay), [w.tied[0], w.tied[1]], () => 0.7);
+    const decider = { ...mk(4, plan.a, plan.b, 9, 11), decider: true };
+    const r = groupWinner([...twoWay, decider]);
+    expect(r).toMatchObject({ decider: "decided", winner: w.tied[1] });
+    expect(tally([...twoWay, decider]).get("p2")).toEqual(tally(twoWay).get("p2"));
+    expect(groupWinner([...twoWay, { ...decider, status: "todo" as const, scoreA: null, scoreB: null }]).decider).toBe("playing");
   });
 
-  it("is playing until both games have scores, and level if the points tie", () => {
-    const w = groupWinner(tiedGroup);
-    const table = groupRank(tally(tiedGroup, ids(4)).values());
-    const plan = decideTie(table, [w.tied[0], w.tied[1]]);
-    const one = d(base[0], 0, plan[0], 11, 9);
-    expect(groupWinner([...tiedGroup, one, { ...d(base[0], 1, plan[1], 0, 0), status: "todo", scoreA: null, scoreB: null }]).decider).toBe("playing");
-    expect(groupWinner([...tiedGroup, one, d(base[0], 1, plan[1], 9, 11)]).decider).toBe("level");
+  it("shows three or more level as a tie with no decider, rather than leaving one of them out", () => {
+    const w = groupWinner(threeWay);
+    expect(w.winner).toBeNull();
+    expect([...w.tied].sort()).toEqual(["p0", "p1", "p2"]);
   });
 });
 

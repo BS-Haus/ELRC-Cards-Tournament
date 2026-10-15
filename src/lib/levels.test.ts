@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Game } from "./cards";
-import { xpWeekends, levelFor, climb, winXp, lossXp, LEVELS, XP } from "./levels";
+import { xpWeekends, levelFor, winXp, lossXp, LEVELS, XP } from "./levels";
 
 let n = 0;
 /** One finished game: a's score first. */
@@ -74,9 +74,4 @@ describe("levels", () => {
     expect(levelFor(80).progress).toBeCloseTo((80 - 60) / (110 - 60), 5);
   });
 
-  it("draws the lines a climb crossed, a few at most, and the next one up", () => {
-    expect(climb([]).marks).toEqual([]);
-    expect(climb([20, 70]).marks.map((m) => m.name)).toEqual(["Whiff Merchant", "Tacky Boomer", "Soft Touch"]);
-    expect(climb([10, 400]).marks).toHaveLength(4);
-  });
 });

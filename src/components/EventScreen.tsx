@@ -466,12 +466,12 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: {
       {(g.winner || g.tied.length > 0) && (
         <div className="mx-3 mb-2 rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: `${tint}22`, color: tint }}>
           {g.winner
-            ? `★ ${name(g.winner)} ${final ? `wins the ${g.name} final` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)} on points` : ""}`
+            ? `★ ${name(g.winner)} ${final ? `wins the ${g.name} final` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)}` : ""}`
             : g.decider === "playing"
-              ? `Decider: ${tiedNames} play two games to ${DECIDER_TO}, swapping partners. Most points across both wins.`
+              ? `Decider: one game to ${DECIDER_TO}, ${tiedNames} on opposite sides. Whoever's side wins tops the group.`
               : g.decider === "level"
                 ? `Still level after the decider (${pts[0]}–${pts[1]}). Play it again, or toss a coin.`
-                : `Tied at the top: ${tiedNames}.${org ? "" : " The organiser can set up a decider."}`}
+                : g.tied.length > 2 ? `Tied at the top: ${tiedNames}, level on wins and points. The organiser calls it, or toss a coin.` : `Tied at the top: ${tiedNames}, level on wins, points and head to head.${org ? "" : " The organiser can set up a decider."}`}
           {org && g.tied.length === 2 && (g.decider === "none" || g.decider === "level") && (
             <button disabled={pending} onClick={() => run(() => addDecider(eventId, g.stageNo, g.groupNo), "Decider added. It's next on the net")} className={`${btnPrimary} mt-2 w-full`}>
               {g.decider === "level" ? "Play the decider again" : "Play decider"}

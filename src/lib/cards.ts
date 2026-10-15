@@ -19,7 +19,7 @@ export type Game = {
   scoreA: number | null;
   scoreB: number | null;
   status: GameStatus;
-  /** One of the two tie-break games (decideTie): settles who tops the group, counts for nothing else. */
+  /** The tie-break game (decideTie): settles who tops the group, counts for nothing else. */
   decider?: boolean;
 };
 
@@ -175,8 +175,23 @@ export function rank(lines: Iterable<Line>): Line[] {
 }
 
 /** Inside one group, points (= wins) decide, then point difference. */
-export function groupRank(lines: Iterable<Line>): Line[] {
-  return [...lines].sort((x, y) => y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa));
+/** Who came out on top in the games two players played on opposite sides: 1 if x, -1 if y, 0 if
+ *  level or they never faced each other. Deciders and a sub's games don't count. */
+export function headToHead(games: Game[], x: string, y: string): number {
+  let n = 0;
+  for (const g of games) {
+    if (!isDone(g) || g.decider || g.subs.includes(x) || g.subs.includes(y)) continue;
+    const xa = g.a.includes(x), xb = g.b.includes(x), ya = g.a.includes(y), yb = g.b.includes(y);
+    if (!((xa && yb) || (xb && ya))) continue;
+    n += xa === g.scoreA! > g.scoreB! ? 1 : -1;
+  }
+  return Math.sign(n);
+}
+
+/** Inside one group: wins, then points difference, then points scored, then (given the games)
+ *  who won when the two faced each other. Ties that survive all four go to a decider. */
+export function groupRank(lines: Iterable<Line>, games?: Game[]): Line[] {
+  return [...lines].sort((x, y) => y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa) || y.pf - x.pf || (games ? -headToHead(games, x.id, y.id) : 0));
 }
 
 /** Everyone who appears in a group's games (minus anyone who only ever subbed in). */
@@ -299,7 +314,7 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
     const nos = [...new Set(last.map((g) => g.groupNo))].sort((a, b) => a - b);
     played = nos.flatMap((no) => {
       const gs = last.filter((g) => g.groupNo === no);
-      return groupRank(tally(gs.filter((g) => g.status !== "void"), groupMembers(gs)).values()).map((r) => r.id);
+      return groupRank(tally(gs.filter((g) => g.status !== "void"), groupMembers(gs)).values(), gs).map((r) => r.id);
     });
     // Anyone who played earlier stages but not the last one (rare): after them, by the table.
     const rest = rank(tally(groupStages).values()).filter((r) => r.gp > 0).map((r) => r.id);
@@ -324,8 +339,14 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
 export function groupWinner(games: Game[]): { winner: string | null; tied: string[]; decider: "none" | "playing" | "decided" | "level" } {
   const live = games.filter((g) => g.status !== "void" && !g.decider);
   if (!live.length || live.some((g) => !isDone(g))) return { winner: null, tied: [], decider: "none" };
-  const rows = groupRank(tally(live, groupMembers(live)).values());
-  if (!(rows.length > 1 && rows[0].w === rows[1].w && rows[0].pf - rows[0].pa === rows[1].pf - rows[1].pa)) {
+  const rows = groupRank(tally(live, groupMembers(live)).values(), live);
+  // Everyone level with the top on wins, points difference and points scored...
+  const top = rows.filter((r) => r.w === rows[0].w && r.pf - r.pa === rows[0].pf - rows[0].pa && r.pf === rows[0].pf);
+  // ...and, for two, head to head too. Three or more level: shown as a tie, no decider (one game
+  // can't fairly settle three people), so the organiser calls it.
+  if (top.length > 2) return { winner: null, tied: top.map((r) => r.id), decider: "none" };
+  const level = top.length === 2 && headToHead(live, top[0].id, top[1].id) === 0;
+  if (!level) {
     return { winner: rows[0]?.id ?? null, tied: [], decider: "none" };
   }
   const tied = [rows[0].id, rows[1].id];
@@ -342,16 +363,13 @@ export function deciderPoints(deciders: Game[], tied: string[]): number[] {
   return tied.map((id) => deciders.filter(isDone).reduce((n, g) => n + (g.a.includes(id) ? g.scoreA! : g.b.includes(id) ? g.scoreB! : 0), 0));
 }
 
-/**
- * A fair decider between two players level at the top of a group: two games in which they're on
- * opposite sides and swap partners, so each plays once with each of the next two in the table
- * (x+c v y+d, then x+d v y+c). Neither gets the better partner. Most points across both wins.
- */
-export function decideTie(table: Line[], tied: [string, string]): Planned[] {
+/** A tie that survives every tie-break: one game to 11, the tied two on opposite sides, each with
+ *  one of the group's other players (a coin decides who gets whom). Whoever's side wins tops the group. */
+export function decideTie(table: Line[], tied: [string, string], rnd: () => number = Math.random): Planned[] {
   const [x, y] = tied;
   const [c, d] = table.map((r) => r.id).filter((id) => id !== x && id !== y);
   if (!c || !d) return [];
-  return [{ a: [x, c], b: [y, d] }, { a: [x, d], b: [y, c] }];
+  return rnd() < 0.5 ? [{ a: [x, c], b: [y, d] }] : [{ a: [x, d], b: [y, c] }];
 }
 
 /** "Group A", "A final" or "Group A decider": what a game is, for headings. */

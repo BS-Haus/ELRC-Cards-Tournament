@@ -8,7 +8,7 @@ import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
 import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
-import { getEventView, groupsOf, myMoments, myDrawStory, type Moments, type DrawFeed } from "@/lib/data";
+import { getEventView, groupsOf, myMoments, myDrawStory, gameStory, type Moments, type DrawFeed } from "@/lib/data";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -403,9 +403,9 @@ export async function redrawStage(eventId: string): Promise<Result> {
 }
 
 /**
- * Organiser: settle a tie at the top of a group with two decider games (decideTie): the tied pair
- * on opposite sides, swapping partners between the next two in the table. They go on the group's
- * net, next in line, and count for nothing but who tops the group.
+ * Organiser: settle a tie at the top of a group with one decider game (decideTie): the tied pair
+ * on opposite sides, each partnered with one of the next two in the table. It goes on the group's
+ * net, next in line, and counts for nothing but who tops the group.
  */
 export async function addDecider(eventId: string, stageNo: number, groupNo: number): Promise<Result> {
   const no = await requireOrganiser(); if (no) return no;
@@ -544,4 +544,11 @@ export async function seenMoments(upTo: number): Promise<Result> {
   const at = new Date(Math.min(upTo + 1, Date.now() + 60_000));
   await db.update(players).set({ xpSeenAt: sql`greatest(${players.xpSeenAt}, ${at.toISOString()}::timestamptz)` }).where(eq(players.id, s.playerId!));
   return { ok: true };
+}
+
+/** The story of one past game for a player, replayed from their profile. Anyone can look: it's
+ *  the same results the profile already shows. */
+export async function replayGame(playerId: string, gameId: string): Promise<Moments | null> {
+  if (!isUuid(playerId) || !isUuid(gameId)) return null;
+  try { return await gameStory(playerId, gameId); } catch { return null; }
 }

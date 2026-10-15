@@ -76,7 +76,7 @@ function finishes(games: Game[]): Map<string, XpPart> {
     const { winner } = groupWinner(gg);
     if (!winner) continue;
     if (no === nos[0]) {
-      const rest = groupRank(tally(gg, groupMembers(gg)).values()).map((r) => r.id).filter((id) => id !== winner);
+      const rest = groupRank(tally(gg, groupMembers(gg)).values(), gg).map((r) => r.id).filter((id) => id !== winner);
       out.set(winner, { label: "Champion", xp: XP.champion });
       if (rest[0]) out.set(rest[0], { label: `${gg[0].groupName} final, 2nd`, xp: XP.second });
       if (rest[1]) out.set(rest[1], { label: `${gg[0].groupName} final, 3rd`, xp: XP.third });
@@ -117,14 +117,4 @@ export function xpWeekends(events: { id: string; startsAt: number; games: Game[]
     }
   }
   return out;
-}
-
-/** The Me tab's chart: XP after each weekend (oldest first), and the level lines it crossed, plus
- *  the next one up, so a drop below a line shows as clearly as a climb above one. */
-export function climb(after: number[]): { values: number[]; marks: Level[] } {
-  if (!after.length) return { values: [], marks: [] };
-  const hi = Math.max(...after);
-  const next = levelFor(hi).next;
-  const crossed = LEVELS.filter((l) => l.min > 0 && l.min >= Math.min(...after) && l.min <= hi).slice(-3); // a few, not a ladder
-  return { values: after, marks: next ? [...crossed, next] : crossed };
 }

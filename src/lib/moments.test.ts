@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMoments, cheerFor, type MomentEvent, type TimedGame } from "./moments";
+import { buildMoments, cheerFor, gameMoments, gameXps, type MomentEvent, type TimedGame } from "./moments";
 
 const game = (id: string, at: number, a: [string, string], b: [string, string], sa: number | null, sb: number | null, extra: Partial<TimedGame> = {}): TimedGame => ({
   id, eventId: "e1", updatedAt: at, stageNo: 1, kind: "random", groupNo: 0, groupName: "A", seq: 1, ord: 0, net: 1,
@@ -46,5 +46,30 @@ describe("buildMoments", () => {
   it("gives the same message for the same game every time", () => {
     expect(cheerFor(true, 4, "g1")).toBe(cheerFor(true, 4, "g1"));
     expect(cheerFor(false, 2, "g9")).toMatch(/close|coin|right there/i);
+  });
+});
+
+describe("gameMoments (replaying a past game)", () => {
+  const games = [
+    game("g1", 100, ["me", "p"], ["x", "y"], 15, 11),
+    game("g2", 200, ["me", "x"], ["p", "y"], 13, 15),
+    game("g3", 300, ["me", "y"], ["p", "x"], 15, 4),
+  ];
+
+  it("tells a game's story as things stood when it was scored, ignoring later games", () => {
+    expect(gameMoments(ev(games), "me", "g1")[0]).toMatchObject({ kind: "game", xp: 20, turnedUp: true, before: 0, after: 20 });
+    expect(gameMoments(ev(games), "me", "g2")[0]).toMatchObject({ kind: "game", xp: -3, before: 20, after: 17 });
+    expect(gameMoments(ev(games), "me", "g2")[1]).toMatchObject({ kind: "levelDown" });
+  });
+
+  it("each game's XP adds up to the total, and matches what popped up at the time", () => {
+    const xps = gameXps(ev(games), "me", ["g1", "g2", "g3"]);
+    const live = buildMoments(ev(games), "me", 0).slides.filter((s) => s.kind === "game").map((s) => (s.kind === "game" ? s.xp : 0));
+    expect([...xps.values()]).toEqual(live);
+  });
+
+  it("has no story for a game you subbed in, a decider or someone else's game", () => {
+    const more = [...games, game("g4", 400, ["me", "p"], ["x", "y"], 15, 9, { subs: ["me"] }), game("g5", 500, ["me", "p"], ["x", "y"], 5, 3, { decider: true }), game("g6", 600, ["p", "x"], ["y", "z"], 15, 9)];
+    for (const id of ["g4", "g5", "g6"]) expect(gameMoments(ev(more), "me", id)).toEqual([]);
   });
 });

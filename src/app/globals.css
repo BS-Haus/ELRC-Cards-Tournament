@@ -68,6 +68,15 @@ button:disabled { cursor: default; }
 @media (prefers-reduced-motion: reduce) { .spk-confetti, .spk-crown { animation: none; } .spk-confetti { display: none; } }
 @keyframes spkFade { 0% { opacity: 0; transform: scale(1.04); } 100% { opacity: 1; transform: scale(1); } }
 .spk-fade { animation: spkFade .8s ease-out both; }
+/* Level moments: pieces of a slide arrive one after another (style animationDelay), and the XP
+   lands like a stamp. */
+@keyframes spkRise { 0% { transform: translateY(18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+.spk-rise { animation: spkRise .45s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes spkStamp { 0% { transform: scale(1.8) rotate(-4deg); opacity: 0; } 70% { transform: scale(.94) rotate(-4deg); opacity: 1; } 100% { transform: scale(1) rotate(-4deg); opacity: 1; } }
+.spk-stamp { animation: spkStamp .45s cubic-bezier(.2,.9,.3,1.2) both; transform: rotate(-4deg); }
+@keyframes spkSink { 0% { transform: translateY(-14px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+.spk-sink { animation: spkSink .7s cubic-bezier(.3,.7,.4,1) both; }
+@media (prefers-reduced-motion: reduce) { .spk-rise, .spk-stamp, .spk-sink { animation: none; } }
 
 /* Draw stories: a player dealt into their group like a card. */
 @keyframes spkDeal { 0% { opacity: 0; transform: translate(-40px, -70px) rotate(-14deg) scale(.6); } 70% { opacity: 1; transform: translate(0, 4px) rotate(2deg) scale(1.04); } 100% { opacity: 1; transform: none; } }
