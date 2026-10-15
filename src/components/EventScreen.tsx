@@ -6,6 +6,7 @@ import Link from "next/link";
 import { setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider, swapPlayers, movePlayer, redrawStage } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { pingMoments } from "@/components/LevelMoments";
+import { Shuffle } from "@/components/DrawSlides";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { CheckIn, LiveBadge } from "@/components/CheckIn";
@@ -401,12 +402,7 @@ function DrawVeil({ kind }: { kind?: StageKind }) {
         onClick={pingMoments} whileTap={{ scale: 0.98 }}
         className="relative flex w-full flex-col items-center gap-3 overflow-hidden rounded-[18px] border border-accent/30 bg-accent/[.06] px-5 py-8 text-center"
       >
-        <span className="flex gap-1.5" aria-hidden="true">
-          {[0, 1, 2].map((i) => (
-            <motion.span key={i} className="block h-12 w-9 rounded-lg border border-accent/40 bg-raised"
-              animate={{ rotateY: [0, 180, 360], y: [0, -4, 0] }} transition={{ duration: 2.4, repeat: Infinity, delay: i * 0.25, ease: "easeInOut" }} />
-          ))}
-        </span>
+        <Shuffle n={10} compact />
         <span className="text-[19px] font-black">The {what} are drawn</span>
         <span className="max-w-[30ch] text-[13.5px] text-muted">Watch the draw to find out your {kind === "final" ? "final" : "group"}, your net and your first game.</span>
         <span className="mt-1 rounded-full bg-accent px-5 py-2.5 text-[14px] font-extrabold text-ink">Watch the draw</span>

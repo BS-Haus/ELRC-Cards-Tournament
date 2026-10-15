@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { CountUp, Confetti } from "@/components/StoryReel";
 import { Avatar, tierColor } from "@/components/ui";
 import type { DrawFeed, PlayerLite } from "@/lib/data";
@@ -164,7 +165,8 @@ export function drawSlides(d: DrawFeed): StorySlide[] {
     });
   }
 
-  slides.push({ key: "deal", bg: "from-[#0f2420] to-[#0c0e10]", ms: 7000, body: <Deal groups={s.groups} p={p} me={me.id} final={s.kind === "final"} /> });
+  slides.push({ key: "shuffle", bg: "from-[#101a24] to-[#0c0e10]", ms: 4200, body: <Shuffle n={s.players} final={s.kind === "final"} /> });
+  slides.push({ key: "deal", bg: "from-[#0f2420] to-[#0c0e10]", ms: 4200 + s.players * 160, body: <Deal groups={s.groups} p={p} me={me.id} final={s.kind === "final"} /> });
 
   if (s.mine) {
     const m = s.mine;
@@ -233,25 +235,107 @@ function ResultTable({ g, p, me, done }: { g: ResultGroup; p: (id: string) => Pl
   );
 }
 
-/** The groups dealt out like cards: every player flies in, one after another, into their group. */
+/** The back of a card: the club's lime on near-black, a net in the middle. */
+export function CardBack({ w = 56, h = 78 }: { w?: number; h?: number }) {
+  return (
+    <span className="relative grid shrink-0 place-items-center overflow-hidden rounded-[10px] border-[1.5px] border-accent/50 bg-[#15181b] shadow-[0_6px_14px_-6px_rgba(0,0,0,.7)]"
+      style={{ width: w, height: h, backgroundImage: "repeating-linear-gradient(45deg, rgba(203,251,79,.10) 0 3px, transparent 3px 7px)" }}>
+      <span className="grid place-items-center rounded-full border-2 border-accent bg-[#0c0e10]" style={{ width: w * 0.46, height: w * 0.46 }}>
+        <span className="rounded-full bg-accent" style={{ width: w * 0.12, height: w * 0.12 }} />
+      </span>
+    </span>
+  );
+}
+
+const SHUFFLE_TIMES = [0, 0.16, 0.34, 0.52, 0.66, 0.84, 1];
+
+/** The build-up: a card for every player, face down, fanned, split and riffled together twice,
+ *  then squared up, ready to deal. */
+export function Shuffle({ n, final = false, compact = false }: { n: number; final?: boolean; compact?: boolean }) {
+  const reduce = useReducedMotion();
+  const count = Math.max(4, Math.min(n, 20));
+  const w = compact ? 34 : 64, h = compact ? 47 : 90;
+  const spread = compact ? 70 : 130;
+  // Memoised: the reel re-renders every frame for its progress bar, and fresh keyframe arrays
+  // each render would restart the animation from the top, so it never got past the first frame.
+  const cards = useMemo(() => Array.from({ length: count }, (_, i) => {
+    const t = i / (count - 1) - 0.5; // -0.5 … 0.5
+    const left = i % 2 === 0;
+    const half = (left ? -1 : 1) * spread * 0.55;
+    const fanX = t * spread * 2, fanR = t * 70, fanY = Math.abs(t) * 30;
+    // fan → split into two halves → riffle in → split again → riffle → square up
+    return {
+      x: [0, fanX, half, 0, half * 0.8, 0, 0],
+      y: [0, fanY, -i * 0.6, -i * 0.8, -i * 0.6, -i * 0.8, -i * 0.5],
+      rotate: [0, fanR, left ? -8 : 8, (i % 3) - 1, left ? -6 : 6, (i % 3) - 1, 0],
+      delay: (left ? 0 : 0.04) + (i % 5) * 0.012,
+    };
+  }), [count, spread]);
+  return (
+    <div className={`grid justify-items-center ${compact ? "gap-3" : "gap-8"}`}>
+      {!compact && <div className="text-[13px] font-bold uppercase tracking-[.2em] text-accent">{final ? "Shuffling for the finals" : "Shuffling the deck"}</div>}
+      <div className="relative" style={{ width: w, height: h + (compact ? 6 : 14), perspective: 800 }} aria-hidden="true">
+        {cards.map((c, i) => (
+          <motion.span key={i} className="absolute left-0 top-0" style={{ zIndex: i }}
+            initial={{ x: 0, y: -i * 0.5, rotate: 0 }}
+            animate={reduce ? { x: 0, y: -i * 0.5 } : { x: c.x, y: c.y, rotate: c.rotate }}
+            transition={reduce ? { duration: 0 } : { duration: compact ? 2.6 : 3.8, times: SHUFFLE_TIMES, ease: "easeInOut", delay: c.delay, repeat: compact ? Infinity : 0, repeatDelay: 0.6 }}>
+            <CardBack w={w} h={h} />
+          </motion.span>
+        ))}
+      </div>
+      {!compact && (
+        <div className="grid justify-items-center gap-1 text-center">
+          <div className="tnum text-[54px] font-black leading-none tracking-[-.03em]"><CountUp to={n} /></div>
+          <div className="text-[15px] font-bold text-white/60">players in the deck</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The groups dealt out like cards: each player's card flies off the deck into their group, face
+ *  down, then flips over to show who it is. Yours lands last in its group and glows. */
 function Deal({ groups, p, me, final }: { groups: DrawGroup[]; p: (id: string) => PlayerLite | undefined; me: string; final: boolean }) {
-  let n = 0;
+  const reduce = useReducedMotion();
+  const many = groups.length > 2;
+  const w = many ? 40 : 54, h = many ? 56 : 74;
+  // Deal round-robin, a card to each group in turn, like a real deal.
+  const order: string[] = [];
+  const most = Math.max(...groups.map((g) => g.members.length));
+  for (let r = 0; r < most; r++) for (const g of groups) if (g.members[r]) order.push(g.members[r]);
+  const at = new Map(order.map((id, i) => [id, i]));
+  const step = 0.16;
   return (
     <div className="grid gap-4">
       <div className="text-[13px] font-bold uppercase tracking-[.2em] text-accent">{final ? "Dealing the finals" : "Dealing the groups"}</div>
-      <div className={`grid gap-3 ${groups.length > 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+      <div className={`grid gap-3 ${many ? "grid-cols-2" : "grid-cols-1"}`}>
         {groups.map((g) => {
           const tint = finalTint(g.label);
           return (
             <div key={g.label} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <div className="mb-2 flex items-center justify-between text-[14px] font-black"><span style={{ color: tint }}>{g.label}</span><span className="text-[12px] font-bold text-white/45">Net {g.net}</span></div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="mb-2.5 flex items-center justify-between text-[14px] font-black"><span style={{ color: tint }}>{g.label}</span><span className="text-[12px] font-bold text-white/45">Net {g.net}</span></div>
+              <div className="flex flex-wrap gap-1.5" style={{ perspective: 600 }}>
                 {g.members.map((id) => {
-                  const delay = 250 + n++ * 140;
+                  const d = 0.2 + at.get(id)! * step;
+                  const mine = id === me;
                   return (
-                    <span key={id} className={`spk-deal inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-[13px] font-bold ${id === me ? "bg-accent text-ink" : "bg-white/10"}`} style={{ animationDelay: `${delay}ms` }}>
-                      <Avatar p={p(id)} size={22} />{id === me ? "You" : p(id)?.name}
-                    </span>
+                    <motion.span key={id} className="relative block" style={{ width: w, height: h + 16 }}
+                      initial={reduce ? false : { x: -60, y: -220, rotate: -25, opacity: 0 }}
+                      animate={{ x: 0, y: 0, rotate: 0, opacity: 1 }}
+                      transition={{ type: "spring", stiffness: 260, damping: 22, delay: d }}>
+                      <motion.span className="relative block" style={{ width: w, height: h, transformStyle: "preserve-3d" }}
+                        initial={reduce ? false : { rotateY: 180 }} animate={{ rotateY: 0 }}
+                        transition={{ duration: 0.45, ease: "easeOut", delay: d + 0.35 + (mine ? 0.5 : 0) }}>
+                        {/* face */}
+                        <span className={`absolute inset-0 grid place-items-center content-center gap-1 rounded-[10px] border-[1.5px] px-0.5 text-center ${mine ? "border-accent bg-accent text-ink shadow-[0_0_24px_rgba(203,251,79,.55)]" : "border-white/15 bg-[#1b1f23]"}`} style={{ backfaceVisibility: "hidden" }}>
+                          <Avatar p={p(id)} size={many ? 22 : 28} />
+                          <span className="w-full truncate text-[10.5px] font-extrabold leading-tight">{mine ? "You" : p(id)?.name}</span>
+                        </span>
+                        {/* back */}
+                        <span className="absolute inset-0" style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}><CardBack w={w} h={h} /></span>
+                      </motion.span>
+                    </motion.span>
                   );
                 })}
               </div>
