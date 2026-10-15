@@ -14,8 +14,8 @@ import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, inpu
 import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
-import { ResultCard, Disclosure, AnimatedNumber, SOFT, SPRING } from "@/components/kit";
-import { motion, AnimatePresence, LayoutGroup } from "motion/react";
+import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
+import { motion, LayoutGroup } from "motion/react";
 import { PROV_N } from "@/lib/standings";
 
 const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded: "Seeded groups", final: "Finals" };
@@ -162,10 +162,10 @@ export function EventScreen({ view, me, org, roster, myXp = null }: { view: Even
           )}
 
           {live && queues.some((q) => q.length) && (
-            <Section title="On the nets" aside="Tap a game to score it">
+            <Section title="On the nets" aside="Tap the winners, slide the score">
               <div className="grid gap-2.5">
                 {queues.map((q, i) => (
-                  <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} />
+                  <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} to={q[0] ? toFor(q[0]) : 0} canScore={!!me} />
                 ))}
               </div>
             </Section>
@@ -345,7 +345,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
       {day.played.length > 0 && (
         <Section title="Your games" aside={myGroup && place ? `${ordinal(place)} in ${myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}` : undefined}>
           <div className={`${card} overflow-hidden`}>
-            <div className="grid grid-cols-3 border-b border-white/[.05] text-center">
+            <div className="grid grid-cols-3 text-center">
               {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], xp && xp.games < PROV_N ? [`${xp.games}/${PROV_N}`, "placing"] : [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "rating today"]] as const).map(([v, l]) => (
                 <div key={l} className="py-3">
                   <div className="tnum text-[20px] font-black">{v}</div>
@@ -353,20 +353,25 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
                 </div>
               ))}
             </div>
-          </div>
-          <div className="mt-1.5 flex flex-col gap-1.5">
-            {day.played.map((x) => (
-              <ResultCard
-                key={x.game.id} a={[me!, x.partner]} b={x.opponents} scoreA={x.score![0]} scoreB={x.score![1]} people={view.people}
-                left={<span className={x.won ? "text-win" : "text-loss"}>{x.won ? "WON" : "LOST"}{(x.sub || x.game.decider) && <><br /><span className="text-dim">{x.sub ? "sub" : "decider"}</span></>}</span>}
-                onClick={() => onOpen(x.game.id)} label={`${x.won ? "Won" : "Lost"} ${x.score![0]}–${x.score![1]} with ${name(x.partner)}`}
-              />
-            ))}
+            {day.played.map((x) => <MyGameRow key={x.game.id} x={x} name={name} onOpen={onOpen} />)}
           </div>
         </Section>
       )}
 
     </>
+  );
+}
+
+function MyGameRow({ x, name, onOpen }: { x: MyGame; name: (id: string) => string; onOpen: (id: string) => void }) {
+  return (
+    <button onClick={() => onOpen(x.game.id)} className="spk-press flex w-full items-center gap-3 border-t border-white/[.04] px-4 py-2.5 text-left">
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-black ${x.won ? "bg-win/15 text-win" : "bg-loss/15 text-loss"}`}>{x.won ? "W" : "L"}</span>
+      <span className="min-w-0 flex-1 truncate text-[13.5px]">
+        With <b>{name(x.partner)}</b> <span className="text-muted">vs {x.opponents.map(name).join(" & ")}</span>
+        {(x.sub || x.game.decider) && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-[.08em] text-dim">{x.sub ? "sub" : "decider"}</span>}
+      </span>
+      <span className="tnum shrink-0 font-mono text-[13px] font-bold">{x.score![0]}–{x.score![1]}</span>
+    </button>
   );
 }
 
@@ -405,22 +410,23 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
   )).reduce<React.ReactNode[]>((acc, x, i) => (i ? [...acc, " & ", x] : [x]), []);
 }
 
-/** A net: the game on it now as a result card waiting for its score (tap to score it), and
- *  what's on after. */
-function NetCard({ net, now, next, people, out, onOpen }: { net: number; now?: Game; next?: Game; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void }) {
+/** A net: the game on it now, scored right here (tap the winners, slide the losers' score), and
+ *  what's on after. The header opens the full sheet: subs, skipping, corrections. */
+function NetCard({ net, now, next, people, out, onOpen, to, canScore }: { net: number; now?: Game; next?: Game; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void; to: number; canScore: boolean }) {
   if (!now) return <div className={`${card} p-4 text-[14px] text-muted`}><b className="text-fg">Net {net}</b> · free</div>;
-  const left = needsSub(now, out).length > 0;
   return (
     <div className={`${card} overflow-hidden`}>
-      <ResultCard
-        a={now.a} b={now.b} scoreA={null} scoreB={null} people={people} flat
-        left={<><span className="text-accent">NET {net}</span><br />{now.kind === "final" ? `${now.groupName} fin.` : `Grp ${now.groupName}`}</>}
-        aside={<span className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-extrabold ${left ? "bg-loss/15 text-loss" : "bg-accent text-ink"}`}>{left ? "Sub?" : "Score"}</span>}
-        onClick={() => onOpen(now.id)} label={`Net ${net}: score ${gameLabel(now)}, game ${now.seq}`}
-      />
+      <div className="p-4">
+        <button onClick={() => onOpen(now.id)} className="spk-press flex w-full items-center justify-between text-[12px] font-bold uppercase tracking-[.1em]">
+          <span className="text-accent">Net {net} · on now</span>
+          <span className="text-dim">{gameLabel(now)} · game {now.seq} ›</span>
+        </button>
+        {needsSub(now, out).length > 0 && <div className="mt-2 text-[12.5px] font-semibold text-loss">{needsSub(now, out).map((id) => people[id]?.name).join(" & ")} left: tap above to sub someone in.</div>}
+        <div className="mt-3"><ScoreBoxes key={now.id} game={now} to={to} canScore={canScore} onOpen={() => onOpen(now.id)} people={people} /></div>
+      </div>
       {next && (
-        <div className="border-t border-white/[.05] bg-panel px-4 py-2 text-[12.5px] text-dim">
-          Next: <span className="text-muted">{teamLine(next.a, people, next.subs, out)}</span> vs <span className="text-muted">{teamLine(next.b, people, next.subs, out)}</span>
+        <div className="border-t border-white/[.05] bg-panel px-4 py-2.5 text-[13px] text-muted">
+          Next: <span className="text-fg">{teamLine(next.a, people, next.subs, out)}</span> vs <span className="text-fg">{teamLine(next.b, people, next.subs, out)}</span>
         </div>
       )}
     </div>
@@ -483,40 +489,31 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: {
   );
 }
 
-/** A group's results under its table, newest first, as the ranked app's result cards; the games
- *  still to play fold away under a line that counts them. */
+/** A group's fixtures under its table, in playing order: every game with its score, or a dashed
+ *  box to tap and score it. Rows slide in place as results come in. */
 function GroupGames({ g, people, out, onOpen }: { g: GroupView; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const played = g.games.filter(isDone).sort((x, y) => y.ord - x.ord);
-  const todo = g.games.filter((x) => !isDone(x));
-  const left = (x: Game) => <>{x.decider ? "Decider" : `Game ${x.seq}`}{x.subs.length > 0 && <><br /><span className="text-accent">sub</span></>}{x.status === "void" && <><br />skipped</>}</>;
-  const row = (x: Game) => (
-    <ResultCard key={x.id} flat a={x.a} b={x.b} scoreA={isDone(x) ? x.scoreA : null} scoreB={isDone(x) ? x.scoreB : null} people={people} dim={x.status === "void"}
-      left={left(x)} onClick={() => onOpen(x.id)} label={`${gameLabel(x)}, game ${x.seq}`} />
-  );
+  const games = [...g.games].sort((x, y) => x.ord - y.ord);
   return (
     <div className="mt-1 border-t border-white/[.06]">
-      <motion.div layout transition={SOFT}>
-        <AnimatePresence initial={false}>
-          {played.map((x) => <motion.div key={x.id} layout initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>{row(x)}</motion.div>)}
-        </AnimatePresence>
-      </motion.div>
-      {todo.length > 0 && (
-        <>
-          <button onClick={() => setOpen(!open)} aria-expanded={open} className="spk-press flex w-full items-center gap-2.5 border-t border-white/[.05] bg-panel px-4 py-2.5 text-left">
-            <span className="flex-1 text-[12.5px] font-bold text-muted">{todo.length} {todo.length === 1 ? "game" : "games"} to play</span>
-            <motion.svg animate={{ rotate: open ? 90 : 0 }} transition={SPRING} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" className="text-dimmer" aria-hidden="true"><path d="M9 18l6-6-6-6" /></motion.svg>
-          </button>
-          <AnimatePresence initial={false}>
-            {open && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={SOFT} className="overflow-hidden border-t border-white/[.05]">
-                {todo.map(row)}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </>
-      )}
+      {games.map((x) => <GameRow key={x.id} g={x} people={people} out={out} onOpen={onOpen} />)}
     </div>
+  );
+}
+
+function GameRow({ g, people, out, onOpen }: { g: Game; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void }) {
+  const fin = isDone(g);
+  const aWon = fin && g.scoreA! > g.scoreB!;
+  return (
+    <motion.button
+      layout="position" transition={SOFT} whileTap={{ scale: 0.98 }} onClick={() => onOpen(g.id)} aria-label={`${gameLabel(g)}, game ${g.seq}${fin ? `, ${g.scoreA}–${g.scoreB}` : ""}`}
+      className={`grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-white/[.03] px-4 py-2.5 text-left text-[13.5px] last:border-0 ${g.status === "void" ? "opacity-40" : ""}`}
+    >
+      <span className={fin && aWon ? "font-bold text-accent" : "text-fg/85"}>{g.decider && <span className="mr-1.5 rounded bg-accent/15 px-1 py-0.5 text-[10px] font-bold uppercase tracking-[.08em] text-accent">Decider</span>}{teamLine(g.a, people, g.subs, out)}</span>
+      <span className={`tnum min-w-[58px] rounded-lg px-2 py-1 text-center font-mono text-[13px] font-bold ${fin ? "bg-raised" : g.status === "void" ? "text-dim" : "border border-dashed border-white/15 text-dim"}`}>
+        {fin ? `${g.scoreA}–${g.scoreB}` : g.status === "void" ? "skipped" : "score"}
+      </span>
+      <span className={`text-right ${fin && !aWon ? "font-bold text-accent" : "text-fg/85"}`}>{teamLine(g.b, people, g.subs, out)}</span>
+    </motion.button>
   );
 }
 
