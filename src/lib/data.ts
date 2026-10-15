@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gt, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
-import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle, gameLabel } from "@/lib/cards";
+import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle } from "@/lib/cards";
 
 /** `photo` is the profile picture's URL (versioned, so it can be cached for good), or null. */
 export type PlayerLite = { id: string; name: string; color: string; claimed: boolean; photo: string | null };
@@ -109,7 +109,7 @@ export { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views"
 import { finalsOf, liveEventId } from "@/lib/views";
 import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
 import { buildStory, type Story } from "@/lib/story";
-import { buildMoments, gameMoments, gameResultOf, type MomentSlide, type ResultLine } from "@/lib/moments";
+import { buildMoments, gameMoments, matchMoments, type MomentSlide } from "@/lib/moments";
 import { buildDrawStory, type DrawStory } from "@/lib/drawStory";
 import { ladder, type LadderRow, type PlacingRow } from "@/lib/ladder";
 import { rate, eventChange, PROV_N, type Ratings, type Ledger } from "@/lib/standings";
@@ -413,23 +413,14 @@ export async function gameStory(playerId: string, gameId: string): Promise<Momen
   return { slides, upTo: g.updatedAt, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(p) };
 }
 
-/** A game just scored, for everyone at the net: the score, the odds going in, and all four lines. */
-export type GameResult = {
-  gameId: string; eventTitle: string; label: string; updatedAt: number;
-  a: [string, string]; b: [string, string]; scoreA: number; scoreB: number;
-  chanceA: number; lines: ResultLine[];
-  names: Record<string, PlayerLite>;
-};
-
-export async function gameResult(gameId: string): Promise<GameResult | null> {
+/** The story of a game just scored, for the phone that scored it (see matchMoments). `played`:
+ *  the viewer was in it, so it's their story of the game and can be marked seen. */
+export async function gameResult(gameId: string, viewer: string | null): Promise<(Moments & { played: boolean }) | null> {
   const { ps, evs, gs } = await everything();
   const g = gs.find((x) => x.id === gameId);
-  if (!g || g.status !== "done") return null;
-  const res = gameResultOf(ratingsOf(evs, gs), g);
-  if (!res) return null;
-  return {
-    gameId, eventTitle: evs.find((e) => e.id === g.eventId)?.title ?? "", label: gameLabel(g), updatedAt: g.updatedAt,
-    a: g.a, b: g.b, scoreA: g.scoreA!, scoreB: g.scoreB!, ...res,
-    names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])),
-  };
+  const me = viewer ? ps.find((x) => x.id === viewer) : undefined;
+  if (!g || g.status !== "done" || !me) return null;
+  const slides = matchMoments(momentEvents(evs, gs), ratingsOf(evs, gs), gameId, viewer);
+  if (!slides.length) return null;
+  return { slides, upTo: g.updatedAt, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(me), played: [...g.a, ...g.b].includes(me.id) };
 }
