@@ -274,6 +274,20 @@ export function remainingGames(members: string[], played: Game[], rnd: () => num
  * difference per game. Comparing people only with the group they actually played means a group
  * of 5 (4 games each) can't crowd out a group of 4 (3 games), and a tough group doesn't sink you.
  */
+/**
+ * Who makes the A final from random groups, as a line to draw under each group's table. The
+ * finals are seeded by finishing place (placementOrder): every group winner, then every runner-up,
+ * and so on, so the top `sure` of every group are in, and `extra` more come from the best of the
+ * next place across all groups. The A final is the first group splitSizes makes of everyone left.
+ */
+export function finalsCut(pool: number, groups: number): { sure: number; extra: number; aSize: number } | null {
+  const sizes = splitSizes(pool);
+  if (sizes.length < 2 || groups < 1) return null; // one final for everyone: nobody misses out
+  const aSize = sizes[0];
+  const sure = Math.floor(aSize / groups);
+  return { sure, extra: aSize - sure * groups, aSize };
+}
+
 export function placementOrder(stageGames: Game[]): string[] {
   const nos = [...new Set(stageGames.map((g) => g.groupNo))].sort((a, b) => a - b);
   // Each person's whole record in this stage, so someone moved between groups mid-stage is judged
