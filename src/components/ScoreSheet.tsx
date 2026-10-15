@@ -57,7 +57,6 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
         ) : (
           <>
             <div className="mt-5 rounded-[18px] border border-white/[.06] bg-panel p-4">
-              <div className="mb-3 text-center text-[11px] font-semibold text-dim">{pick.winner === null ? `TAP THE WINNER · TO ${to}` : "SLIDE THE LOSERS' SCORE · WIN BY 2"}</div>
               <ScoreEntry a={game.a} b={game.b} people={people} to={to} value={pick} onChange={setPick} />
             </div>
 

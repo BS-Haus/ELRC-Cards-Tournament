@@ -2,11 +2,11 @@
 
 import { pingMoments } from "@/components/LevelMoments";
 import { useState } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { enterScore } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { ScoreEntry, scoresOf, type Pick } from "@/components/ScoreEntry";
-import { SPRING } from "@/components/kit";
+import { SPRING, SOFT } from "@/components/kit";
 import type { Game } from "@/lib/cards";
 import type { PlayerLite } from "@/lib/data";
 
@@ -31,13 +31,20 @@ export function ScoreBoxes({ game, to, canScore, onOpen, people, onAccent = fals
     <div>
       {toast}
       <ScoreEntry a={left} b={right} people={people} to={to} value={pick} onChange={setPick} onAccent={onAccent} />
-      <motion.button
-        type="button" onClick={save} disabled={!s || pending} whileTap={{ scale: s ? 0.97 : 1 }} transition={SPRING}
-        className={`mt-3 h-12 w-full rounded-[13px] text-[15px] font-extrabold transition-colors ${s ? (onAccent ? "bg-ink text-accent" : "bg-accent text-ink") : onAccent ? "bg-ink/10 text-ink/40" : "bg-raised text-dimmer"}`}
-        aria-label={s ? `Save ${s[0]}–${s[1]}` : "Tap the winning team"}
-      >
-        {s ? `Save ${s[0]}–${s[1]}` : "Tap the winning team"}
-      </motion.button>
+      {/* The save button only appears once there's a result to save, so an unscored card stays short. */}
+      <AnimatePresence initial={false}>
+        {s && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={SOFT} className="overflow-hidden">
+            <motion.button
+              type="button" onClick={save} disabled={pending} whileTap={{ scale: 0.97 }} transition={SPRING}
+              className={`mt-3 h-12 w-full rounded-[13px] text-[15px] font-extrabold ${onAccent ? "bg-ink text-accent" : "bg-accent text-ink"}`}
+              aria-label={`Save ${s[0]}–${s[1]}`}
+            >
+              Save {s[0]}–{s[1]}
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

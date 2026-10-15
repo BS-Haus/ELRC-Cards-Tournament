@@ -31,39 +31,46 @@ export function ScoreEntry({ a, b, people, to, value, onChange, onAccent = false
 }) {
   const s = scoresOf(value, to);
   const loserSide = value.winner === "a" ? "b" : value.winner === "b" ? "a" : null;
-  const col = (side: "a" | "b") => {
+  // One row: each team's faces and names on the outside, their scores meeting in the middle.
+  // Tapping either half (faces, names or number) makes that team the winner.
+  const half = (side: "a" | "b") => {
     const ids = side === "a" ? a : b;
     const won = value.winner === side;
     const n = s ? (side === "a" ? s[0] : s[1]) : 0;
     const hi = onAccent ? "text-ink" : "text-accent";
+    const right = side === "b";
     return (
       <motion.button
         type="button" onClick={() => onChange({ winner: side, loser: value.winner ? value.loser : Math.max(0, to - 6) })}
-        whileTap={{ scale: 0.92 }} animate={{ scale: won ? 1.04 : 1 }} transition={SPRING}
+        whileTap={{ scale: 0.94 }} transition={SPRING}
         aria-pressed={won} aria-label={`${ids.map((id) => people[id]?.name).join(" & ")} won`}
-        className="spk-noselect flex min-w-0 flex-1 flex-col items-center text-center"
+        className={`spk-noselect flex min-w-0 flex-1 items-center gap-2.5 ${right ? "flex-row-reverse text-right" : "text-left"}`}
       >
-        <span className="flex">{ids.map((id, j) => <span key={id} className="flex" style={{ marginLeft: j ? -8 : 0 }}><Avatar p={people[id]} size={30} ring={onAccent ? "#CBFB4F" : "#15181b"} /></span>)}</span>
-        <span className={`mt-1.5 w-full truncate text-[13.5px] font-bold ${won ? hi : onAccent ? "text-ink/80" : "text-fg"}`}>{ids.map((id) => people[id]?.name ?? "?").join(" & ")}</span>
-        <AnimatedNumber value={n} duration={0.35} className={`mt-1 block font-mono text-[44px] font-extrabold leading-none transition-colors ${s ? (won ? hi : onAccent ? "text-ink/60" : "text-fg") : onAccent ? "text-ink/25" : "text-white/15"}`} />
-        <span className="mt-1.5 block h-3.5">
-          <AnimatePresence mode="wait" initial={false}>
-            {won ? (
-              <motion.span key="w" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }} transition={BOUNCE} className={`block text-[10px] font-extrabold tracking-[.06em] ${hi}`}>WINNER</motion.span>
-            ) : value.winner === null ? (
-              <motion.span key="t" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={`block text-[10px] font-bold tracking-[.06em] ${onAccent ? "text-ink/50" : "text-dimmer"}`}>TAP TO WIN</motion.span>
-            ) : null}
-          </AnimatePresence>
+        <span className={`flex min-w-0 flex-1 flex-col ${right ? "items-end" : "items-start"}`}>
+          <span className={`flex ${right ? "flex-row-reverse" : ""}`}>{ids.map((id, j) => <span key={id} className="flex" style={{ [right ? "marginRight" : "marginLeft"]: j ? -7 : 0 }}><Avatar p={people[id]} size={26} ring={onAccent ? "#CBFB4F" : "#15181b"} /></span>)}</span>
+          <span className={`mt-1 w-full truncate text-[12.5px] font-bold leading-tight ${won ? hi : onAccent ? "text-ink/80" : "text-fg"}`}>{ids.map((id) => people[id]?.name ?? "?").join(" & ")}</span>
+          <span className="block h-3">
+            <AnimatePresence mode="wait" initial={false}>
+              {won ? (
+                <motion.span key="w" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }} transition={BOUNCE} className={`block text-[9.5px] font-extrabold tracking-[.06em] ${hi}`}>WINNER</motion.span>
+              ) : value.winner === null ? (
+                <motion.span key="t" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={`block text-[9.5px] font-bold tracking-[.06em] ${onAccent ? "text-ink/50" : "text-dimmer"}`}>TAP TO WIN</motion.span>
+              ) : null}
+            </AnimatePresence>
+          </span>
         </span>
+        <motion.span animate={{ scale: won ? 1.08 : 1 }} transition={SPRING} className="shrink-0">
+          <AnimatedNumber value={n} duration={0.35} className={`block w-[54px] font-mono text-[40px] font-extrabold leading-none transition-colors ${right ? "text-left" : "text-right"} ${s ? (won ? hi : onAccent ? "text-ink/60" : "text-fg") : onAccent ? "text-ink/25" : "text-white/15"}`} />
+        </motion.span>
       </motion.button>
     );
   };
   return (
     <div>
-      <div className="flex items-start gap-2">
-        {col("a")}
-        <span className={`mt-[58px] font-mono text-[22px] font-bold ${onAccent ? "text-ink/30" : "text-[#3A4046]"}`}>:</span>
-        {col("b")}
+      <div className="flex items-center gap-1.5">
+        {half("a")}
+        <span className={`font-mono text-[20px] font-bold ${onAccent ? "text-ink/30" : "text-[#3A4046]"}`}>:</span>
+        {half("b")}
       </div>
       <AnimatePresence initial={false}>
         {loserSide && (
