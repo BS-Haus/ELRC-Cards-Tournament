@@ -1,6 +1,6 @@
 "use client";
 
-import { pingMoments } from "@/components/LevelMoments";
+import { showResult } from "@/components/GameResult";
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { enterScore } from "@/app/actions";
@@ -22,7 +22,7 @@ export function ScoreBoxes({ game, to, canScore, onOpen, people, onAccent = fals
   const save = () => {
     if (!s) return;
     const [l, r] = s;
-    run(() => enterScore(game.id, flip ? r : l, flip ? l : r), "Score saved", (x) => { if (x.ok) { setPick({ winner: null, loser: 0 }); pingMoments(); } });
+    run(() => enterScore(game.id, flip ? r : l, flip ? l : r), "Score saved", (x) => { if (x.ok) { setPick({ winner: null, loser: 0 }); showResult(game.id); } });
   };
   if (!canScore) {
     return <button type="button" onClick={onOpen} className={`spk-press h-11 w-full rounded-xl text-[13.5px] font-bold ${onAccent ? "bg-ink/10" : "bg-raised text-muted"}`}>Sign in to enter the score</button>;

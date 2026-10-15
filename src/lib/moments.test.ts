@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMoments, cheerFor, gameMoments, type MomentEvent, type TimedGame } from "./moments";
+import { buildMoments, cheerFor, gameMoments, gameResultOf, type MomentEvent, type TimedGame } from "./moments";
 import { rate, PROV_N } from "./standings";
 
 let n = 0;
@@ -66,5 +66,33 @@ describe("gameMoments (replaying a past game)", () => {
     const live = buildMoments(e, r, "me", 400).slides[0];
     expect(gameMoments(e, r, "me", games.at(-1)!.id)[0]).toEqual(live);
     expect(gameMoments(e, r, "me", "nope")).toEqual([]);
+  });
+});
+
+describe("gameResultOf (the whole game, for the phone that scored it)", () => {
+  // Enough games for all four to be placed, then one more.
+  const four = [["a", "b"], ["c", "d"]] as const;
+  const games = Array.from({ length: PROV_N + 1 }, (_, i) =>
+    game(100 + i, [...(i % 3 ? four[0] : ["a", "c"])] as [string, string], [...(i % 3 ? four[1] : ["b", "d"])] as [string, string], 15, 9 + (i % 4)));
+
+  it("gives all four lines, matching each player's own ledger, and side A's odds going in", () => {
+    const e = ev(games), r = ratings(e);
+    const last = games.at(-1)!;
+    const res = gameResultOf(r, last)!;
+    expect(res.lines.map((l) => l.id)).toEqual([...last.a, ...last.b]);
+    for (const l of res.lines) {
+      const entry = r.players.get(l.id)!.entries.find((x) => x.gameId === last.id)!;
+      expect(l.after - l.before).toBe(entry.delta);
+      expect(l.won).toBe(entry.won);
+    }
+    expect(res.chanceA).toBeGreaterThan(0);
+    expect(res.chanceA).toBeLessThan(1);
+    expect(res.lines[2].placingGame).toBeNull(); // placed by now
+  });
+
+  it("counts placement games while placing, with no ladder place", () => {
+    const e = ev(games.slice(0, 2)), r = ratings(e);
+    const res = gameResultOf(r, games[1])!;
+    expect(res.lines.every((l) => l.placingGame === 2 && l.rankBefore === null && l.rankAfter === null)).toBe(true);
   });
 });

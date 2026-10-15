@@ -119,3 +119,37 @@ export function gameMoments(events: MomentEvent[], r: Ratings, me: string, gameI
   const f = events.flatMap((e) => e.games.map((g) => ({ g, e }))).find((y) => y.g.id === gameId);
   return x && f ? slidesFor(x, f.g, f.e.title, me) : [];
 }
+
+/** One player's line on a game's result screen. */
+export type ResultLine = {
+  id: string; won: boolean;
+  delta: number; before: number; after: number;
+  /** Games played after this one while placing (1–PROV_N, and PROV_N is the game that places them); null once placed. */
+  placingGame: number | null;
+  tier: TierInfo; tierBefore: Level;
+  /** Ladder place before and after (placed players only): before is read against everyone else's
+   *  rating now, so it's exact when this was the latest game and close otherwise. */
+  rankBefore: number | null; rankAfter: number | null;
+};
+
+/** Everything the result screen shows for one game: side A's chance going in and all four lines.
+ *  Null if the game doesn't count in the ratings. */
+export function gameResultOf(r: Ratings, g: Game): { chanceA: number; lines: ResultLine[] } | null {
+  const ids = [...g.a, ...g.b];
+  const entries = ids.map((id) => r.players.get(id)?.entries.find((e) => e.gameId === g.id));
+  if (entries.some((e) => !e)) return null;
+  const lines = entries.map((e, i): ResultLine => {
+    const id = ids[i];
+    const placing = e!.gamesBefore + 1 <= PROV_N;
+    const wasPlaced = e!.gamesBefore >= PROV_N;
+    const others = r.ranked.filter((p) => p.id !== id);
+    const rankBefore = wasPlaced ? others.filter((p) => p.rating > e!.ratingBefore).length + 1 : null;
+    return {
+      id, won: e!.won, delta: e!.delta, before: e!.ratingBefore, after: e!.ratingAfter,
+      placingGame: placing ? e!.gamesBefore + 1 : null,
+      tier: tierAt(e!.ratingAfter, e!.gamesBefore + 1), tierBefore: tierAt(e!.ratingBefore, e!.gamesBefore).level,
+      rankBefore, rankAfter: r.players.get(id)?.rank ?? null,
+    };
+  });
+  return { chanceA: entries[0]!.winProb, lines };
+}

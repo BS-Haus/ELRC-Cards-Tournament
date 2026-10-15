@@ -20,6 +20,10 @@ const POLL_MS = 8000;
 /** Ask for an immediate check, e.g. right after saving a score. */
 export const pingMoments = () => { try { window.dispatchEvent(new Event("cards:moments")); } catch {} };
 
+// While a game's result screen is up (GameResult), your own story waits instead of popping up over it.
+let held = false;
+export const holdMoments = (on: boolean) => { held = on; };
+
 export function LevelMoments() {
   // What's waiting: your level updates first, then a draw story (src/components/DrawSlides.tsx).
   const [m, setM] = useState<Moments | null>(null);
@@ -29,7 +33,7 @@ export function LevelMoments() {
 
   const again = useRef(false);
   const check = useCallback(async () => {
-    if (showing.current || document.hidden) return;
+    if (showing.current || held || document.hidden) return;
     // A check already running might have started before the score landed: run once more after it.
     if (busy.current) { again.current = true; return; }
     busy.current = true;
