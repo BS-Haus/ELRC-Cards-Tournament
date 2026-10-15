@@ -133,11 +133,11 @@ export function drawSlides(d: DrawFeed): StorySlide[] {
             <div className="mt-1 text-[16px] font-semibold text-white/60">points scored</div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-white/5 p-4"><div className="tnum text-[30px] font-black text-accent">+<CountUp to={r.xpUp} /></div><div className="text-[13px] text-white/55">XP won in victories</div></div>
-            <div className="rounded-2xl bg-white/5 p-4"><div className="tnum text-[30px] font-black text-white/70">{r.xpDown ? "−" : ""}<CountUp to={Math.abs(r.xpDown)} /></div><div className="text-[13px] text-white/55">XP lost in defeats</div></div>
+            <div className="rounded-2xl bg-white/5 p-4"><div className="tnum text-[30px] font-black text-accent">+<CountUp to={r.xpUp} /></div><div className="text-[13px] text-white/55">rating won in victories</div></div>
+            <div className="rounded-2xl bg-white/5 p-4"><div className="tnum text-[30px] font-black text-white/70">{r.xpDown ? "−" : ""}<CountUp to={Math.abs(r.xpDown)} /></div><div className="text-[13px] text-white/55">rating lost in defeats</div></div>
           </div>
           {r.climber && (
-            <div className="flex items-center gap-3 text-[16px]"><Avatar p={p(r.climber.id)} size={36} /><span><b>{name(r.climber.id)}</b> climbed the most: <b className="text-accent">+{r.climber.xp} XP</b> 🚀</span></div>
+            <div className="flex items-center gap-3 text-[16px]"><Avatar p={p(r.climber.id)} size={36} /><span><b>{name(r.climber.id)}</b> climbed the most: <b className="text-accent">+{r.climber.xp}</b> 🚀</span></div>
           )}
           {r.closest && <div className="text-[16px] text-white/75">Closest game: <b className="tnum font-mono text-fg">{r.closest.score[0]}–{r.closest.score[1]}</b> in {r.closest.label} 😮‍💨</div>}
         </div>
@@ -222,11 +222,13 @@ function ResultTable({ g, p, me, done }: { g: ResultGroup; p: (id: string) => Pl
             <span className="text-center text-[13px] font-black text-white/45">{i === 0 && g.winner ? "👑" : i + 1}</span>
             <span className="flex min-w-0 items-center gap-2"><Avatar p={p(r.id)} size={26} /><span className="truncate text-[15px] font-bold">{r.id === me ? "You" : p(r.id)?.name}</span></span>
             <span className="tnum font-mono text-[14px] font-bold text-white/70">{r.w}–{r.l}</span>
-            <span className={`tnum w-14 text-right text-[14px] font-black ${r.xp > 0 ? "text-accent" : "text-white/50"}`}>{signed(r.xp)} XP</span>
+            {r.placing
+              ? <span className="w-14 text-right text-[13px] font-black text-white/45" title="Still placing">🐣</span>
+              : <span className={`tnum w-14 text-right font-mono text-[14px] font-black ${r.xp > 0 ? "text-accent" : "text-white/50"}`}>{signed(r.xp)}</span>}
           </div>
         ))}
       </div>
-      <div className="text-[14px] text-white/55">{g.points} points scored · {signed(g.xp)} XP between them</div>
+      <div className="text-[14px] text-white/55">{g.points} points scored</div>
     </div>
   );
 }

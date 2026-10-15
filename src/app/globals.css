@@ -86,3 +86,5 @@ button:disabled { cursor: default; }
 @keyframes spkDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 .spk-draw { stroke-dasharray: 1; animation: spkDraw .7s cubic-bezier(.22,1,.36,1) both; }
 @media (prefers-reduced-motion: reduce) { .spk-draw { animation: none; } }
+/* Score rail (ScoreEntry.tsx): a horizontal dial, no scrollbar. */
+.spk-rail::-webkit-scrollbar { display: none; }

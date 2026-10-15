@@ -3,16 +3,19 @@ import type { PlayerLite } from "@/lib/data";
 
 export const initial = (name: string) => (name.trim()[0] ?? "?").toUpperCase();
 
-export function Avatar({ p, size = 32, dim = false }: { p?: Pick<PlayerLite, "name" | "color"> & { photo?: string | null }; size?: number; dim?: boolean }) {
+/** `ring`: a border in that colour, so overlapping avatars read as separate faces (the ranked
+ *  app's pairs in a result card). */
+export function Avatar({ p, size = 32, dim = false, ring }: { p?: Pick<PlayerLite, "name" | "color"> & { photo?: string | null }; size?: number; dim?: boolean; ring?: string }) {
+  const edge = ring ? `0 0 0 2px ${ring}` : undefined;
   if (p?.photo) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={p.photo} alt="" aria-hidden="true" width={size} height={size} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size, opacity: dim ? 0.45 : 1, background: p.color }} />;
+    return <img src={p.photo} alt="" aria-hidden="true" width={size} height={size} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size, opacity: dim ? 0.45 : 1, background: p.color, boxShadow: edge }} />;
   }
   return (
     <span
       aria-hidden="true"
       className="inline-flex shrink-0 items-center justify-center rounded-full font-extrabold text-ink"
-      style={{ width: size, height: size, background: p?.color ?? "#5A6168", fontSize: Math.round(size * 0.42), opacity: dim ? 0.45 : 1 }}
+      style={{ width: size, height: size, background: p?.color ?? "#5A6168", fontSize: Math.round(size * 0.42), opacity: dim ? 0.45 : 1, boxShadow: edge }}
     >
       {initial(p?.name ?? "?")}
     </span>
@@ -94,11 +97,11 @@ export function LevelPill({ level, size = "sm" }: { level: { name: string; icon:
   );
 }
 
-/** A player's photo in a ring of their level's colour, with the level as a banner across the
- *  bottom: the top of the Me page and of every profile. Elsewhere avatars stay plain. The higher
+/** A player's photo in a ring of their tier's colour, with the tier (and `tag`, their rating or
+ *  placement) as a banner across the bottom: the top of the Me page and of every profile. Elsewhere avatars stay plain. The higher
  *  the level, the more it does: a coloured ring (3+), a glow (5+), a slowly turning ring and a
  *  shine across the banner (7+), a halo and sparkles (9+), and a crown at the very top (11). */
-export function RankAvatar({ p, size = 104, rank }: { p: Pick<PlayerLite, "name" | "color"> & { photo?: string | null }; size?: number; rank?: { name: string; icon: string; color: string; level?: number } }) {
+export function RankAvatar({ p, size = 104, rank, tag }: { p: Pick<PlayerLite, "name" | "color"> & { photo?: string | null }; size?: number; rank?: { name: string; icon: string; color: string; level?: number }; tag?: string }) {
   if (!rank) return <Avatar p={p} size={size} />;
   const lv = rank.level ?? 1, c = rank.color;
   const ring = lv >= 7
@@ -123,7 +126,7 @@ export function RankAvatar({ p, size = 104, rank }: { p: Pick<PlayerLite, "name"
         className={`absolute -bottom-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1 overflow-hidden whitespace-nowrap rounded-full border-[3px] border-bg px-2.5 py-0.5 text-[12px] font-black ${lv >= 3 ? "text-ink" : "text-fg"} ${lv >= 7 ? "spk-shine" : ""}`}
         style={{ background: lv >= 3 ? c : "#2a2f35" }}
       >
-        <span className="opacity-60">Lv {lv}</span><span aria-hidden="true">{rank.icon}</span>{rank.name}
+        {tag && <span className="tnum opacity-60">{tag}</span>}<span aria-hidden="true">{rank.icon}</span>{rank.name}
       </span>
     </span>
   );

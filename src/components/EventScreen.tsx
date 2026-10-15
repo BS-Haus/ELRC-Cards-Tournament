@@ -14,13 +14,15 @@ import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, inpu
 import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
-import type { LadderRow } from "@/lib/ladder";
-import { Ladder, ResultCard, Disclosure } from "@/components/kit";
+import { ResultCard, Disclosure, AnimatedNumber, SOFT, SPRING } from "@/components/kit";
+import { motion, AnimatePresence, LayoutGroup } from "motion/react";
+import { PROV_N } from "@/lib/standings";
 
 const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded: "Seeded groups", final: "Finals" };
 
-/** `myXp`: your XP either side of this weekend so far (src/lib/levels.ts), loaded on the server. */
-export function EventScreen({ view, me, org, roster, myXp = null, ladder = [] }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number } | null; ladder?: LadderRow[] }) {
+/** `myXp`: your rating either side of this weekend so far, and your games in all (src/lib/standings.ts),
+ *  loaded on the server. */
+export function EventScreen({ view, me, org, roster, myXp = null }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number; games: number } | null }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [open, setOpen] = useState<string | null>(null); // game id in the score sheet
@@ -68,7 +70,6 @@ export function EventScreen({ view, me, org, roster, myXp = null, ladder = [] }:
     crowned.current = now;
   }, [winnersKey]);
   const iPlayed = !!me && games.some((g) => g.status === "done" && [...g.a, ...g.b].includes(me) && !g.subs.includes(me));
-  const latest = useMemo(() => games.filter((g) => isDone(g)).sort((x, y) => y.stageNo - x.stageNo || y.ord - x.ord).slice(0, 3), [games]);
   const openGame = games.find((g) => g.id === open) ?? null;
   const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
   const live = ev.status === "live";
@@ -161,25 +162,11 @@ export function EventScreen({ view, me, org, roster, myXp = null, ladder = [] }:
           )}
 
           {live && queues.some((q) => q.length) && (
-            <Section title="On the nets" aside="Type the score in, or tap the game for more">
+            <Section title="On the nets" aside="Tap a game to score it">
               <div className="grid gap-2.5">
                 {queues.map((q, i) => (
-                  <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} to={q[0] ? toFor(q[0]) : 0} canScore={!!me} />
+                  <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} />
                 ))}
-              </div>
-            </Section>
-          )}
-
-          {ladder.some((r) => r.w + r.l > 0) && (
-            <Section title={done ? "The day" : "Today so far"} aside="XP made, and how">
-              <Ladder rows={ladder} people={people} metric="today" limit={5} notes={Object.fromEntries([...out].map((id) => [id, "Left"]))} />
-            </Section>
-          )}
-
-          {latest.length > 0 && !done && (
-            <Section title="Latest results">
-              <div className="flex flex-col gap-1.5">
-                {latest.map((g) => <ResultCard key={g.id} a={g.a} b={g.b} scoreA={g.scoreA} scoreB={g.scoreB} people={people} left={<>{gameLabel(g).replace(/^Group /, "Grp ")}<br />G{g.seq}</>} onClick={() => setOpen(g.id)} label={`${gameLabel(g)}, game ${g.seq}`} />)}
               </div>
             </Section>
           )}
@@ -290,7 +277,7 @@ const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n
 function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, org, run, pending, onOpen, xp }: {
   view: EventView; me: string | null; state: EntryState | null; day: MyDay | null; iPlayed: boolean; waiting: boolean;
   groups: GroupView[]; live: boolean; done: boolean; org: boolean; run: Run; pending: boolean; onOpen: (id: string) => void;
-  xp: { before: number; after: number } | null;
+  xp: { before: number; after: number; games: number } | null;
 }) {
   const { event: ev, games, people } = view;
   const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
@@ -312,7 +299,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
             </span>
             <span className="min-w-0">
               <span className="block text-[17px] font-black">Watch your review</span>
-              <span className="block text-[13px] font-semibold opacity-70">Every game, your partners, the XP you earned</span>
+              <span className="block text-[13px] font-semibold opacity-70">Every game, your partners, what it did to your rating</span>
             </span>
           </Link>
         </div>
@@ -331,9 +318,8 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
                   <div className={`mt-0.5 text-[15px] font-semibold ${first.ahead === 0 ? "opacity-75" : "text-muted"}`}>vs {both(first.opponents)}{first.sub ? " · you're subbing" : ""}</div>
                 </button>
                 {first.ahead === 0 && (
-                  <div className="mt-3">
-                    <div className="mb-1.5 grid grid-cols-[1fr_44px_1fr] gap-2 text-center text-[11px] font-bold uppercase tracking-[.1em] opacity-60"><span>You</span><span /><span>Them</span></div>
-                    <ScoreBoxes key={first.game.id} game={first.game} to={toFor(first.game)} canScore onOpen={() => onOpen(first.game.id)} onAccent flip={!first.game.a.includes(me)} />
+                  <div className="mt-4">
+                    <ScoreBoxes key={first.game.id} game={first.game} to={toFor(first.game)} canScore onOpen={() => onOpen(first.game.id)} people={view.people} onAccent flip={!first.game.a.includes(me)} />
                   </div>
                 )}
               </div>
@@ -360,7 +346,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
         <Section title="Your games" aside={myGroup && place ? `${ordinal(place)} in ${myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}` : undefined}>
           <div className={`${card} overflow-hidden`}>
             <div className="grid grid-cols-3 border-b border-white/[.05] text-center">
-              {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "XP today"]] as const).map(([v, l]) => (
+              {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], xp && xp.games < PROV_N ? [`${xp.games}/${PROV_N}`, "placing"] : [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "rating today"]] as const).map(([v, l]) => (
                 <div key={l} className="py-3">
                   <div className="tnum text-[20px] font-black">{v}</div>
                   <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">{l}</div>
@@ -419,27 +405,22 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
   )).reduce<React.ReactNode[]>((acc, x, i) => (i ? [...acc, " & ", x] : [x]), []);
 }
 
-function NetCard({ net, now, next, people, out, onOpen, to, canScore }: { net: number; now?: Game; next?: Game; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void; to: number; canScore: boolean }) {
-  if (!now) return (
-    <div className={`${card} p-4 text-[14px] text-muted`}><b className="text-fg">Net {net}</b> · free</div>
-  );
+/** A net: the game on it now as a result card waiting for its score (tap to score it), and
+ *  what's on after. */
+function NetCard({ net, now, next, people, out, onOpen }: { net: number; now?: Game; next?: Game; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void }) {
+  if (!now) return <div className={`${card} p-4 text-[14px] text-muted`}><b className="text-fg">Net {net}</b> · free</div>;
+  const left = needsSub(now, out).length > 0;
   return (
     <div className={`${card} overflow-hidden`}>
-      <div className="p-4">
-        <button onClick={() => onOpen(now.id)} className="spk-press flex w-full items-center justify-between text-[12px] font-bold uppercase tracking-[.1em]">
-          <span className="text-accent">Net {net} · on now</span>
-          <span className="text-dim">{gameLabel(now)} · game {now.seq} ›</span>
-        </button>
-        <div className="mt-2.5 mb-2.5 grid grid-cols-[1fr_44px_1fr] items-center gap-2 text-center text-[15px] font-extrabold leading-tight">
-          <span>{teamLine(now.a, people, now.subs, out)}</span>
-          <span className="text-[12px] font-bold text-dim">vs</span>
-          <span>{teamLine(now.b, people, now.subs, out)}</span>
-        </div>
-        <ScoreBoxes key={now.id} game={now} to={to} canScore={canScore} onOpen={() => onOpen(now.id)} />
-      </div>
+      <ResultCard
+        a={now.a} b={now.b} scoreA={null} scoreB={null} people={people} flat
+        left={<><span className="text-accent">NET {net}</span><br />{now.kind === "final" ? `${now.groupName} fin.` : `Grp ${now.groupName}`}</>}
+        aside={<span className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-extrabold ${left ? "bg-loss/15 text-loss" : "bg-accent text-ink"}`}>{left ? "Sub?" : "Score"}</span>}
+        onClick={() => onOpen(now.id)} label={`Net ${net}: score ${gameLabel(now)}, game ${now.seq}`}
+      />
       {next && (
-        <div className="border-t border-white/[.05] bg-panel px-4 py-2.5 text-[13px] text-muted">
-          Next: <span className="text-fg">{teamLine(next.a, people, next.subs, out)}</span> vs <span className="text-fg">{teamLine(next.b, people, next.subs, out)}</span>
+        <div className="border-t border-white/[.05] bg-panel px-4 py-2 text-[12.5px] text-dim">
+          Next: <span className="text-muted">{teamLine(next.a, people, next.subs, out)}</span> vs <span className="text-muted">{teamLine(next.b, people, next.subs, out)}</span>
         </div>
       )}
     </div>
@@ -478,55 +459,62 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: {
           )}
         </div>
       )}
-      <table className="tnum w-full text-[14px]">
-        <thead>
-          <tr className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">
-            <th className="w-8 py-1 pl-4 text-left font-bold">#</th><th className="text-left font-bold">Player</th><th className="px-2 text-right font-bold">Pts</th><th className="px-2 text-right font-bold">W–L</th><th className="pr-4 pl-2 text-right font-bold">+/−</th>
-          </tr>
-        </thead>
-        <tbody>
+      <div className="tnum text-[14px]">
+        <div className="grid grid-cols-[28px_1fr_36px_44px_44px] items-center px-4 py-1 text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">
+          <span>#</span><span>Player</span><span className="text-right">Pts</span><span className="text-right">W–L</span><span className="text-right">+/−</span>
+        </div>
+        <LayoutGroup id={`group-${g.stageNo}-${g.groupNo}`}>
           {g.table.map((r, i) => {
             const pd = r.pf - r.pa;
             return (
-              <tr key={r.id} className={`border-t border-white/[.04] ${r.id === me ? "bg-accent/[.06]" : ""}`}>
-                <td className="py-2 pl-4 font-mono text-[12.5px] text-dim">{i + 1}</td>
-                <td className="py-2"><span className="flex items-center gap-2"><Avatar p={people[r.id]} size={22} dim={out.has(r.id)} /><PlayerLink p={people[r.id]} className={`font-semibold ${out.has(r.id) ? "text-dim" : ""}`} />{out.has(r.id) && <span className="text-[11px] text-dim">left</span>}</span></td>
-                <td className="px-2 text-right font-black">{r.w}</td>
-                <td className="px-2 text-right text-num">{r.w}–{r.l}</td>
-                <td className={`pr-4 pl-2 text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</td>
-              </tr>
+              <motion.div key={r.id} layout="position" transition={SOFT} className={`grid grid-cols-[28px_1fr_36px_44px_44px] items-center border-t border-white/[.04] px-4 py-2 ${r.id === me ? "bg-accent/[.06]" : ""}`}>
+                <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
+                <span className="flex min-w-0 items-center gap-2"><Avatar p={people[r.id]} size={22} dim={out.has(r.id)} /><PlayerLink p={people[r.id]} className={`truncate font-semibold ${out.has(r.id) ? "text-dim" : ""}`} />{out.has(r.id) && <span className="text-[11px] text-dim">left</span>}</span>
+                <AnimatedNumber value={r.w} className="text-right font-black" />
+                <span className="text-right text-num">{r.w}–{r.l}</span>
+                <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
+              </motion.div>
             );
           })}
-        </tbody>
-      </table>
+        </LayoutGroup>
+      </div>
       <GroupGames g={g} people={people} out={out} onOpen={onOpen} />
     </div>
   );
 }
 
-/** A group's games, folded away under a line that says how far it's got: the table above is what
- *  most people want, and the nets section is where scores go in. */
+/** A group's results under its table, newest first, as the ranked app's result cards; the games
+ *  still to play fold away under a line that counts them. */
 function GroupGames({ g, people, out, onOpen }: { g: GroupView; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  const real = g.games.filter((x) => x.status !== "void");
-  const played = real.filter(isDone).length;
+  const played = g.games.filter(isDone).sort((x, y) => y.ord - x.ord);
+  const todo = g.games.filter((x) => !isDone(x));
+  const left = (x: Game) => <>{x.decider ? "Decider" : `Game ${x.seq}`}{x.subs.length > 0 && <><br /><span className="text-accent">sub</span></>}{x.status === "void" && <><br />skipped</>}</>;
+  const row = (x: Game) => (
+    <ResultCard key={x.id} flat a={x.a} b={x.b} scoreA={isDone(x) ? x.scoreA : null} scoreB={isDone(x) ? x.scoreB : null} people={people} dim={x.status === "void"}
+      left={left(x)} onClick={() => onOpen(x.id)} label={`${gameLabel(x)}, game ${x.seq}`} />
+  );
   return (
-    <div className="mt-1 border-t border-white/[.05]">
-      <button onClick={() => setOpen(!open)} aria-expanded={open} className="spk-press flex w-full items-center gap-2.5 px-4 py-3 text-left">
-        <span className="flex-1 text-[13px] font-bold text-muted">Games</span>
-        <span className="font-mono text-[12px] text-dim">{played} of {real.length} played</span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" className={`text-dimmer transition-transform duration-200 ${open ? "rotate-90" : ""}`} aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
-      </button>
-      {open && (
-        <div className="spk-up flex flex-col gap-1.5 px-2.5 pb-2.5">
-          {g.games.map((x) => (
-            <ResultCard
-              key={x.id} a={x.a} b={x.b} scoreA={isDone(x) ? x.scoreA : null} scoreB={isDone(x) ? x.scoreB : null} people={people} dim={x.status === "void"}
-              left={<>{x.decider ? "Decider" : `Game ${x.seq}`}{x.subs.length > 0 && <><br /><span className="text-accent">sub</span></>}{x.status === "void" && <><br />skipped</>}</>}
-              onClick={() => onOpen(x.id)} label={`${gameLabel(x)}, game ${x.seq}`}
-            />
-          ))}
-        </div>
+    <div className="mt-1 border-t border-white/[.06]">
+      <motion.div layout transition={SOFT}>
+        <AnimatePresence initial={false}>
+          {played.map((x) => <motion.div key={x.id} layout initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={SOFT}>{row(x)}</motion.div>)}
+        </AnimatePresence>
+      </motion.div>
+      {todo.length > 0 && (
+        <>
+          <button onClick={() => setOpen(!open)} aria-expanded={open} className="spk-press flex w-full items-center gap-2.5 border-t border-white/[.05] bg-panel px-4 py-2.5 text-left">
+            <span className="flex-1 text-[12.5px] font-bold text-muted">{todo.length} {todo.length === 1 ? "game" : "games"} to play</span>
+            <motion.svg animate={{ rotate: open ? 90 : 0 }} transition={SPRING} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" className="text-dimmer" aria-hidden="true"><path d="M9 18l6-6-6-6" /></motion.svg>
+          </button>
+          <AnimatePresence initial={false}>
+            {open && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={SOFT} className="overflow-hidden border-t border-white/[.05]">
+                {todo.map(row)}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
       )}
     </div>
   );
@@ -585,7 +573,6 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
             {waiting.length > 0 && current ? ` ${waiting.length} waiting to join.` : ""}
           </p>
           <p className="mt-1 text-[13px] text-dim">{plan}</p>
-          {current?.kind === "random" && <p className="mt-1 text-[13px] text-dim">Finals are seeded by where people finished in their own group: every group winner first, then every runner-up, and so on. Ties go to win %, then points per game, so a group of 5 has no edge over a group of 4.</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {!current && <button disabled={pending || here < 4} onClick={() => run(() => drawStage(ev.id, "random"), "Groups drawn")} className={btnPrimary}>Draw random groups</button>}
             {/* Two stages is the format: random groups, then A / B finals. A middle

@@ -4,10 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { Avatar, fmtDate, tierColor } from "@/components/ui";
 import { Climb } from "@/components/Climb";
-import { Disclosure, FormDots, ResultCard, Sparkline, StatLine } from "@/components/kit";
+import { AnimatedNumber, Disclosure, FormDots, ResultCard, Sparkline, StatLine } from "@/components/kit";
 import { Reel } from "@/components/LevelMoments";
 import { replayGame } from "@/app/actions";
-import { levelFor } from "@/lib/levels";
+import { tierFor } from "@/lib/levels";
+import { PROV_N } from "@/lib/standings";
 import type { Moments, Profile, ProfileGame, Season } from "@/lib/data";
 
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
@@ -18,9 +19,9 @@ type Pr = Pick<Profile, "player" | "tierWins" | "bestPartner" | "recent" | "name
 
 /**
  * Everything about one player, the same for you on Me and for anyone you tap in Players, laid out
- * like a profile in the ranked app: one hero card (XP, level, place, form) and then a stack of
+ * like a profile in the ranked app: one hero card (rating, tier, place, form) and then a stack of
  * folded rows, each with a teaser, so the page says plenty at a glance and the detail is a tap
- * away. Each game shows the XP it earned or cost; tapping it replays its story.
+ * away. Each game shows what it did to the rating; tapping it replays its story.
  */
 export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr: Pr; mine?: boolean }) {
   const [story, setStory] = useState<Moments | null>(null);
@@ -31,7 +32,7 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
     try { setStory(await replayGame(pr.player.id, g.id)); } catch {} finally { setOpening(null); }
   };
   const { names, player } = pr;
-  const lv = levelFor(s.xp);
+  const lv = tierFor(s);
   const played = s.events.filter((e) => e.w + e.l > 0);
   const last = played.find((e) => e.change != null);
   const { stats } = s;
@@ -56,10 +57,17 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
       {/* HERO: the one number, where it puts them, and how they're going. */}
       <div className="mb-2.5 rounded-[18px] border border-accent/25 bg-accent/[.05] px-4 pt-4 pb-3.5">
         <div className="flex items-end justify-between gap-3">
-          <div>
-            <div className="font-mono text-[44px] font-extrabold leading-none text-accent">{s.xp}</div>
-            <div className="mt-1.5 text-[10px] font-bold uppercase tracking-[.08em] text-dimmer">XP · LEVEL {lv.level.level}{s.position > 0 ? ` · ${ordinal(s.position)} OF ${s.of}` : ""}</div>
-          </div>
+          {lv.placing ? (
+            <div>
+              <div className="font-mono text-[44px] font-extrabold leading-none text-fg">{s.games}<span className="text-[24px] text-dim">/{PROV_N}</span></div>
+              <div className="mt-1.5 text-[10px] font-bold uppercase tracking-[.08em] text-dimmer">Placement games · 🐣 Fresh Meat</div>
+            </div>
+          ) : (
+            <div>
+              <AnimatedNumber value={s.rating} className="block font-mono text-[44px] font-extrabold leading-none text-accent" />
+              <div className="mt-1.5 text-[10px] font-bold uppercase tracking-[.08em] text-dimmer">Rating{s.position > 0 ? ` · ${ordinal(s.position)} of ${s.of}` : ""}</div>
+            </div>
+          )}
           {last && (
             <div className="text-right">
               <div className={`font-mono text-[15px] font-extrabold ${last.change! > 0 ? "text-win" : last.change! < 0 ? "text-loss" : "text-dim"}`}>{signed(last.change!)}</div>
@@ -67,10 +75,14 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
             </div>
           )}
         </div>
-        <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-white/10">
-          <div className="h-full rounded-full" style={{ width: `${lv.progress * 100}%`, background: lv.level.color }} />
-        </div>
-        <div className="mt-1.5 text-[11.5px] text-dim">{lv.next ? `${lv.next.min - s.xp} XP to Level ${lv.next.level}, ${lv.next.icon} ${lv.next.name}` : "The top level. Hold on to it: losses cost XP."}</div>
+        {lv.placing ? (
+          <div className="mt-3.5 flex gap-1">{Array.from({ length: PROV_N }, (_, i) => <span key={i} className={`h-1.5 flex-1 rounded-full ${i < s.games ? "bg-accent" : "bg-white/10"}`} />)}</div>
+        ) : (
+          <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full" style={{ width: `${lv.progress * 100}%`, background: lv.level.color }} />
+          </div>
+        )}
+        <div className="mt-1.5 text-[11.5px] text-dim">{lv.placing ? `${lv.toNext} more ${lv.toNext === 1 ? "game" : "games"} and ${mine ? "your" : "the"} rating is revealed.` : <>{lv.level.icon} {lv.level.name}{lv.next ? ` · ${lv.toNext} to ${lv.next.icon} ${lv.next.name}` : " · the top tier"}</>}</div>
         <div className="mt-3 flex items-center gap-2.5 border-t border-white/[.07] pt-3">
           <FormDots form={pr.form} />
           <span className="font-mono text-[12.5px] text-muted">{stats.w}–{stats.l}</span>
@@ -82,9 +94,9 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
 
       {/* Everything else is opt-in. Teasers keep the page informative while it's closed. */}
       <div className="flex flex-col gap-2">
-        {played.some((e) => e.after != null) && (
-          <Disclosure title="XP over time" teaser={`${played.length} ${played.length === 1 ? "weekend" : "weekends"}`}>
-            <Climb events={[...played].reverse()} />
+        {pr.trail.length > 0 && (
+          <Disclosure title="Rating over time" teaser={`${signed(pr.trail.at(-1)! - pr.trail[0])} since placing`}>
+            <Climb values={pr.trail} />
           </Disclosure>
         )}
 
@@ -139,13 +151,13 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
                 <ResultCard
                   key={g.id} a={[player.id, g.partner]} b={g.opponents} scoreA={g.mine} scoreB={g.theirs} people={{ ...names, [player.id]: names[player.id] ?? player }}
                   left={<>{day(g.at)}<br /><span className="text-dimmer">{g.sub ? "sub" : g.label.replace(/^Group /, "Grp ")}</span></>}
-                  aside={g.xp != null ? <XpChip xp={g.xp} busy={opening === g.id} /> : undefined}
-                  onClick={g.xp != null ? () => replay(g) : undefined}
-                  label={g.xp != null ? `Replay this game: ${g.xp >= 0 ? "+" : "−"}${Math.abs(g.xp)} XP` : undefined}
+                  aside={g.xp != null || g.placing != null ? <XpChip xp={g.xp} placing={g.placing} busy={opening === g.id} /> : undefined}
+                  onClick={g.xp != null || g.placing != null ? () => replay(g) : undefined}
+                  label={g.xp != null ? `Replay this game: ${signed(g.xp)}` : g.placing != null ? `Replay placement game ${g.placing}` : undefined}
                 />
               ))}
             </div>
-            <p className="mt-2 text-[10.5px] text-dimmer">Tap a game to replay its story{mine ? "" : ` from ${them}'s side`}. Sub games don&apos;t count.</p>
+            <p className="mt-2 text-[10.5px] text-dimmer">Tap a game to replay its story{mine ? "" : ` from ${them}'s side`}.</p>
           </Disclosure>
         )}
       </div>
@@ -155,12 +167,13 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
   );
 }
 
-/** A game's XP as a chip with a play mark: the hint that tapping it replays the story. */
-function XpChip({ xp, busy }: { xp: number; busy: boolean }) {
-  const up = xp >= 0;
+/** What a game did to the rating, as a chip with a play mark: the hint that tapping it replays
+ *  the story. A placement game shows which one it was. */
+function XpChip({ xp, placing, busy }: { xp: number | null; placing: number | null; busy: boolean }) {
+  const up = xp == null || xp >= 0;
   return (
-    <span className={`tnum flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[12px] font-black ${up ? "bg-accent/15 text-accent" : "bg-white/[.07] text-fg/70"}`}>
-      {signed(xp)}
+    <span className={`tnum flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-mono text-[12px] font-black ${xp == null ? "bg-white/[.07] text-fg/70" : up ? "bg-accent/15 text-accent" : "bg-white/[.07] text-fg/70"}`}>
+      {xp == null ? `🐣 ${placing}/${PROV_N}` : signed(xp)}
       <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true" className={busy ? "animate-pulse" : ""}><path d="M2 1.2v7.6L8.6 5z" fill="currentColor" /></svg>
     </span>
   );
