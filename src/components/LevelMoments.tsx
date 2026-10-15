@@ -9,6 +9,7 @@ import type { Moments, DrawFeed } from "@/lib/data";
 import type { MomentSlide } from "@/lib/moments";
 import type { Level } from "@/lib/levels";
 import { PROV_N } from "@/lib/standings";
+import { MatchView, isUpset } from "@/components/MatchView";
 
 // Pops up whenever one of your games has been scored (by you or anyone else): a short story of
 // what it did to your rating. Checks every few seconds while the app is open, and straight away
@@ -20,6 +21,10 @@ const POLL_MS = 8000;
 /** Ask for an immediate check, e.g. right after saving a score. */
 export const pingMoments = () => { try { window.dispatchEvent(new Event("cards:moments")); } catch {} };
 
+// While a game's result screen is up (GameResult), your own story waits instead of popping up over it.
+let held = false;
+export const holdMoments = (on: boolean) => { held = on; };
+
 export function LevelMoments() {
   // What's waiting: your level updates first, then a draw story (src/components/DrawSlides.tsx).
   const [m, setM] = useState<Moments | null>(null);
@@ -29,7 +34,7 @@ export function LevelMoments() {
 
   const again = useRef(false);
   const check = useCallback(async () => {
-    if (showing.current || document.hidden) return;
+    if (showing.current || held || document.hidden) return;
     // A check already running might have started before the score landed: run once more after it.
     if (busy.current) { again.current = true; return; }
     busy.current = true;
@@ -119,11 +124,14 @@ export function Reel({ m, onClose, title = "Your results", done = "Back to it", 
   };
 
   const s = slides[at];
+  const upset = (s.kind === "game" || s.kind === "match") && isUpset(s.match);
   const bg = s.kind === "levelUp" || s.kind === "placed" ? "from-[#24300f] to-[#0c0e10]"
     : s.kind === "levelDown" ? "from-[#1c1f2a] to-[#0c0e10]"
+    : upset ? "from-[#2a2208] to-[#0c0e10]"
     : s.kind === "game" && s.won ? "from-[#16260f] to-[#0c0e10]"
-    : s.kind === "game" ? "from-[#1d1b22] to-[#0c0e10]" : "from-[#10202a] to-[#0c0e10]";
-  const party = s.kind === "levelUp" || s.kind === "placed";
+    : s.kind === "game" ? "from-[#1d1b22] to-[#0c0e10]"
+    : s.kind === "match" ? "from-[#16200e] to-[#0c0e10]" : "from-[#10202a] to-[#0c0e10]";
+  const party = s.kind === "levelUp" || s.kind === "placed" || upset || (s.kind === "game" && s.won);
 
   return (
     <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-[60] mx-auto flex max-w-[480px] flex-col bg-[#0c0e10] text-fg">
@@ -188,62 +196,9 @@ function LevelBar({ bar, delta }: { bar: { from: number; to: number; level: Leve
   );
 }
 
-/** One side of the net: two faces overlapping, two names, and their score underneath. */
-function Side({ ids, score, lead, m, align, self = false }: { ids: string[]; score: number; lead: boolean; m: Moments; align: "left" | "right"; self?: boolean }) {
-  const right = align === "right";
-  return (
-    <div className={`flex min-w-0 flex-1 flex-col ${right ? "items-end text-right" : "items-start"}`}>
-      <div className={`flex ${right ? "flex-row-reverse" : ""}`}>
-        {ids.map((id, i) => (
-          <span key={id} className={`rounded-full ring-[3px] ring-[#0c0e10] ${i ? (right ? "-mr-3" : "-ml-3") : ""}`}><Avatar p={id === m.me.id ? m.me : m.names[id]} size={46} dim={!lead} /></span>
-        ))}
-      </div>
-      <div className={`mt-2 w-full truncate text-[13.5px] font-bold ${lead ? "text-fg" : "text-white/50"}`}>{ids.map((id) => (id === m.me.id && self ? "You" : (id === m.me.id ? m.me : m.names[id])?.name ?? "?")).join(" & ")}</div>
-      <div className={`tnum mt-1 font-mono text-[76px] font-black leading-[.9] tracking-[-.05em] ${lead ? "text-fg" : "text-white/30"}`}><CountUp to={score} /></div>
-    </div>
-  );
-}
-
 function Body({ s, m, self }: { s: MomentSlide; m: Moments; self: boolean }) {
-  if (s.kind === "game") {
-    return (
-      <div className="relative flex flex-1 flex-col justify-between py-5">
-        {/* The result as a word bigger than the screen, behind everything. */}
-        <div aria-hidden="true" className={`spk-fade pointer-events-none absolute -right-8 top-6 select-none text-[150px] font-black uppercase leading-none tracking-[-.06em] ${s.won ? "text-accent/[.10]" : "text-white/[.05]"}`}>{s.won ? "Win" : "Loss"}</div>
-
-        <div className="spk-rise relative flex items-center gap-2" style={beat(0)}>
-          <span className={`rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-[.14em] ${s.won ? "bg-accent text-ink" : "bg-white/12 text-fg"}`}>{s.won ? "Win" : "Loss"}</span>
-          <span className="truncate text-[12px] font-bold uppercase tracking-[.14em] text-white/45">{s.eventTitle} · {s.label}</span>
-        </div>
-
-        <div className="spk-rise relative" style={beat(1)}>
-          <div className="flex items-end gap-3">
-            <Side ids={[m.me.id, s.partner]} score={s.mine} lead={s.won} m={m} align="left" self={self} />
-            <span className="pb-4 text-[13px] font-black uppercase tracking-[.2em] text-white/30">vs</span>
-            <Side ids={s.opponents} score={s.theirs} lead={!s.won} m={m} align="right" />
-          </div>
-        </div>
-
-        <p className="spk-rise relative text-[24px] font-black leading-[1.15] tracking-[-.01em]" style={beat(3)}>{s.cheer}</p>
-
-        <div className="spk-rise relative rounded-3xl border border-white/10 bg-white/[.05] p-4" style={beat(4)}>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-1.5 text-[12px] font-bold">
-              <span className="rounded-full bg-white/[.08] px-2.5 py-1 text-white/70">{Math.round(s.winProb * 100)}% to win going in</span>
-            </div>
-            {s.placingGame == null ? (
-              <span className={`spk-stamp tnum shrink-0 rounded-2xl px-3 py-1.5 text-[30px] font-black leading-none ${s.delta >= 0 ? "bg-accent text-ink" : "bg-white/15 text-fg"}`} style={beat(5)}>
-                {s.delta >= 0 ? "+" : "−"}<CountUp to={Math.abs(s.delta)} />
-              </span>
-            ) : (
-              <span className="spk-stamp tnum shrink-0 rounded-2xl bg-white/15 px-3 py-1.5 text-[18px] font-black leading-none" style={beat(5)}>{s.placingGame}/{PROV_N}</span>
-            )}
-          </div>
-          <LevelBar bar={s.bar} delta={s.delta} />
-        </div>
-      </div>
-    );
-  }
+  if (s.kind === "game") return <MatchView match={s.match} names={m.names} title={`${s.eventTitle} · ${s.label}`} you={self ? m.me.id : undefined} cheer={self ? s.cheer : undefined} />;
+  if (s.kind === "match") return <MatchView match={s.match} names={m.names} title={`${s.eventTitle} · ${s.label}`} />;
   if (s.kind === "placed") {
     const c = s.level.color;
     return (

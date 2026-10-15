@@ -8,7 +8,7 @@ import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
 import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
-import { getEventView, groupsOf, myMoments, myDrawStory, gameStory, type Moments, type DrawFeed } from "@/lib/data";
+import { getEventView, groupsOf, myMoments, myDrawStory, gameStory, gameResult, type Moments, type DrawFeed } from "@/lib/data";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -551,4 +551,10 @@ export async function seenMoments(upTo: number): Promise<Result> {
 export async function replayGame(playerId: string, gameId: string): Promise<Moments | null> {
   if (!isUuid(playerId) || !isUuid(gameId)) return null;
   try { return await gameStory(playerId, gameId); } catch { return null; }
+}
+
+/** The story of a game this phone just scored: the whole game, then yours if you played in it. */
+export async function resultOf(gameId: string): Promise<(Moments & { played: boolean }) | null> {
+  if (!isUuid(gameId)) return null;
+  try { return await gameResult(gameId, (await me())?.playerId ?? null); } catch { return null; }
 }

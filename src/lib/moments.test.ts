@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMoments, cheerFor, gameMoments, type MomentEvent, type TimedGame } from "./moments";
+import { buildMoments, cheerFor, gameMoments, gameResultOf, matchMoments, type MomentEvent, type TimedGame } from "./moments";
 import { rate, PROV_N } from "./standings";
 
 let n = 0;
@@ -66,5 +66,62 @@ describe("gameMoments (replaying a past game)", () => {
     const live = buildMoments(e, r, "me", 400).slides[0];
     expect(gameMoments(e, r, "me", games.at(-1)!.id)[0]).toEqual(live);
     expect(gameMoments(e, r, "me", "nope")).toEqual([]);
+  });
+});
+
+describe("gameResultOf (the whole game, for the phone that scored it)", () => {
+  // Enough games for all four to be placed, then one more.
+  const four = [["a", "b"], ["c", "d"]] as const;
+  const games = Array.from({ length: PROV_N + 1 }, (_, i) =>
+    game(100 + i, [...(i % 3 ? four[0] : ["a", "c"])] as [string, string], [...(i % 3 ? four[1] : ["b", "d"])] as [string, string], 15, 9 + (i % 4)));
+
+  it("gives all four lines, matching each player's own ledger, and side A's odds going in", () => {
+    const e = ev(games), r = ratings(e);
+    const last = games.at(-1)!;
+    const res = gameResultOf(r, last)!;
+    expect(res.lines.map((l) => l.id)).toEqual([...last.a, ...last.b]);
+    for (const l of res.lines) {
+      const entry = r.players.get(l.id)!.entries.find((x) => x.gameId === last.id)!;
+      expect(l.after - l.before).toBe(entry.delta);
+      expect(l.won).toBe(entry.won);
+    }
+    expect(res.chanceA).toBeGreaterThan(0);
+    expect(res.chanceA).toBeLessThan(1);
+    expect(res.lines[2].placingGame).toBeNull(); // placed by now
+  });
+
+  it("counts placement games while placing, with no ladder place", () => {
+    const e = ev(games.slice(0, 2)), r = ratings(e);
+    const res = gameResultOf(r, games[1])!;
+    expect(res.lines.every((l) => l.placingGame === 2 && l.rankBefore === null && l.rankAfter === null)).toBe(true);
+  });
+});
+
+describe("matchMoments (the story the scorer's phone shows)", () => {
+  const gs = [game(100, ["a", "b"], ["c", "d"], 15, 9), game(200, ["a", "c"], ["b", "d"], 13, 15)];
+
+  it("opens every game's story with the whole game, then yours", () => {
+    const e = ev(gs), r = ratings(e);
+    const mine = matchMoments(e, r, gs[1].id, "a");
+    expect(mine[0]).toMatchObject({ kind: "game", match: { scoreA: 13, scoreB: 15 } });
+    expect(mine[0].kind === "game" && mine[0].match.lines.map((l) => l.id)).toEqual(["a", "c", "b", "d"]);
+    // The same slides a player gets on their own phone.
+    expect(mine).toEqual(gameMoments(e, r, "a", gs[1].id));
+  });
+
+  it("shows a scorer at the side just the whole game", () => {
+    const e = ev(gs), r = ratings(e);
+    const side = matchMoments(e, r, gs[1].id, "someone-else");
+    expect(side).toHaveLength(1);
+    expect(side[0]).toMatchObject({ kind: "match", match: { a: ["a", "c"], b: ["b", "d"] } });
+  });
+});
+
+describe("ladder places on the whole-game slide", () => {
+  it("only shows a ladder place on each player's latest game", () => {
+    const gs = Array.from({ length: PROV_N + 2 }, (_, i) => game(100 + i, ["a", "b"], ["c", "d"], 15, 9 + (i % 4)));
+    const e = ev(gs), r = ratings(e);
+    expect(gameResultOf(r, gs.at(-1)!)!.lines.every((l) => l.rankAfter != null)).toBe(true);
+    expect(gameResultOf(r, gs.at(-2)!)!.lines.every((l) => l.rankAfter == null && l.rankBefore == null)).toBe(true);
   });
 });

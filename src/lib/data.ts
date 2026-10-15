@@ -109,7 +109,7 @@ export { groupsOf, finalsOf, eventStandings, type GroupView } from "@/lib/views"
 import { finalsOf, liveEventId } from "@/lib/views";
 import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
 import { buildStory, type Story } from "@/lib/story";
-import { buildMoments, gameMoments, type MomentSlide } from "@/lib/moments";
+import { buildMoments, gameMoments, matchMoments, type MomentSlide } from "@/lib/moments";
 import { buildDrawStory, type DrawStory } from "@/lib/drawStory";
 import { ladder, type LadderRow, type PlacingRow } from "@/lib/ladder";
 import { rate, eventChange, PROV_N, type Ratings, type Ledger } from "@/lib/standings";
@@ -411,4 +411,16 @@ export async function gameStory(playerId: string, gameId: string): Promise<Momen
   const slides = gameMoments(momentEvents(evs, gs), ratingsOf(evs, gs), playerId, gameId);
   if (!slides.length) return null;
   return { slides, upTo: g.updatedAt, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(p) };
+}
+
+/** The story of a game just scored, for the phone that scored it (see matchMoments). `played`:
+ *  the viewer was in it, so it's their story of the game and can be marked seen. */
+export async function gameResult(gameId: string, viewer: string | null): Promise<(Moments & { played: boolean }) | null> {
+  const { ps, evs, gs } = await everything();
+  const g = gs.find((x) => x.id === gameId);
+  const me = viewer ? ps.find((x) => x.id === viewer) : undefined;
+  if (!g || g.status !== "done" || !me) return null;
+  const slides = matchMoments(momentEvents(evs, gs), ratingsOf(evs, gs), gameId, viewer);
+  if (!slides.length) return null;
+  return { slides, upTo: g.updatedAt, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(me), played: [...g.a, ...g.b].includes(me.id) };
 }
