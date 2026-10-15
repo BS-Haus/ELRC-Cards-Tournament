@@ -18,7 +18,7 @@ import { EventPhotos } from "@/components/EventPhotos";
 export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
   me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null;
   today: { id: string; title: string; state: EntryState | null; started: boolean; photos: EventPhoto[] } | null; season: Season | null;
-  profile: Pick<Profile, "player" | "tierWins" | "bestPartner" | "recent" | "names"> | null;
+  profile: Pick<Profile, "player" | "tierWins" | "bestPartner" | "recent" | "names" | "form" | "trail" | "biggestWin" | "bestRun"> | null;
 }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();

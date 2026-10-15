@@ -112,6 +112,7 @@ import { xpWeekends } from "@/lib/levels";
 import { buildStory, type Story } from "@/lib/story";
 import { buildMoments, gameMoments, gameXps, type MomentSlide } from "@/lib/moments";
 import { buildDrawStory, type DrawStory } from "@/lib/drawStory";
+import { eventLadder, overallLadder, xpTrail, type LadderEvent, type LadderRow } from "@/lib/ladder";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
@@ -180,6 +181,12 @@ export type Profile = {
   recent: ProfileGame[];
   names: Record<string, PlayerLite>;
   xp: number;
+  /** Their last five counted results, oldest first, and XP after each of their latest games. */
+  form: ("W" | "L")[];
+  trail: number[];
+  /** Biggest winning margin and longest run of wins, over every counted game. */
+  biggestWin: number;
+  bestRun: number;
 };
 
 /** The headline of a player's weekends: their XP and place among everyone who's played, their
@@ -261,7 +268,40 @@ export async function getProfile(id: string): Promise<Profile | null> {
       };
     });
 
-  return { player: lite(me), stats: { ...stats, events: evIds.size }, tierWins, bestPartner: bp ? { id: bp[0], ...bp[1] } : null, events, recent, names, xp: rated?.xp ?? 0 };
+  const trail = rated ? xpTrail(ladderEvents(evs, gs), id, xpWeekends(byEvent(evs, gs))) : [];
+  const inOrder = counted.filter((g) => !g.decider).sort((a, b) => a.updatedAt - b.updatedAt);
+  const wonIt = (g: Game) => (g.a.includes(id) ? g.scoreA! > g.scoreB! : g.scoreB! > g.scoreA!);
+  let run = 0, bestRun = 0, biggestWin = 0;
+  for (const g of inOrder) {
+    if (wonIt(g)) { run++; bestRun = Math.max(bestRun, run); biggestWin = Math.max(biggestWin, Math.abs(g.scoreA! - g.scoreB!)); } else run = 0;
+  }
+  return {
+    player: lite(me), stats: { ...stats, events: evIds.size }, tierWins, bestPartner: bp ? { id: bp[0], ...bp[1] } : null, events, recent, names, xp: rated?.xp ?? 0,
+    form: inOrder.slice(-5).map((g) => (wonIt(g) ? "W" : "L")), trail: [0, ...trail.map((t) => t.xp)].slice(-11), biggestWin, bestRun,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ladders (src/lib/ladder.ts)
+
+const ladderEvents = (evs: { id: string; startsAt: Date }[], gs: (Game & { eventId: string; updatedAt: number })[]): LadderEvent[] =>
+  evs.map((e) => ({ id: e.id, startsAt: e.startsAt.getTime(), games: gs.filter((g) => g.eventId === e.id) }));
+
+/** One event's ladder: everyone checked in or who has played there, by XP made that day. Events
+ *  after it are left out, so a finished event's ladder reads the same later on. */
+export async function getEventLadder(eventId: string): Promise<LadderRow[]> {
+  const { evs, ens, gs } = await everything();
+  const ev = evs.find((e) => e.id === eventId);
+  if (!ev) return [];
+  const ids = new Set(ens.filter((e) => e.eventId === eventId && e.state === "here").map((e) => e.playerId));
+  for (const g of gs) if (g.eventId === eventId && g.status !== "void") for (const id of [...g.a, ...g.b]) ids.add(id);
+  return eventLadder(ladderEvents(evs.filter((e) => e.startsAt <= ev.startsAt), gs), eventId, [...ids]);
+}
+
+/** Everyone who's played, by all-time XP. */
+export async function getOverallLadder(): Promise<LadderRow[]> {
+  const { ps, evs, gs } = await everything();
+  return overallLadder(ladderEvents(evs, gs), ps.map((p) => p.id));
 }
 
 export const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
