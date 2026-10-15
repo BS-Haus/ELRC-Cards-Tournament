@@ -111,6 +111,7 @@ import { buildRecap, type DayEvent, type Recap } from "@/lib/recap";
 import { xpWeekends } from "@/lib/levels";
 import { buildStory, type Story } from "@/lib/story";
 import { buildMoments, type MomentSlide } from "@/lib/moments";
+import { buildDrawStory, type DrawStory } from "@/lib/drawStory";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
@@ -310,4 +311,30 @@ export async function myMoments(playerId: string): Promise<Moments | null> {
   const { slides, upTo } = buildMoments(events, playerId, p.xpSeenAt.getTime());
   if (!slides.length) return null;
   return { slides, upTo, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(p) };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Draw stories: a stage you're in, drawn since you last looked (src/lib/drawStory.ts).
+
+export type DrawFeed = { story: DrawStory; names: Record<string, PlayerLite>; me: PlayerLite };
+
+export async function myDrawStory(playerId: string): Promise<DrawFeed | null> {
+  const [p] = await db.select().from(players).where(eq(players.id, playerId));
+  if (!p) return null;
+  // Cheap check first: the newest stage drawn since they looked that has them in a game.
+  const [hit] = await db.select({ id: stages.id, eventId: stages.eventId, no: stages.no }).from(stages)
+    .innerJoin(games, eq(games.stageId, stages.id))
+    .where(and(gt(stages.createdAt, p.stageSeenAt), or(eq(games.a1, playerId), eq(games.a2, playerId), eq(games.b1, playerId), eq(games.b2, playerId))))
+    .orderBy(desc(stages.createdAt)).limit(1);
+  if (!hit) return null;
+  const { ps, evs, sts, gs } = await everything();
+  const ev = evs.find((e) => e.id === hit.eventId);
+  if (!ev) return null;
+  const history = evs.map((e) => ({ id: e.id, startsAt: e.startsAt.getTime(), games: gs.filter((g) => g.eventId === e.id) }));
+  const story = buildDrawStory(
+    { id: ev.id, title: ev.title, nets: ev.nets, stages: sts.filter((s) => s.eventId === ev.id).map((s) => ({ no: s.no, kind: s.kind as StageKind, createdAt: s.createdAt.getTime() })), games: gs.filter((g) => g.eventId === ev.id) },
+    history, hit.no, playerId,
+  );
+  if (!story) return null;
+  return { story, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(p) };
 }

@@ -8,7 +8,7 @@ import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
 import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
-import { getEventView, groupsOf, myMoments, type Moments } from "@/lib/data";
+import { getEventView, groupsOf, myMoments, myDrawStory, type Moments, type DrawFeed } from "@/lib/data";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -513,11 +513,27 @@ export async function subIn(gameId: string, fromId: string, subId: string, allRe
 // ---------------------------------------------------------------------------------------------
 // Level moments
 
-/** Your games scored since you last looked, as story slides; null when there's nothing new (or
- *  you're not signed in). Polled by every signed-in phone, so the empty case is one small query. */
-export async function checkMoments(): Promise<Moments | null> {
+export type Feed = { levels: Moments | null; draw: DrawFeed | null };
+
+/** What's new for you since you last looked: your scored games (level moments) and any stage
+ *  you're in that's been drawn (draw story). Null when there's nothing (or you're not signed in).
+ *  Polled by every signed-in phone, so the empty case is two small queries. */
+export async function checkMoments(): Promise<Feed | null> {
   const s = await me(); if (!s) return null;
-  try { return await myMoments(s.playerId!); } catch { return null; }
+  const [levels, draw] = await Promise.all([
+    myMoments(s.playerId!).catch(() => null),
+    myDrawStory(s.playerId!).catch(() => null),
+  ]);
+  return levels || draw ? { levels, draw } : null;
+}
+
+/** Mark draw stories up to `at` (the stage's creation time, ms) as seen. Never moves backwards. */
+export async function seenDraw(at: number): Promise<Result> {
+  const s = await me(); if (!s) return fail("Sign in first.");
+  if (!Number.isFinite(at) || at <= 0) return fail("Nothing to mark.");
+  const t = new Date(Math.min(at + 1, Date.now() + 60_000));
+  await db.update(players).set({ stageSeenAt: sql`greatest(${players.stageSeenAt}, ${t.toISOString()}::timestamptz)` }).where(eq(players.id, s.playerId!));
+  return { ok: true };
 }
 
 /** Mark everything up to `upTo` (ms) as seen. Never moves backwards. */

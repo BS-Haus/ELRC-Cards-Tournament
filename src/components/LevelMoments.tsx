@@ -1,16 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { checkMoments, seenMoments } from "@/app/actions";
+import { checkMoments, seenMoments, seenDraw, type Feed } from "@/app/actions";
 import { CountUp, Confetti } from "@/components/StoryReel";
 import { Avatar } from "@/components/ui";
-import type { Moments } from "@/lib/data";
+import { drawSlides } from "@/components/DrawSlides";
+import type { Moments, PlayerLite } from "@/lib/data";
 import type { MomentSlide } from "@/lib/moments";
 import type { Level } from "@/lib/levels";
 
-// Pops up whenever one of your games has been scored (by you or anyone else): a short story of
-// what it did to your level. Checks every few seconds while the app is open, and straight away
-// when this phone saves a score (the "cards:moments" event). Closing it marks it seen.
+// Story moments that pop up on their own: how each scored game moved your level, and the draw
+// whenever a stage you're in is drawn (results so far, seeding, the new groups, your net). Checks
+// every few seconds while the app is open, and straight away when this phone saves a score (the
+// "cards:moments" event). Level updates play first, then the draw. Each is marked seen when closed.
 
 const SLIDE_MS = 4500;
 const POLL_MS = 8000;
@@ -18,12 +20,29 @@ const POLL_MS = 8000;
 /** Ask for an immediate check, e.g. right after saving a score. */
 export const pingMoments = () => { try { window.dispatchEvent(new Event("cards:moments")); } catch {} };
 
+/** One slide of any story: what's on it, its background, and whether it throws confetti. */
+export type StorySlide = { key: string; bg: string; body: React.ReactNode; party?: boolean; ms?: number };
+type Story = { label: string; me: PlayerLite; slides: StorySlide[]; done: string; markSeen: () => Promise<unknown> };
+
+function storiesFrom(f: Feed): Story[] {
+  const out: Story[] = [];
+  if (f.levels?.slides.length) {
+    const m = f.levels;
+    out.push({ label: "Your results", me: m.me, slides: levelSlides(m), done: f.draw ? "Next" : "Back to it", markSeen: () => seenMoments(m.upTo) });
+  }
+  if (f.draw) {
+    const d = f.draw;
+    out.push({ label: d.story.eventTitle, me: d.me, slides: drawSlides(d), done: "Let's play", markSeen: () => seenDraw(d.story.createdAt) });
+  }
+  return out;
+}
+
 export function LevelMoments() {
-  const [m, setM] = useState<Moments | null>(null);
+  const [queue, setQueue] = useState<Story[]>([]);
   const busy = useRef(false);
   const showing = useRef(false);
-
   const again = useRef(false);
+
   const check = useCallback(async () => {
     if (showing.current || document.hidden) return;
     // A check already running might have started before the score landed: run once more after it.
@@ -32,8 +51,9 @@ export function LevelMoments() {
     try {
       do {
         again.current = false;
-        const r = await checkMoments();
-        if (r && r.slides.length) { showing.current = true; setM(r); break; }
+        const f = await checkMoments();
+        const stories = f ? storiesFrom(f) : [];
+        if (stories.length) { showing.current = true; setQueue(stories); break; }
       } while (again.current);
     } catch {} finally { busy.current = false; }
   }, []);
@@ -48,31 +68,33 @@ export function LevelMoments() {
     return () => { clearTimeout(first); clearInterval(t); window.removeEventListener("cards:moments", now); document.removeEventListener("visibilitychange", vis); };
   }, [check]);
 
-  if (!m) return null;
+  const story = queue[0];
+  if (!story) return null;
   const close = () => {
-    const upTo = m.upTo;
-    setM(null);
-    showing.current = false;
-    seenMoments(upTo).catch(() => {});
+    story.markSeen().catch(() => {});
+    const rest = queue.slice(1);
+    setQueue(rest);
+    if (!rest.length) showing.current = false;
   };
-  return <Reel m={m} onClose={close} />;
+  return <Reel key={story.label + story.slides.length} story={story} onClose={close} />;
 }
 
-function Reel({ m, onClose }: { m: Moments; onClose: () => void }) {
-  const slides = m.slides;
+function Reel({ story, onClose }: { story: Story; onClose: () => void }) {
+  const slides = story.slides;
   const [at, setAt] = useState(0);
   const [paused, setPaused] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const last = at === slides.length - 1;
+  const ms = slides[at]?.ms ?? SLIDE_MS;
   const go = useCallback((i: number) => { if (i >= slides.length) return; setAt(Math.max(0, i)); setElapsed(0); }, [slides.length]);
 
   useEffect(() => {
-    if (paused || last) return; // the last slide waits for "Back to it"
+    if (paused || last) return; // the last slide waits for the button
     const t0 = performance.now() - elapsed;
     let raf = 0;
     const tick = (t: number) => {
       const e = t - t0;
-      if (e >= SLIDE_MS) { go(at + 1); return; }
+      if (e >= ms) { go(at + 1); return; }
       setElapsed(e);
       raf = requestAnimationFrame(tick);
     };
@@ -101,42 +123,49 @@ function Reel({ m, onClose }: { m: Moments; onClose: () => void }) {
   };
 
   const s = slides[at];
-  const bg = s.kind === "levelUp" || s.kind === "finish" ? "from-[#24300f] to-[#0c0e10]"
-    : s.kind === "levelDown" ? "from-[#1c1f2a] to-[#0c0e10]"
-    : s.kind === "game" && s.won ? "from-[#16260f] to-[#0c0e10]"
-    : s.kind === "game" ? "from-[#1d1b22] to-[#0c0e10]" : "from-[#10202a] to-[#0c0e10]";
-  const party = s.kind === "levelUp" || s.kind === "finish";
-
   return (
-    <div role="dialog" aria-modal="true" aria-label="Your latest results" className="fixed inset-0 z-[60] mx-auto flex max-w-[480px] flex-col bg-[#0c0e10] text-fg">
-      <div className={`absolute inset-0 bg-gradient-to-b ${bg}`} />
-      {party && <Confetti key={at} />}
+    <div role="dialog" aria-modal="true" aria-label={story.label} className="fixed inset-0 z-[60] mx-auto flex max-w-[480px] flex-col bg-[#0c0e10] text-fg">
+      <div className={`absolute inset-0 bg-gradient-to-b ${s.bg}`} />
+      {s.party && <Confetti key={s.key} />}
       <div className="relative z-10 flex gap-1 px-3 pt-[calc(10px+env(safe-area-inset-top))]">
-        {slides.map((_, i) => (
-          <div key={i} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/20">
-            <div className="h-full bg-white" style={{ width: i < at ? "100%" : i === at ? (last ? "100%" : `${(elapsed / SLIDE_MS) * 100}%`) : "0%" }} />
+        {slides.map((x, i) => (
+          <div key={x.key} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/20">
+            <div className="h-full bg-white" style={{ width: i < at ? "100%" : i === at ? (last ? "100%" : `${(elapsed / ms) * 100}%`) : "0%" }} />
           </div>
         ))}
       </div>
       <div className="relative z-10 flex items-center justify-between px-4 pt-3">
-        <span className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.16em] text-white/50"><Avatar p={m.me} size={20} />Your results</span>
+        <span className="flex min-w-0 items-center gap-2 text-[12px] font-bold uppercase tracking-[.16em] text-white/50"><Avatar p={story.me} size={20} /><span className="truncate">{story.label}</span></span>
         <button onClick={onClose} className="spk-press -mr-2 p-2 text-white/70" aria-label="Close">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
         </button>
       </div>
       <div
-        className="spk-noselect relative z-10 flex flex-1 touch-manipulation select-none items-center px-7"
+        className="spk-noselect relative z-10 flex min-h-0 flex-1 touch-manipulation select-none items-center overflow-y-auto px-6"
         onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => setPaused(false)} onContextMenu={(e) => e.preventDefault()}
       >
-        <div key={at} className="spk-up w-full"><Body s={s} m={m} /></div>
+        <div key={s.key} className="spk-up w-full py-4">{s.body}</div>
       </div>
       <div className="relative z-10 px-7 pb-[calc(28px+env(safe-area-inset-bottom))]">
         {last
-          ? <button onClick={onClose} className="spk-press h-14 w-full rounded-2xl bg-accent text-[16px] font-black text-ink">Back to it</button>
+          ? <button onClick={onClose} className="spk-press h-14 w-full rounded-2xl bg-accent text-[16px] font-black text-ink">{story.done}</button>
           : <p className="text-center text-[12.5px] text-white/40">Tap to continue</p>}
       </div>
     </div>
   );
+}
+
+/** The level-moment slides (one scored game, a level change, a finals finish, a summary). */
+function levelSlides(m: Moments): StorySlide[] {
+  return m.slides.map((s, i) => ({
+    key: `lv-${i}`,
+    bg: s.kind === "levelUp" || s.kind === "finish" ? "from-[#24300f] to-[#0c0e10]"
+      : s.kind === "levelDown" ? "from-[#1c1f2a] to-[#0c0e10]"
+      : s.kind === "game" && s.won ? "from-[#16260f] to-[#0c0e10]"
+      : s.kind === "game" ? "from-[#1d1b22] to-[#0c0e10]" : "from-[#10202a] to-[#0c0e10]",
+    party: s.kind === "levelUp" || s.kind === "finish",
+    body: <Body s={s} m={m} />,
+  }));
 }
 
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}`;

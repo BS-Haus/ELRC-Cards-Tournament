@@ -68,3 +68,8 @@ button:disabled { cursor: default; }
 @media (prefers-reduced-motion: reduce) { .spk-confetti, .spk-crown { animation: none; } .spk-confetti { display: none; } }
 @keyframes spkFade { 0% { opacity: 0; transform: scale(1.04); } 100% { opacity: 1; transform: scale(1); } }
 .spk-fade { animation: spkFade .8s ease-out both; }
+
+/* Draw stories: a player dealt into their group like a card. */
+@keyframes spkDeal { 0% { opacity: 0; transform: translate(-40px, -70px) rotate(-14deg) scale(.6); } 70% { opacity: 1; transform: translate(0, 4px) rotate(2deg) scale(1.04); } 100% { opacity: 1; transform: none; } }
+.spk-deal { animation: spkDeal .5s cubic-bezier(.2,.9,.3,1.1) both; }
+@media (prefers-reduced-motion: reduce) { .spk-deal { animation: none; } }
