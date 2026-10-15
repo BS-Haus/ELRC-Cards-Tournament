@@ -15,6 +15,8 @@ export const players = pgTable("players", {
   // When they last saw how their games moved their level (src/lib/moments.ts). Anything scored
   // after this pops up as a story next time they're in the app.
   xpSeenAt: timestamp("xp_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  // When they last saw a draw story (src/lib/drawStory.ts): stages drawn after this pop up.
+  stageSeenAt: timestamp("stage_seen_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // A weekend session people sign up for: "Sunday cards, Victoria Park".
