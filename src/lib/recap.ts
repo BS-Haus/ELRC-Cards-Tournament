@@ -1,7 +1,6 @@
 // A player's day, as a story: the numbers, the finish, the moments, and how it compares with
 // last time. Pure: games in, recap out. Everything the recap reel and its saveable image show is
 // worked out here, so the two can't disagree.
-import type { XpPart } from "@/lib/levels";
 import { tally, groupRank, groupMembers, groupWinner, isDone, rank, TIERS, type Game, type Line } from "@/lib/cards";
 
 export type DayGame = Game & { eventId: string };
@@ -18,8 +17,9 @@ export type Recap = {
   /** The day's headline games, for everyone. */
   moments: { biggestWin: Moment | null; longestGame: Moment | null; unbeaten: string[] };
   me: MyDay | null;
-  /** XP either side of this weekend and how it was made up (src/lib/levels.ts; added by the loader). */
-  progress?: { before: number; after: number; parts: XpPart[] } | null;
+  /** Rating either side of this weekend, and their games before it and in it (src/lib/standings.ts;
+   *  added by the loader). Below PROV_N games they're still placing. */
+  progress?: { before: number; after: number; gamesBefore: number; games: number } | null;
 };
 
 export type MyDay = {
@@ -92,7 +92,7 @@ export function finishOf(games: Game[], id: string): Finish | null {
   for (const g of res.groups) {
     const members = groupMembers(g.games.filter((x) => !x.decider));
     if (!members.includes(id)) continue;
-    const table = groupRank(tally(g.games.filter((x) => x.status !== "void"), members).values()).map((r) => r.id);
+    const table = groupRank(tally(g.games.filter((x) => x.status !== "void"), members).values(), g.games).map((r) => r.id);
     // A decided tie puts the decider's winner first.
     if (g.winner && table[0] !== g.winner) table.splice(table.indexOf(g.winner), 1), table.unshift(g.winner);
     const tierIndex = TIERS.indexOf(g.name) >= 0 ? TIERS.indexOf(g.name) : g.groupNo;

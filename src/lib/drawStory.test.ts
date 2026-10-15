@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildDrawStory } from "./drawStory";
 import { planStage, type Game, type StageKind } from "./cards";
+import { rate } from "./standings";
+
+const r = (games: Game[]) => rate([{ id: "e", startsAt: Date.UTC(2026, 9, 3, 11), groupTo: 15, finalTo: 15, games }]);
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 
@@ -15,7 +18,7 @@ describe("buildDrawStory", () => {
   it("first draw: groups, nets, and your group and first game, no results yet", () => {
     const games = stageGames("random", 1, ids(9));
     const ev = { id: "e", title: "Sunday cards", nets: 2, stages: [{ no: 1, kind: "random" as const, createdAt: 1 }], games };
-    const s = buildDrawStory(ev, [{ id: "e", startsAt: 0, games }], 1, "p0")!;
+    const s = buildDrawStory(ev, r(games), 1, "p0")!;
     expect(s.results).toBeNull();
     expect(s.groups.map((g) => g.label)).toEqual(["Group A", "Group B"]);
     expect(s.players).toBe(9);
@@ -30,21 +33,22 @@ describe("buildDrawStory", () => {
     const s2 = stageGames("final", 2, ["p0", "p5", "p1", "p6", "p2", "p7", "p3", "p8", "p4", "p9"]);
     const games = [...s1, ...s2];
     const ev = { id: "e", title: "Sunday cards", nets: 2, stages: [{ no: 1, kind: "random" as const, createdAt: 1 }, { no: 2, kind: "final" as const, createdAt: 2 }], games };
-    const s = buildDrawStory(ev, [{ id: "e", startsAt: 0, games }], 2, "p0")!;
+    const s = buildDrawStory(ev, r(games), 2, "p0")!;
     expect(s.kind).toBe("final");
     expect(s.results!.groups).toHaveLength(2);
     expect(s.results!.groups[0].winner).toBe("p0");
     const p0 = s.results!.groups[0].rows[0];
     expect(p0).toMatchObject({ id: "p0", w: 4, l: 0 });
+    expect(p0.placing).toBe(true); // four games in: still placing, so no number on show
     expect(p0.xp).toBeGreaterThan(0);
     expect(s.results!.xpUp).toBeGreaterThan(0);
-    expect(s.results!.xpDown).toBeLessThan(0); // losses show, even though everyone's net XP is up
+    expect(s.results!.xpDown).toBeLessThan(0);
     expect(s.results!.closest!.score[0] - s.results!.closest!.score[1]).toBe(2);
     expect(s.seeding).toMatchObject({ from: "1st in Group A", to: "A final" });
     expect(s.groups[0].label).toBe("A final");
   });
 
   it("is null for a stage you can't find", () => {
-    expect(buildDrawStory({ id: "e", title: "x", nets: 2, stages: [], games: [] }, [], 1, "p0")).toBeNull();
+    expect(buildDrawStory({ id: "e", title: "x", nets: 2, stages: [], games: [] }, r([]), 1, "p0")).toBeNull();
   });
 });

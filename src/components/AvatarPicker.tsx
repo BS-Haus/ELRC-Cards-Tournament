@@ -25,7 +25,7 @@ async function shrink(file: File): Promise<string> {
 /** Your photo, big: tap it to add one, or (once you have one) to change or remove it. No buttons
  *  on the page; the choices only appear when you ask for them. With `rank` it wears the rank ring
  *  and division banner (RankAvatar), as your profile does for everyone else. */
-export function AvatarPicker({ me, size = 104, rank }: { me: { name: string; color: string; photo: string | null }; size?: number; rank?: { name: string; icon: string; color: string } }) {
+export function AvatarPicker({ me, size = 104, rank, tag }: { me: { name: string; color: string; photo: string | null }; size?: number; rank?: { name: string; icon: string; color: string; level?: number }; tag?: string }) {
   const { run, pending, toast } = useAction();
   const file = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState(false);
@@ -40,7 +40,7 @@ export function AvatarPicker({ me, size = 104, rank }: { me: { name: string; col
     <>
       {toast}
       <button type="button" disabled={pending} onClick={() => (me.photo ? setMenu(true) : choose())} className="spk-press relative rounded-full disabled:opacity-60" aria-label={me.photo ? "Change or remove your photo" : "Add a photo"}>
-        <RankAvatar p={me} size={size} rank={rank} />
+        <RankAvatar p={me} size={size} rank={rank} tag={tag} />
         <span className="absolute top-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-[3px] border-bg bg-accent text-ink" aria-hidden="true">
           {me.photo
             ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>

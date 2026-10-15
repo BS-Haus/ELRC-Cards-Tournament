@@ -11,14 +11,15 @@ import { AvatarPicker } from "@/components/AvatarPicker";
 import { CheckIn } from "@/components/CheckIn";
 import { PlayerBody } from "@/components/PlayerBody";
 import type { Profile, Season } from "@/lib/data";
-import { levelFor } from "@/lib/levels";
+import { tierFor } from "@/lib/levels";
+import { PROV_N } from "@/lib/standings";
 import type { EntryState, EventPhoto } from "@/lib/data";
 import { EventPhotos } from "@/components/EventPhotos";
 
 export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
   me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null;
   today: { id: string; title: string; state: EntryState | null; started: boolean; photos: EventPhoto[] } | null; season: Season | null;
-  profile: Pick<Profile, "tierWins" | "bestPartner" | "recent" | "names"> | null;
+  profile: Pick<Profile, "player" | "tierWins" | "bestPartner" | "recent" | "names" | "form" | "trail" | "biggestWin" | "bestRun"> | null;
 }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
@@ -29,7 +30,7 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
       {toast}
       {me ? (
         <header className="flex flex-col items-center px-5 pt-[calc(22px+env(safe-area-inset-top))] pb-5 text-center">
-          <AvatarPicker me={me} rank={season ? levelFor(season.xp).level : undefined} />
+          <AvatarPicker me={me} rank={season ? tierFor(season).level : undefined} tag={season ? (season.games < PROV_N ? `${season.games}/${PROV_N}` : String(season.rating)) : undefined} />
           <h1 className="mt-5 text-[26px] font-black leading-tight tracking-[-.02em]">{me.name}</h1>
           <div className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">East London Roundnet</div>
           {next && <Link href={next} className="mt-3 text-[13px] font-bold text-accent">← Back to the event</Link>}
@@ -52,7 +53,7 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
             </CheckIn>
           </>
         )}
-        {season && profile && <PlayerBody season={season} pr={profile} />}
+        {season && profile && <PlayerBody season={season} pr={profile} mine />}
         </>
       )}
 

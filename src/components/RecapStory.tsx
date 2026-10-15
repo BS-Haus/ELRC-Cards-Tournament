@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { StoryReel, CountUp, type Slide } from "@/components/StoryReel";
 import { finalWinTitle } from "@/lib/cards";
 import { Avatar, tierColor, fmtDate, LevelPill, RankBadge } from "@/components/ui";
-import { levelFor } from "@/lib/levels";
+import { tierFor } from "@/lib/levels";
+import { PROV_N } from "@/lib/standings";
 import type { Recap, Moment, Finish } from "@/lib/recap";
 import type { PlayerLite } from "@/lib/data";
 
@@ -90,32 +91,35 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
       });
     }
 
-    // Your XP: what the day earned (or cost), line by line, and any level up or down.
-    if (recap.progress && recap.progress.parts.length) {
+    // Your rating: what the day did to it, and any tier change. While placing, how far through.
+    if (recap.progress) {
       const pr = recap.progress;
-      const from = levelFor(pr.before), to = levelFor(pr.after);
+      const from = tierFor({ rating: pr.before, games: pr.gamesBefore }), to = tierFor({ rating: pr.after, games: pr.gamesBefore + pr.games });
+      const placedNow = from.placing && !to.placing;
       const change = pr.after - pr.before;
-      const up = to.level.level > from.level.level, down = to.level.level < from.level.level;
+      const up = placedNow || (!from.placing && to.level.level > from.level.level), down = !from.placing && to.level.level < from.level.level;
       slides.push({
-        key: "xp", bg: up ? "from-[#16260c] to-[#0c0e10]" : down ? "from-[#2a1212] to-[#0c0e10]" : "from-[#14201a] to-[#0c0e10]", confetti: up,
+        key: "rating", bg: up ? "from-[#16260c] to-[#0c0e10]" : down ? "from-[#2a1212] to-[#0c0e10]" : "from-[#14201a] to-[#0c0e10]", confetti: up,
         body: (
           <div className="grid gap-5">
-            <div className="text-[13px] font-bold uppercase tracking-[.2em] text-white/50">XP</div>
-            <div className={`tnum text-[88px] font-black leading-none tracking-[-.03em] ${change >= 0 ? "text-accent" : "text-loss"}`}><CountUp to={Math.abs(change)} prefix={change >= 0 ? "+" : "−"} /></div>
-            <div className="grid gap-1.5">
-              {pr.parts.map((p, i) => (
-                <div key={p.label} className="spk-up flex justify-between text-[16px]" style={{ animationDelay: `${0.25 + i * 0.15}s` }}>
-                  <span className="text-white/70">{p.label}</span><span className={`tnum font-bold ${p.xp < 0 ? "text-loss" : ""}`}>{p.xp >= 0 ? "+" : "−"}{Math.abs(p.xp)}</span>
-                </div>
-              ))}
-            </div>
+            <div className="text-[13px] font-bold uppercase tracking-[.2em] text-white/50">{to.placing ? "Placing" : placedNow ? "Placed" : "Rating"}</div>
+            {to.placing ? (
+              <div className="tnum text-[88px] font-black leading-none tracking-[-.03em] text-white/80">{pr.gamesBefore + pr.games}/{PROV_N}</div>
+            ) : placedNow ? (
+              <div className="tnum text-[88px] font-black leading-none tracking-[-.03em] text-accent"><CountUp to={pr.after} /></div>
+            ) : (
+              <div className={`tnum text-[88px] font-black leading-none tracking-[-.03em] ${change >= 0 ? "text-accent" : "text-loss"}`}><CountUp to={Math.abs(change)} prefix={change >= 0 ? "+" : "−"} /></div>
+            )}
+            <p className="text-[16px] text-white/70">
+              {to.placing ? `${to.toNext} more ${to.toNext === 1 ? "game" : "games"} and your rating is revealed.` : placedNow ? "Your placement games are done. This is your rating, and every game from here moves it." : `${pr.before} → ${pr.after} over ${pr.games} ${pr.games === 1 ? "game" : "games"}.`}
+            </p>
             {(up || down) && (
               <div className="spk-crown flex items-center gap-3 text-[24px] font-black" style={{ color: up ? to.level.color : "#FF6B6B" }}>
                 <RankBadge level={to.level} size={40} />
-                <span>{up ? `Level ${to.level.level}! ${to.level.name}` : `Down to Level ${to.level.level}, ${to.level.name}`}</span>
+                <span>{placedNow ? `Placed: ${to.level.name}` : up ? `Up to ${to.level.name}` : `Down to ${to.level.name}`}</span>
               </div>
             )}
-            <XpBar xp={pr.after} />
+            <TierBar rating={pr.after} games={pr.gamesBefore + pr.games} />
           </div>
         ),
       });
@@ -370,19 +374,19 @@ function FieldBar({ label, s, fmt }: { label: string; s: { you: number; min: num
   );
 }
 
-/** How far through your level you are, filling once the slide is up. */
-function XpBar({ xp }: { xp: number }) {
-  const l = levelFor(xp);
+/** How far through your tier (or your placement) you are, filling once the slide is up. */
+function TierBar({ rating, games }: { rating: number; games: number }) {
+  const l = tierFor({ rating, games });
   const [pct, setPct] = useState(0);
   useEffect(() => { const t = setTimeout(() => setPct(l.progress), 500); return () => clearTimeout(t); }, [l.progress]);
   return (
     <div className="mt-2">
       <div className="mb-2 flex items-center justify-between">
         <LevelPill level={l.level} size="md" />
-        <span className="tnum text-[13px] text-white/60">{xp} XP{l.next ? ` · ${l.next.min - xp} to Level ${l.next.level}` : " · top level"}</span>
+        <span className="tnum text-[13px] text-white/60">{l.placing ? `${games}/${PROV_N} placed` : `${rating}${l.next ? ` · ${l.toNext} to ${l.next.name}` : " · top tier"}`}</span>
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full rounded-full" style={{ width: `${pct * 100}%`, background: l.level.color, transition: "width 1.1s cubic-bezier(.2,.8,.2,1)" }} />
+        <div className="h-full rounded-full" style={{ width: `${pct * 100}%`, background: l.placing ? "#CBFB4F" : l.level.color, transition: "width 1.1s cubic-bezier(.2,.8,.2,1)" }} />
       </div>
     </div>
   );

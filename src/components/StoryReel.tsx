@@ -42,9 +42,10 @@ export function Confetti() {
 /** `image`: a photo filling the screen behind the slide, darkened so the words read over it. */
 export type Slide = { key: string; bg: string; body: React.ReactNode; confetti?: boolean; image?: string };
 
-export function StoryReel({ slides, label, backHref, imageUrl, shareUrl, title, endTitle, endNote, endExtra }: {
+/** `endVisual`: what the saved image shows, drawn above the end screen's buttons. */
+export function StoryReel({ slides, label, backHref, imageUrl, shareUrl, title, endTitle, endNote, endExtra, endVisual }: {
   slides: Slide[]; label: string; backHref: string; imageUrl: string; shareUrl: string; title: string;
-  endTitle: string; endNote: string; endExtra?: React.ReactNode;
+  endTitle: string; endNote: string; endExtra?: React.ReactNode; endVisual?: React.ReactNode;
 }) {
   const router = useRouter();
   const [at, setAt] = useState(0);
@@ -133,7 +134,8 @@ export function StoryReel({ slides, label, backHref, imageUrl, shareUrl, title, 
       </div>
 
       {done ? (
-        <div className="relative z-10 flex flex-1 flex-col justify-center gap-3 px-7 pb-[calc(32px+env(safe-area-inset-bottom))]">
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col justify-center gap-3 overflow-y-auto px-7 pb-[calc(32px+env(safe-area-inset-bottom))]">
+          {endVisual && <div className="spk-up mb-3">{endVisual}</div>}
           <div className="text-[34px] font-black leading-tight">{endTitle}</div>
           <p className="mb-4 text-[16px] text-white/60">{endNote}</p>
           {endExtra}

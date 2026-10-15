@@ -12,13 +12,17 @@ import { ScoreBoxes } from "@/components/ScoreBoxes";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
-import { groupsOf, finalsOf, eventStandings, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
+import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
+import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
+import { motion, LayoutGroup } from "motion/react";
+import { PROV_N } from "@/lib/standings";
 
 const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded: "Seeded groups", final: "Finals" };
 
-/** `myXp`: your XP either side of this weekend so far (src/lib/levels.ts), loaded on the server. */
-export function EventScreen({ view, me, org, roster, myXp = null }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number } | null }) {
+/** `myXp`: your rating either side of this weekend so far, and your games in all (src/lib/standings.ts),
+ *  loaded on the server. */
+export function EventScreen({ view, me, org, roster, myXp = null }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number; games: number } | null }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [open, setOpen] = useState<string | null>(null); // game id in the score sheet
@@ -66,7 +70,6 @@ export function EventScreen({ view, me, org, roster, myXp = null }: { view: Even
     crowned.current = now;
   }, [winnersKey]);
   const iPlayed = !!me && games.some((g) => g.status === "done" && [...g.a, ...g.b].includes(me) && !g.subs.includes(me));
-  const standings = useMemo(() => eventStandings(view), [view]);
   const openGame = games.find((g) => g.id === open) ?? null;
   const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
   const live = ev.status === "live";
@@ -159,7 +162,7 @@ export function EventScreen({ view, me, org, roster, myXp = null }: { view: Even
           )}
 
           {live && queues.some((q) => q.length) && (
-            <Section title="On the nets" aside="Type the score in, or tap the game for more">
+            <Section title="On the nets" aside="Tap the winners, slide the score">
               <div className="grid gap-2.5">
                 {queues.map((q, i) => (
                   <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} to={q[0] ? toFor(q[0]) : 0} canScore={!!me} />
@@ -188,18 +191,6 @@ export function EventScreen({ view, me, org, roster, myXp = null }: { view: Even
           )}
 
           {org && !done && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} pool={inPool} />}
-
-          {live && standings.some((r) => r.gp) && (
-            <Section title="Standings">
-              <Link href="/players" className={`${card} spk-press flex items-center justify-between gap-3 p-4`}>
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex -space-x-2">{standings.filter((r) => r.gp).slice(0, 3).map((r) => <span key={r.id} className="rounded-full ring-2 ring-surface"><Avatar p={people[r.id]} size={26} /></span>)}</span>
-                  <span className="truncate text-[14.5px] font-bold">Everyone&apos;s day so far</span>
-                </span>
-                <span className="shrink-0 text-[13px] font-bold text-accent">Players · Today →</span>
-              </Link>
-            </Section>
-          )}
 
           {stages.length > 1 && (
             <Section title="Earlier stages">
@@ -286,7 +277,7 @@ const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n
 function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, org, run, pending, onOpen, xp }: {
   view: EventView; me: string | null; state: EntryState | null; day: MyDay | null; iPlayed: boolean; waiting: boolean;
   groups: GroupView[]; live: boolean; done: boolean; org: boolean; run: Run; pending: boolean; onOpen: (id: string) => void;
-  xp: { before: number; after: number } | null;
+  xp: { before: number; after: number; games: number } | null;
 }) {
   const { event: ev, games, people } = view;
   const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
@@ -308,7 +299,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
             </span>
             <span className="min-w-0">
               <span className="block text-[17px] font-black">Watch your review</span>
-              <span className="block text-[13px] font-semibold opacity-70">Every game, your partners, the XP you earned</span>
+              <span className="block text-[13px] font-semibold opacity-70">Every game, your partners, what it did to your rating</span>
             </span>
           </Link>
         </div>
@@ -327,9 +318,8 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
                   <div className={`mt-0.5 text-[15px] font-semibold ${first.ahead === 0 ? "opacity-75" : "text-muted"}`}>vs {both(first.opponents)}{first.sub ? " · you're subbing" : ""}</div>
                 </button>
                 {first.ahead === 0 && (
-                  <div className="mt-3">
-                    <div className="mb-1.5 grid grid-cols-[1fr_44px_1fr] gap-2 text-center text-[11px] font-bold uppercase tracking-[.1em] opacity-60"><span>You</span><span /><span>Them</span></div>
-                    <ScoreBoxes key={first.game.id} game={first.game} to={toFor(first.game)} canScore onOpen={() => onOpen(first.game.id)} onAccent flip={!first.game.a.includes(me)} />
+                  <div className="mt-4">
+                    <ScoreBoxes key={first.game.id} game={first.game} to={toFor(first.game)} canScore onOpen={() => onOpen(first.game.id)} people={view.people} onAccent flip={!first.game.a.includes(me)} />
                   </div>
                 )}
               </div>
@@ -355,8 +345,8 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
       {day.played.length > 0 && (
         <Section title="Your games" aside={myGroup && place ? `${ordinal(place)} in ${myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}` : undefined}>
           <div className={`${card} overflow-hidden`}>
-            <div className="grid grid-cols-3 border-b border-white/[.05] text-center">
-              {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "XP today"]] as const).map(([v, l]) => (
+            <div className="grid grid-cols-3 text-center">
+              {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], xp && xp.games < PROV_N ? [`${xp.games}/${PROV_N}`, "placing"] : [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "rating today"]] as const).map(([v, l]) => (
                 <div key={l} className="py-3">
                   <div className="tnum text-[20px] font-black">{v}</div>
                   <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">{l}</div>
@@ -374,7 +364,7 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
 
 function MyGameRow({ x, name, onOpen }: { x: MyGame; name: (id: string) => string; onOpen: (id: string) => void }) {
   return (
-    <button onClick={() => onOpen(x.game.id)} className="spk-press flex w-full items-center gap-3 border-b border-white/[.03] px-4 py-2.5 text-left last:border-0">
+    <button onClick={() => onOpen(x.game.id)} className="spk-press flex w-full items-center gap-3 border-t border-white/[.04] px-4 py-2.5 text-left">
       <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-black ${x.won ? "bg-win/15 text-win" : "bg-loss/15 text-loss"}`}>{x.won ? "W" : "L"}</span>
       <span className="min-w-0 flex-1 truncate text-[13.5px]">
         With <b>{name(x.partner)}</b> <span className="text-muted">vs {x.opponents.map(name).join(" & ")}</span>
@@ -420,10 +410,10 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
   )).reduce<React.ReactNode[]>((acc, x, i) => (i ? [...acc, " & ", x] : [x]), []);
 }
 
+/** A net: the game on it now, scored right here (tap the winners, slide the losers' score), and
+ *  what's on after. The header opens the full sheet: subs, skipping, corrections. */
 function NetCard({ net, now, next, people, out, onOpen, to, canScore }: { net: number; now?: Game; next?: Game; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void; to: number; canScore: boolean }) {
-  if (!now) return (
-    <div className={`${card} p-4 text-[14px] text-muted`}><b className="text-fg">Net {net}</b> · free</div>
-  );
+  if (!now) return <div className={`${card} p-4 text-[14px] text-muted`}><b className="text-fg">Net {net}</b> · free</div>;
   return (
     <div className={`${card} overflow-hidden`}>
       <div className="p-4">
@@ -431,12 +421,8 @@ function NetCard({ net, now, next, people, out, onOpen, to, canScore }: { net: n
           <span className="text-accent">Net {net} · on now</span>
           <span className="text-dim">{gameLabel(now)} · game {now.seq} ›</span>
         </button>
-        <div className="mt-2.5 mb-2.5 grid grid-cols-[1fr_44px_1fr] items-center gap-2 text-center text-[15px] font-extrabold leading-tight">
-          <span>{teamLine(now.a, people, now.subs, out)}</span>
-          <span className="text-[12px] font-bold text-dim">vs</span>
-          <span>{teamLine(now.b, people, now.subs, out)}</span>
-        </div>
-        <ScoreBoxes key={now.id} game={now} to={to} canScore={canScore} onOpen={() => onOpen(now.id)} />
+        {needsSub(now, out).length > 0 && <div className="mt-2 text-[12.5px] font-semibold text-loss">{needsSub(now, out).map((id) => people[id]?.name).join(" & ")} left: tap above to sub someone in.</div>}
+        <div className="mt-3"><ScoreBoxes key={now.id} game={now} to={to} canScore={canScore} onOpen={() => onOpen(now.id)} people={people} /></div>
       </div>
       {next && (
         <div className="border-t border-white/[.05] bg-panel px-4 py-2.5 text-[13px] text-muted">
@@ -466,12 +452,12 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: {
       {(g.winner || g.tied.length > 0) && (
         <div className="mx-3 mb-2 rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: `${tint}22`, color: tint }}>
           {g.winner
-            ? `★ ${name(g.winner)} ${final ? `wins the ${g.name} final` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)} on points` : ""}`
+            ? `★ ${name(g.winner)} ${final ? `wins the ${g.name} final` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)}` : ""}`
             : g.decider === "playing"
-              ? `Decider: ${tiedNames} play two games to ${DECIDER_TO}, swapping partners. Most points across both wins.`
+              ? `Decider: one game to ${DECIDER_TO}, ${tiedNames} on opposite sides. Whoever's side wins tops the group.`
               : g.decider === "level"
                 ? `Still level after the decider (${pts[0]}–${pts[1]}). Play it again, or toss a coin.`
-                : `Tied at the top: ${tiedNames}.${org ? "" : " The organiser can set up a decider."}`}
+                : g.tied.length > 2 ? `Tied at the top: ${tiedNames}, level on wins and points. The organiser calls it, or toss a coin.` : `Tied at the top: ${tiedNames}, level on wins, points and head to head.${org ? "" : " The organiser can set up a decider."}`}
           {org && g.tied.length === 2 && (g.decider === "none" || g.decider === "level") && (
             <button disabled={pending} onClick={() => run(() => addDecider(eventId, g.stageNo, g.groupNo), "Decider added. It's next on the net")} className={`${btnPrimary} mt-2 w-full`}>
               {g.decider === "level" ? "Play the decider again" : "Play decider"}
@@ -479,30 +465,37 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId }: {
           )}
         </div>
       )}
-      <table className="tnum w-full text-[14px]">
-        <thead>
-          <tr className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">
-            <th className="w-8 py-1 pl-4 text-left font-bold">#</th><th className="text-left font-bold">Player</th><th className="px-2 text-right font-bold">Pts</th><th className="px-2 text-right font-bold">W–L</th><th className="pr-4 pl-2 text-right font-bold">+/−</th>
-          </tr>
-        </thead>
-        <tbody>
+      <div className="tnum text-[14px]">
+        <div className="grid grid-cols-[28px_1fr_36px_44px_44px] items-center px-4 py-1 text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">
+          <span>#</span><span>Player</span><span className="text-right">Pts</span><span className="text-right">W–L</span><span className="text-right">+/−</span>
+        </div>
+        <LayoutGroup id={`group-${g.stageNo}-${g.groupNo}`}>
           {g.table.map((r, i) => {
             const pd = r.pf - r.pa;
             return (
-              <tr key={r.id} className={`border-t border-white/[.04] ${r.id === me ? "bg-accent/[.06]" : ""}`}>
-                <td className="py-2 pl-4 font-mono text-[12.5px] text-dim">{i + 1}</td>
-                <td className="py-2"><span className="flex items-center gap-2"><Avatar p={people[r.id]} size={22} dim={out.has(r.id)} /><PlayerLink p={people[r.id]} className={`font-semibold ${out.has(r.id) ? "text-dim" : ""}`} />{out.has(r.id) && <span className="text-[11px] text-dim">left</span>}</span></td>
-                <td className="px-2 text-right font-black">{r.w}</td>
-                <td className="px-2 text-right text-num">{r.w}–{r.l}</td>
-                <td className={`pr-4 pl-2 text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</td>
-              </tr>
+              <motion.div key={r.id} layout="position" transition={SOFT} className={`grid grid-cols-[28px_1fr_36px_44px_44px] items-center border-t border-white/[.04] px-4 py-2 ${r.id === me ? "bg-accent/[.06]" : ""}`}>
+                <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
+                <span className="flex min-w-0 items-center gap-2"><Avatar p={people[r.id]} size={22} dim={out.has(r.id)} /><PlayerLink p={people[r.id]} className={`truncate font-semibold ${out.has(r.id) ? "text-dim" : ""}`} />{out.has(r.id) && <span className="text-[11px] text-dim">left</span>}</span>
+                <AnimatedNumber value={r.w} className="text-right font-black" />
+                <span className="text-right text-num">{r.w}–{r.l}</span>
+                <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
+              </motion.div>
             );
           })}
-        </tbody>
-      </table>
-      <div className="mt-1 border-t border-white/[.05]">
-        {g.games.map((x) => <GameRow key={x.id} g={x} people={people} out={out} onOpen={onOpen} />)}
+        </LayoutGroup>
       </div>
+      <GroupGames g={g} people={people} out={out} onOpen={onOpen} />
+    </div>
+  );
+}
+
+/** A group's fixtures under its table, in playing order: every game with its score, or a dashed
+ *  box to tap and score it. Rows slide in place as results come in. */
+function GroupGames({ g, people, out, onOpen }: { g: GroupView; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void }) {
+  const games = [...g.games].sort((x, y) => x.ord - y.ord);
+  return (
+    <div className="mt-1 border-t border-white/[.06]">
+      {games.map((x) => <GameRow key={x.id} g={x} people={people} out={out} onOpen={onOpen} />)}
     </div>
   );
 }
@@ -511,13 +504,16 @@ function GameRow({ g, people, out, onOpen }: { g: Game; people: Record<string, P
   const fin = isDone(g);
   const aWon = fin && g.scoreA! > g.scoreB!;
   return (
-    <button onClick={() => onOpen(g.id)} className={`spk-press grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-white/[.03] px-4 py-2.5 text-left text-[13.5px] last:border-0 ${g.status === "void" ? "opacity-40" : ""}`}>
-      <span className={aWon ? "font-bold" : "text-fg/85"}>{g.decider && <span className="mr-1.5 rounded bg-accent/15 px-1 py-0.5 text-[10px] font-bold uppercase tracking-[.08em] text-accent">Decider</span>}{teamLine(g.a, people, g.subs, out)}</span>
+    <motion.button
+      layout="position" transition={SOFT} whileTap={{ scale: 0.98 }} onClick={() => onOpen(g.id)} aria-label={`${gameLabel(g)}, game ${g.seq}${fin ? `, ${g.scoreA}–${g.scoreB}` : ""}`}
+      className={`grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-white/[.03] px-4 py-2.5 text-left text-[13.5px] last:border-0 ${g.status === "void" ? "opacity-40" : ""}`}
+    >
+      <span className={fin && aWon ? "font-bold text-accent" : "text-fg/85"}>{g.decider && <span className="mr-1.5 rounded bg-accent/15 px-1 py-0.5 text-[10px] font-bold uppercase tracking-[.08em] text-accent">Decider</span>}{teamLine(g.a, people, g.subs, out)}</span>
       <span className={`tnum min-w-[58px] rounded-lg px-2 py-1 text-center font-mono text-[13px] font-bold ${fin ? "bg-raised" : g.status === "void" ? "text-dim" : "border border-dashed border-white/15 text-dim"}`}>
         {fin ? `${g.scoreA}–${g.scoreB}` : g.status === "void" ? "skipped" : "score"}
       </span>
-      <span className={`text-right ${fin && !aWon ? "font-bold" : "text-fg/85"}`}>{teamLine(g.b, people, g.subs, out)}</span>
-    </button>
+      <span className={`text-right ${fin && !aWon ? "font-bold text-accent" : "text-fg/85"}`}>{teamLine(g.b, people, g.subs, out)}</span>
+    </motion.button>
   );
 }
 
@@ -567,15 +563,13 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
   return (
     <Section title="Organiser">
       <div className={`${card} grid gap-4 p-4`}>
-        <GameLength view={view} run={run} pending={pending} />
-        <div className="border-t border-white/[.05] pt-4">
+        <div>
           <div className="text-[15px] font-extrabold">{current ? "Next step" : "Start the tournament"}</div>
           <p className="mt-1 text-[13.5px] leading-relaxed text-muted">
             {current ? (left ? `${left} game${left === 1 ? "" : "s"} left in this stage. Drawing the next stage skips them.` : "This stage is finished.") : "Check people in below as they arrive, then draw. "}
             {waiting.length > 0 && current ? ` ${waiting.length} waiting to join.` : ""}
           </p>
           <p className="mt-1 text-[13px] text-dim">{plan}</p>
-          {current?.kind === "random" && <p className="mt-1 text-[13px] text-dim">Finals are seeded by where people finished in their own group: every group winner first, then every runner-up, and so on. Ties go to win %, then points per game, so a group of 5 has no edge over a group of 4.</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {!current && <button disabled={pending || here < 4} onClick={() => run(() => drawStage(ev.id, "random"), "Groups drawn")} className={btnPrimary}>Draw random groups</button>}
             {/* Two stages is the format: random groups, then A / B finals. A middle
@@ -592,10 +586,15 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
         </div>
 
         {current && <EditGroups view={view} run={run} pending={pending} pool={pool} />}
+      </div>
 
-        <div className="border-t border-white/[.05] pt-4">
-          <div className="text-[15px] font-extrabold">Check-in</div>
-          <p className="mt-1 text-[13px] text-muted">Mark people <b className="text-fg">here</b> as they arrive. After the first stage everyone who played stays in, so only mark someone <b className="text-fg">out</b> if they leave: their games get flagged for a sub.</p>
+      {/* The rest of the toolbox, folded: each line says where things stand without opening it. */}
+      <div className="mt-2 grid gap-2">
+        <Disclosure title="Game length" teaser={`to ${ev.groupTo} · finals ${ev.finalTo}`}>
+          <GameLength view={view} run={run} pending={pending} />
+        </Disclosure>
+        <Disclosure title="Check-in" teaser={`${here} here`} defaultOpen={!current}>
+          <p className="text-[13px] text-muted">Mark people <b className="text-fg">here</b> as they arrive. After the first stage everyone who played stays in, so only mark someone <b className="text-fg">out</b> if they leave: their games get flagged for a sub.</p>
           <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) run(() => addWalkIn(ev.id, name), `${name.trim()} checked in`, (r) => r.ok && setName("")); }}>
             <input className={input} list="roster" value={name} onChange={(e) => setName(e.target.value)} placeholder="Add someone by name" aria-label="Add someone by name" />
             <datalist id="roster">{roster.map((r) => <option key={r.id} value={r.name} />)}</datalist>
@@ -621,9 +620,9 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
               </div>
             ))}
           </div>
-        </div>
+        </Disclosure>
 
-        <div className="border-t border-white/[.05] pt-4">
+        <Disclosure title="Event details" teaser={ev.location ?? undefined}>
           {!edit ? (
             <div className="flex flex-wrap gap-2">
               <button onClick={() => setEdit(true)} className={btnGhost}>Edit event details</button>
@@ -632,7 +631,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
           ) : (
             <EditEvent view={view} run={run} pending={pending} onDone={() => setEdit(false)} />
           )}
-        </div>
+        </Disclosure>
       </div>
     </Section>
   );
@@ -735,7 +734,6 @@ function GameLength({ view, run, pending }: { view: EventView; run: Run; pending
   );
   return (
     <div className="grid gap-2">
-      <div className="text-[15px] font-extrabold">Game length</div>
       {row("groupTo", "Groups to")}
       {row("finalTo", "Finals to")}
       <p className="text-[12.5px] text-dim">Win by 2. Changes apply to games from now on, on every phone. Scores already entered stay as they are.</p>

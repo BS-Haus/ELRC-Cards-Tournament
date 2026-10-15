@@ -1,11 +1,13 @@
 // "Draw stories": when the organiser draws a stage (random groups, a seeded round, or the finals),
 // everyone in it gets a short story next time they're in the app: how the last stage finished
-// (tables, XP won and lost), how the seeding works and where they've landed, then the new groups
+// (tables, rating won and lost), how the seeding works and where they've landed, then the new groups
 // being dealt out, their own group, net and first game. Pure: games in, story out.
 import { tally, groupRank, stageMembers, isDone, finalName, gameLabel, netQueues, type Game, type StageKind } from "@/lib/cards";
-import { xpWeekends, winXp, lossXp } from "@/lib/levels";
+import { PROV_N, type Ratings } from "@/lib/standings";
 
-export type StoryRow = { id: string; w: number; l: number; pd: number; xp: number };
+/** `xp` is the rating the stage won or lost them; `placing` when they're still placing after it
+ *  (their number isn't shown yet). */
+export type StoryRow = { id: string; w: number; l: number; pd: number; xp: number; placing: boolean };
 export type ResultGroup = { label: string; rows: StoryRow[]; winner: string | null; points: number; xp: number };
 export type DrawGroup = { label: string; net: number; members: string[]; tier: number };
 export type MyDraw = { label: string; net: number; mates: string[]; partner: string; opponents: [string, string]; ahead: number; sitsFirst: boolean };
@@ -29,23 +31,24 @@ export type DrawStory = {
 const labelFor = (kind: StageKind, name: string) => (kind === "final" ? `${finalName(name)} final` : `Group ${name}`);
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 
-/** XP each player gained or lost from one set of games, by replaying XP with and without them. */
-export function xpFrom(events: { id: string; startsAt: number; games: Game[] }[], ids: Set<string>): Map<string, number> {
-  const without = events.map((e) => ({ ...e, games: e.games.map((g) => (ids.has(g.id) ? { ...g, status: "todo" as const, scoreA: null, scoreB: null } : g)) }));
-  const a = xpWeekends(without), b = xpWeekends(events);
-  const out = new Map<string, number>();
-  for (const [id, p] of b) out.set(id, p.xp - (a.get(id)?.xp ?? 0));
+/** Rating each player gained or lost over one set of games (their lines in the ledger), and
+ *  whether they're still placing after them. */
+export function ratingFrom(r: Ratings, ids: Set<string>): Map<string, { delta: number; placing: boolean }> {
+  const out = new Map<string, { delta: number; placing: boolean }>();
+  for (const p of r.players.values()) {
+    const es = p.entries.filter((e) => ids.has(e.gameId));
+    if (es.length) out.set(p.id, { delta: es.reduce((n, e) => n + e.delta, 0), placing: es.at(-1)!.gamesBefore + 1 < PROV_N });
+  }
   return out;
 }
 
 /**
- * The story for stage `stageNo` of an event, as `me` sees it. `history` is every event's games
- * (for XP); `event.games` are this event's. Later stages' games are left out of everything, so the
+ * The story for stage `stageNo` of an event, as `me` sees it, with everyone's ratings (`r`). Later stages' games are left out of everything, so the
  * story reads the same whenever it's opened.
  */
 export function buildDrawStory(
   event: { id: string; title: string; nets: number; stages: { no: number; kind: StageKind; createdAt: number }[]; games: Game[] },
-  history: { id: string; startsAt: number; games: Game[] }[],
+  r: Ratings,
   stageNo: number,
   me: string,
 ): DrawStory | null {
@@ -78,38 +81,35 @@ export function buildDrawStory(
     }
   }
 
-  // The stage before: its tables, with XP won and lost there.
+  // The stage before: its tables, with rating won and lost there.
   const prevStage = [...event.stages].filter((s) => s.no < stageNo).sort((a, b) => b.no - a.no)[0];
   let results: DrawStory["results"] = null;
   let seeding: DrawStory["seeding"] = null;
-  const upTo = (n: number) => history.map((e) => (e.id === event.id ? { ...e, games: e.games.filter((g) => g.stageNo <= n) } : e));
   if (prevStage) {
     const prev = event.games.filter((g) => g.stageNo === prevStage.no && g.status !== "void");
     const played = prev.filter((g) => isDone(g) && !g.decider);
     if (played.length) {
-      const xp = xpFrom(upTo(prevStage.no), new Set(played.map((g) => g.id)));
+      const moved = ratingFrom(r, new Set(played.map((g) => g.id)));
       const pm = stageMembers(prev);
       const lines = tally(prev);
       const rg: ResultGroup[] = [...pm.keys()].map((no) => {
         const gs = prev.filter((g) => g.groupNo === no);
         const rows = groupRank(pm.get(no)!.map((id) => lines.get(id) ?? { id, gp: 0, w: 0, l: 0, pf: 0, pa: 0 }))
-          .map((r) => ({ id: r.id, w: r.w, l: r.l, pd: r.pf - r.pa, xp: xp.get(r.id) ?? 0 }));
+          .map((x) => ({ id: x.id, w: x.w, l: x.l, pd: x.pf - x.pa, xp: moved.get(x.id)?.delta ?? 0, placing: moved.get(x.id)?.placing ?? true }));
         const done = gs.filter((g) => isDone(g) && !g.decider);
         return {
           label: labelFor(prevStage.kind, gs[0].groupName), rows, winner: done.length ? rows[0]?.id ?? null : null,
           points: done.reduce((n, g) => n + g.scoreA! + g.scoreB!, 0), xp: rows.reduce((n, r) => n + r.xp, 0),
         };
       });
-      const deltas = [...xp.entries()].filter(([id]) => rg.some((g) => g.rows.some((r) => r.id === id)));
-      const top = deltas.sort((a, b) => b[1] - a[1])[0];
+      // The climber is the biggest mover whose number is on show.
+      const deltas = [...moved.entries()].filter(([id, m]) => !m.placing && rg.some((g) => g.rows.some((x) => x.id === id))).map(([id, m]) => [id, m.delta] as const);
+      const top = [...deltas].sort((a, b) => b[1] - a[1])[0];
       const close = [...played].sort((a, b) => Math.abs(a.scoreA! - a.scoreB!) - Math.abs(b.scoreA! - b.scoreB!))[0];
-      // XP won in victories and given back in defeats, game by game (sub games don't count).
+      // Rating won and given back, game by game, across everyone.
       let xpUp = 0, xpDown = 0;
-      for (const g of played) {
-        const m = Math.abs(g.scoreA! - g.scoreB!), aWon = g.scoreA! > g.scoreB!;
-        for (const id of aWon ? g.a : g.b) if (!g.subs.includes(id)) xpUp += winXp(m);
-        for (const id of aWon ? g.b : g.a) if (!g.subs.includes(id)) xpDown += lossXp(m);
-      }
+      const ids = new Set(played.map((g) => g.id));
+      for (const p of r.players.values()) for (const e of p.entries) if (ids.has(e.gameId)) { if (e.delta > 0) xpUp += e.delta; else xpDown += e.delta; }
       results = {
         kind: prevStage.kind, groups: rg,
         points: played.reduce((n, g) => n + g.scoreA! + g.scoreB!, 0),

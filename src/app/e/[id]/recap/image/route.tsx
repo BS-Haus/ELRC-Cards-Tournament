@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { players, eventPhotos } from "@/db/schema";
 import { getRecap, getStory } from "@/lib/data";
@@ -92,50 +92,79 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   );
 }
 
-/** The tournament's card: the champion big, then every final's winner and the records broken. */
+/** The tournament's card, a podium: the A final's top three on their blocks (2nd, 1st, 3rd), the
+ *  champion tallest with the crown, then every other final's winner and any records broken. */
 async function storyCard(id: string) {
   const r = await getStory(id);
   if (!r) return new Response("Not found", { status: 404 });
   const { story, names } = r;
   const name = (pid: string) => names[pid]?.name ?? "Someone";
-  const champ = story.champion;
-  const [row] = champ ? await db.select({ avatar: players.avatar }).from(players).where(eq(players.id, champ.id)) : [];
+  const top = story.podium[0];
+  const three = top?.winner ? [top.runnerUp, top.winner, top.third] : [null, null, null];
+  const ids = three.filter((x): x is string => !!x);
+  const rows = ids.length ? await db.select({ id: players.id, avatar: players.avatar }).from(players).where(inArray(players.id, ids)) : [];
+  const avatar = new Map(rows.map((x) => [x.id, x.avatar]));
   const [cover] = await db.select({ data: eventPhotos.data }).from(eventPhotos).where(eq(eventPhotos.eventId, id)).orderBy(asc(eventPhotos.createdAt)).limit(1);
+  const line = (pid: string) => top?.table.find((t) => t.id === pid);
+
+  const face = (pid: string, size: number, ring: string) =>
+    avatar.get(pid)
+      // eslint-disable-next-line @next/next/no-img-element
+      ? <img src={avatar.get(pid)!} width={size} height={size} style={{ borderRadius: size / 2, border: `10px solid ${ring}`, objectFit: "cover" }} alt="" />
+      : <div style={{ width: size, height: size, borderRadius: size / 2, border: `10px solid ${ring}`, background: names[pid]?.color ?? "#CBFB4F", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45, fontWeight: 900, color: "#0c0e10" }}>{name(pid)[0]}</div>;
+
+  // Column order on the podium: 2nd, 1st, 3rd.
+  const cols = [
+    { pid: three[0], place: 2, size: 200, block: 420, ring: "rgba(255,255,255,.35)", fill: "rgba(255,255,255,.14)", ink: "#F4F5F6" },
+    { pid: three[1], place: 1, size: 270, block: 560, ring: "#CBFB4F", fill: "#CBFB4F", ink: "#0c0e10" },
+    { pid: three[2], place: 3, size: 180, block: 330, ring: "rgba(255,255,255,.22)", fill: "rgba(255,255,255,.08)", ink: "rgba(244,245,246,.8)" },
+  ];
+
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", padding: 96, background: "linear-gradient(180deg, #3a2c06 0%, #120f05 45%, #0c0e10 100%)", color: "#F4F5F6", fontFamily: "sans-serif", position: "relative" }}>
+      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", padding: "96px 72px 0", background: "linear-gradient(180deg, #23300c 0%, #10140a 45%, #0c0e10 100%)", color: "#F4F5F6", fontFamily: "sans-serif", position: "relative" }}>
         {cover?.data && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={cover.data} width={1080} height={1920} style={{ position: "absolute", top: 0, left: 0, width: 1080, height: 1920, objectFit: "cover" }} alt="" />
         )}
-        {cover?.data && <div style={{ position: "absolute", top: 0, left: 0, width: 1080, height: 1920, background: "linear-gradient(180deg, rgba(12,14,16,.55) 0%, rgba(12,14,16,.35) 35%, rgba(12,14,16,.92) 70%, #0c0e10 100%)" }} />}
-        <div style={{ fontSize: 34, letterSpacing: 6, color: "#FFCF5C", textTransform: "uppercase" }}>{`${story.event.title} · ${when(story.event.startsAt)}`}</div>
-        {champ ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 110 }}>
-            <div style={{ fontSize: 110 }}>👑</div>
-            {row?.avatar
-              // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={row.avatar} width={360} height={360} style={{ borderRadius: 180, border: "14px solid #FFCF5C", objectFit: "cover" }} alt="" />
-              : <div style={{ width: 360, height: 360, borderRadius: 180, border: "14px solid #FFCF5C", background: names[champ.id]?.color ?? "#CBFB4F", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 170, color: "#0c0e10" }}>{name(champ.id)[0]}</div>}
-            <div style={{ fontSize: 40, letterSpacing: 14, color: "#FFCF5C", marginTop: 56 }}>CHAMPION</div>
-            <div style={{ fontSize: 120, marginTop: 8 }}>{name(champ.id)}</div>
-            <div style={{ fontSize: 42, color: "#C9CED2", marginTop: 12 }}>{`${champ.line.w}–${champ.line.l} on the day · ${champ.titles === 1 ? "first title" : `${ordinal(champ.titles)} title`}`}</div>
+        {cover?.data && <div style={{ position: "absolute", top: 0, left: 0, width: 1080, height: 1920, background: "linear-gradient(180deg, rgba(12,14,16,.75) 0%, rgba(12,14,16,.55) 30%, rgba(12,14,16,.94) 55%, #0c0e10 100%)" }} />}
+
+        <div style={{ display: "flex", fontSize: 32, fontWeight: 700, letterSpacing: 6, color: "#CBFB4F", textTransform: "uppercase" }}>East London Roundnet</div>
+        <div style={{ display: "flex", fontSize: 104, fontWeight: 900, marginTop: 18, lineHeight: 1 }}>{story.event.title}</div>
+        <div style={{ display: "flex", fontSize: 40, color: "#C9CED2", marginTop: 14 }}>{`${when(story.event.startsAt)} · ${story.numbers.players} players · ${story.numbers.games} games`}</div>
+
+        {top?.winner ? (
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 28, marginTop: "auto" }}>
+            {cols.map((c) => (
+              <div key={c.place} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
+                {c.place === 1 && <div style={{ display: "flex", fontSize: 110, marginBottom: 6 }}>🏆</div>}
+                {c.pid ? face(c.pid, c.size, c.ring) : <div style={{ width: c.size, height: c.size, borderRadius: c.size / 2, background: "rgba(255,255,255,.08)", display: "flex" }} />}
+                <div style={{ display: "flex", fontSize: c.place === 1 ? 58 : 46, fontWeight: 900, marginTop: 20, textAlign: "center" }}>{c.pid ? name(c.pid) : "–"}</div>
+                <div style={{ display: "flex", fontSize: 32, color: "#8A9196", marginTop: 6 }}>{c.pid && line(c.pid) ? `${line(c.pid)!.w}–${line(c.pid)!.l}` : " "}</div>
+                <div style={{ display: "flex", justifyContent: "center", width: "100%", height: c.block, marginTop: 24, borderRadius: "40px 40px 0 0", background: c.fill, color: c.ink, fontSize: c.place === 1 ? 150 : 110, fontWeight: 900, paddingTop: 30 }}>{String(c.place)}</div>
+              </div>
+            ))}
           </div>
-        ) : <div style={{ fontSize: 96, marginTop: 200 }}>{story.event.title}</div>}
-        <div style={{ display: "flex", flexDirection: "column", width: "100%", gap: 18, marginTop: "auto" }}>
-          {story.records.slice(0, 3).map((rec) => (
-            <div key={rec.kind} style={{ display: "flex", justifyContent: "space-between", fontSize: 36, padding: "20px 32px", borderRadius: 28, background: "rgba(192,132,252,.14)", border: "2px solid rgba(192,132,252,.4)" }}>
-              <span style={{ color: "#E9D5FF" }}>{`Record · ${rec.label}`}</span>
-              <span>{rec.value}</span>
-            </div>
-          ))}
-          {story.podium.slice(1).map((pd) => (
-            <div key={pd.name} style={{ display: "flex", fontSize: 40 }}>
-              <span style={{ color: tierColor(pd.name), width: 240 }}>{`${pd.name} final`}</span>
-              <span>{pd.winner ? name(pd.winner) : "—"}</span>
-            </div>
-          ))}
-        </div>
+        ) : (
+          <div style={{ display: "flex", fontSize: 64, fontWeight: 800, marginTop: "auto", marginBottom: 200, color: "#C9CED2" }}>{top?.tied.length ? `A final tied: ${top.tied.map(name).join(" / ")}` : "Finals still to play"}</div>
+        )}
+
+        {(story.podium.length > 1 || story.records.length > 0) && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, margin: "0 -72px", padding: "40px 72px 72px", background: "#0c0e10" }}>
+            {story.podium.slice(1).map((pd) => (
+              <div key={pd.name} style={{ display: "flex", alignItems: "center", fontSize: 40 }}>
+                <span style={{ display: "flex", color: tierColor(pd.name), fontWeight: 800, width: 260 }}>{`${pd.name} final`}</span>
+                <span style={{ display: "flex", fontWeight: 700 }}>{pd.winner ? `🏆 ${name(pd.winner)}` : pd.tied.length ? `Tied: ${pd.tied.map(name).join(" / ")}` : "–"}</span>
+              </div>
+            ))}
+            {story.records.slice(0, 2).map((rec) => (
+              <div key={rec.kind} style={{ display: "flex", justifyContent: "space-between", fontSize: 34, color: "#E9D5FF", marginTop: 6 }}>
+                <span style={{ display: "flex" }}>{`Record · ${rec.label}`}</span>
+                <span style={{ display: "flex", fontWeight: 800 }}>{rec.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     ),
     { width: 1080, height: 1920 },

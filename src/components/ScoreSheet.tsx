@@ -6,12 +6,13 @@ import Link from "next/link";
 import { enterScore, clearScore, setSkipped, subIn } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { Avatar, btnPrimary, btnGhost, btnQuiet } from "@/components/ui";
-import { isDone, winnerScore, gameLabel, type Game } from "@/lib/cards";
+import { isDone, gameLabel, type Game } from "@/lib/cards";
+import { ScoreEntry, scoresOf, type Pick } from "@/components/ScoreEntry";
 import type { PlayerLite } from "@/lib/data";
 
 /**
- * Tap the team that won, then the losers' score: the winners' score follows from the game
- * length (win by two). One-handed, no keyboard. Also where subs and skips are sorted.
+ * Tap the team that won, then slide the losers' score: the winners' score follows from the game
+ * length (win by two), the ranked app's way (ScoreEntry). Also where subs and skips are sorted.
  */
 export function ScoreSheet({ game, people, to, canScore, org, candidates, out, onClose }: {
   game: Game; people: Record<string, PlayerLite>; to: number; canScore: boolean; org: boolean;
@@ -19,14 +20,13 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
 }) {
   const { run, pending, toast } = useAction();
   const done = isDone(game);
-  const [winner, setWinner] = useState<"a" | "b" | null>(done ? (game.scoreA! > game.scoreB! ? "a" : "b") : null);
-  const [loser, setLoser] = useState<number | null>(done ? Math.min(game.scoreA!, game.scoreB!) : null);
+  const [pick, setPick] = useState<Pick>(done ? { winner: game.scoreA! > game.scoreB! ? "a" : "b", loser: Math.min(game.scoreA!, game.scoreB!) } : { winner: null, loser: 0 });
   const [subFor, setSubFor] = useState<string | null>(null);
   const [subAll, setSubAll] = useState(true);
   const name = (id: string) => people[id]?.name ?? "?";
   const team = (ids: string[]) => ids.map(name).join(" & ");
-  const w = loser == null ? null : winnerScore(loser, to);
-  const scoreA = winner === "a" ? w : loser, scoreB = winner === "b" ? w : loser;
+  const sc = scoresOf(pick, to);
+  const [scoreA, scoreB] = sc ?? [null, null];
   const label = gameLabel(game);
   const save = () => {
     if (scoreA == null || scoreB == null) return;
@@ -56,36 +56,12 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
           </div>
         ) : (
           <>
-            <div className="mt-4 text-[15px] font-extrabold">Who won?</div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {(["a", "b"] as const).map((side) => {
-                const ids = game[side];
-                const on = winner === side;
-                return (
-                  <button key={side} onClick={() => setWinner(side)} aria-pressed={on} className={`spk-press min-h-20 rounded-2xl border p-3 text-left ${on ? "border-accent bg-accent text-ink" : "border-white/[.08] bg-raised"}`}>
-                    <div className="flex -space-x-1.5">{ids.map((id) => <Avatar key={id} p={people[id]} size={26} />)}</div>
-                    <div className="mt-2 text-[14.5px] font-extrabold leading-tight">{team(ids)}</div>
-                  </button>
-                );
-              })}
+            <div className="mt-5 rounded-[18px] border border-white/[.06] bg-panel p-4">
+              <ScoreEntry a={game.a} b={game.b} people={people} to={to} value={pick} onChange={setPick} />
             </div>
 
-            {winner && (
-              <>
-                <div className="mt-5 text-[15px] font-extrabold">{team(game[winner === "a" ? "b" : "a"])} scored</div>
-                <div className="mt-2 grid grid-cols-6 gap-1.5">
-                  {Array.from({ length: to + 6 }, (_, n) => n).map((n) => (
-                    <button key={n} onClick={() => setLoser(n)} aria-pressed={loser === n} className={`spk-press tnum h-11 rounded-xl font-mono text-[15px] font-bold ${loser === n ? "bg-accent text-ink" : n >= to - 1 ? "bg-panel text-muted" : "bg-raised"}`}>
-                      {n}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-2 text-[12px] text-dim">From {to - 1} up it&apos;s deuce: the winners get two more.</p>
-              </>
-            )}
-
             <button disabled={pending || scoreA == null} onClick={save} className={`${btnPrimary} mt-5 h-14 w-full text-[16px]`}>
-              {scoreA == null ? "Pick the winner and score" : `Save · ${team(game[winner!])} win ${w}–${loser}`}
+              {sc == null ? "Tap the winning team" : `Save ${sc[0]}–${sc[1]}`}
             </button>
 
             {done && org && <button disabled={pending} onClick={() => run(() => clearScore(game.id), "Score cleared", (r) => r.ok && onClose())} className={`${btnQuiet} mt-2 w-full`}>Clear this score</button>}
@@ -93,7 +69,7 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
             {game.status === "todo" && (
               <div className="mt-5 border-t border-white/[.06] pt-4">
                 <div className="text-[15px] font-extrabold">Someone can&apos;t play?</div>
-                <p className="mt-1 text-[13px] text-muted">Swap in a sub. The result still counts for the other three, but not for the sub.</p>
+                <p className="mt-1 text-[13px] text-muted">Swap in a sub. It counts in everyone's rating, sub included, but the sub isn't added to this group's table.</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {[...game.a, ...game.b].map((id) => (
                     <button key={id} onClick={() => setSubFor(subFor === id ? null : id)} aria-pressed={subFor === id} className={`spk-press rounded-full px-3 py-1.5 text-[13.5px] font-bold ${subFor === id ? "bg-loss text-ink" : out.has(id) ? "border border-loss/50 text-loss" : "border border-white/[.08] bg-raised"}`}>

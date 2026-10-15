@@ -15,7 +15,8 @@ const TALE_BG: Record<Tale["kind"], string> = {
 };
 const TALE_ICON: Record<Tale["kind"], string> = { unbeaten: "💯", firstTitle: "✨", climber: "🧗", streak: "🔥", partnership: "🤝", blowout: "💥", deuce: "😮‍💨", points: "🎯" };
 
-/** The tournament as a story: the champion first, then the day's stories, its records and its numbers. */
+/** The tournament as a story: the champion first, every final's table, then the day's stories,
+ *  records and numbers; it ends on the podium, which is also the image you save. */
 export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: { story: Story; names: Record<string, PlayerLite>; photos: EventPhoto[]; viewerPlayed: boolean; viewer: string | null }) {
   const n = (id: string) => names[id]?.name ?? "Someone";
   const both = (ids: string[]) => ids.map(n).join(" & ");
@@ -67,23 +68,38 @@ export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: 
     ),
   });
 
-  // 2. The finals: the A final's podium (1st, 2nd, 3rd), every other final's winner and runner-up.
-  if (story.podium.length) {
+  // 2. The tables: one slide per final (or per group, before finals), in finishing order, the
+  //    winner's row lit in the final's colour. The podium is kept for the end and the saved image.
+  for (const p of story.podium) {
+    if (!p.table.length) continue;
+    const c = tierColor(p.name.replace(/^Group /, ""));
+    const isFinal = !p.name.startsWith("Group ");
     slides.push({
-      key: "podium", bg: "from-[#2e2408] to-[#0c0e10]",
+      key: `table-${p.name}`, bg: "from-[#141a1f] to-[#0c0e10]",
       body: (
-        <div className="grid gap-3">
-          <div className="text-[13px] font-bold uppercase tracking-[.2em] text-gold">The finals</div>
-          {story.podium[0]?.winner ? (
-            <div className="mt-3">
-              <PodiumStand size="lg" first={names[story.podium[0].winner]} second={story.podium[0].runnerUp ? names[story.podium[0].runnerUp] : undefined} third={story.podium[0].third ? names[story.podium[0].third] : undefined} />
+        <div className="grid gap-4">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="text-[12px] font-bold uppercase tracking-[.2em] text-white/45">{isFinal ? "Final table" : "Group table"}</div>
+              <div className="mt-1 text-[40px] font-black leading-none tracking-[-.02em]" style={{ color: c }}>{isFinal ? `${p.name} final` : p.name}</div>
             </div>
-          ) : story.podium[0] && <div className="text-[18px] font-bold">{story.podium[0].tied.length ? `Tied: ${both(story.podium[0].tied)}` : "Still playing"}</div>}
-          {story.podium.length > 1 && (
-            <div className="mt-2">
-              <FinalWinners finals={story.podium.slice(1).map((p) => ({ name: p.name, winner: p.winner ? names[p.winner] : undefined, tied: p.tied.length ? `Tied: ${both(p.tied)}` : undefined }))} />
-            </div>
-          )}
+            <div className="flex gap-4 pb-1 text-[11px] font-bold uppercase tracking-[.12em] text-white/40"><span className="w-10 text-right">W–L</span><span className="w-9 text-right">+/−</span></div>
+          </div>
+          <div className="grid gap-1.5">
+            {p.table.map((r, i) => {
+              const top = i === 0 && p.winner === r.id;
+              return (
+                <div key={r.id} className="spk-up flex items-center gap-3 rounded-2xl px-3 py-2.5" style={{ animationDelay: `${150 + i * 110}ms`, background: top ? `${c}22` : "rgba(255,255,255,.04)", border: `1px solid ${top ? `${c}66` : "transparent"}` }}>
+                  <span className="tnum w-5 shrink-0 text-center text-[16px] font-black" style={{ color: top ? c : "rgba(255,255,255,.45)" }}>{i + 1}</span>
+                  <Avatar p={names[r.id]} size={top ? 40 : 34} />
+                  <span className={`min-w-0 flex-1 truncate font-black ${top ? "text-[19px]" : "text-[16px]"}`}>{n(r.id)}{top && <span aria-hidden="true"> 🏆</span>}</span>
+                  <span className="tnum w-10 shrink-0 text-right font-mono text-[15px] font-bold">{r.w}–{r.l}</span>
+                  <span className={`tnum w-9 shrink-0 text-right text-[14px] font-bold ${r.diff > 0 ? "text-win" : r.diff < 0 ? "text-loss" : "text-white/50"}`}>{r.diff > 0 ? "+" : ""}{r.diff}</span>
+                </div>
+              );
+            })}
+          </div>
+          {p.tied.length > 0 && !p.winner && <div className="text-[14px] font-bold text-white/60">Level at the top: {both(p.tied)}</div>}
         </div>
       ),
     });
@@ -179,6 +195,13 @@ export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: 
       title={`${ev.title} story`}
       endTitle={champ ? `${n(champ.id)} takes it.` : "That's the story so far."}
       endNote={viewerPlayed ? "Now watch your own day: your games, your points, your rank." : "Save the card or send it to the group."}
+      endVisual={story.podium[0]?.winner ? (
+        <div className="grid gap-3">
+          <div className="text-center text-[12px] font-bold uppercase tracking-[.2em] text-gold">{ev.title} · A final</div>
+          <PodiumStand first={names[story.podium[0].winner]} second={story.podium[0].runnerUp ? names[story.podium[0].runnerUp] : undefined} third={story.podium[0].third ? names[story.podium[0].third] : undefined} />
+          {story.podium.length > 1 && <FinalWinners finals={story.podium.slice(1).map((p) => ({ name: p.name, winner: p.winner ? names[p.winner] : undefined, tied: p.tied.length ? `Tied: ${both(p.tied)}` : undefined }))} />}
+        </div>
+      ) : undefined}
       endExtra={viewerPlayed && viewer ? (
         <Link href={`/e/${ev.id}/recap?p=${viewer}`} className="spk-press flex h-14 items-center justify-center rounded-2xl border-2 border-accent text-[16px] font-black text-accent">▶ Watch your review</Link>
       ) : undefined}
