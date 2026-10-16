@@ -266,7 +266,10 @@ const TAB_ICON = {
  *  (icons, underline, full width) rather than a toggle, so it reads as a place to go. */
 function Tabs({ tab, setTab, done, nudge }: { tab: "event" | "you"; setTab: (t: "event" | "you") => void; done: boolean; nudge: boolean }) {
   return (
-    <div className="sticky top-0 z-20 mb-4 border-b border-white/[.08] bg-bg/90 backdrop-blur-md" role="tablist">
+    // Saved to the home screen the status bar is see-through, so the bar sticks just below it and a
+    // strip of background covers the status bar itself; otherwise the page scrolls up behind the
+    // clock and the tabs slide under it. In a browser tab the inset is 0 and both do nothing.
+    <div className="sticky top-[env(safe-area-inset-top)] z-20 mb-4 border-b border-white/[.08] bg-bg/95 backdrop-blur-md before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-[env(safe-area-inset-top)] before:bg-bg before:content-['']" role="tablist">
       <div className="grid grid-cols-2">
         {(["event", "you"] as const).map((t) => {
           const on = tab === t;
