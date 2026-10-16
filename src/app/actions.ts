@@ -26,9 +26,13 @@ function refresh(eventId?: string) {
   if (eventId) revalidatePath(`/e/${eventId}`);
 }
 
+/** The signed-in player's session, or null. A cookie whose player no longer exists (the data was
+ *  cleared, say) counts as signed out, so nothing tries to write under a missing player. */
 async function me() {
   const s = await getSession();
-  return s?.playerId ? s : null;
+  if (!s?.playerId || !isUuid(s.playerId)) return null;
+  const [p] = await db.select({ id: players.id }).from(players).where(eq(players.id, s.playerId));
+  return p ? s : null;
 }
 async function requireOrganiser(): Promise<Result | null> {
   return isOrganiser(await getSession()) ? null : fail("Organisers only. Unlock with the organiser code on the Me tab.");
