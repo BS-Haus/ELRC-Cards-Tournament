@@ -365,15 +365,16 @@ function NetCarousel({ slides, start, focus = null }: { slides: NetSlide[]; star
   return (
     <>
       <div className="sticky top-[env(safe-area-inset-top)] z-10 -mx-4 mb-3 bg-bg px-4 py-2 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-[env(safe-area-inset-top)] before:bg-bg before:content-['']">
-        <div className="grid gap-1 rounded-xl border border-white/[.06] bg-panel p-1" style={{ gridTemplateColumns: `repeat(${slides.length}, minmax(0, 1fr))` }} role="tablist" aria-label="Nets">
+        {/* Light on purpose: the nets below are the content, this just says which one. */}
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${slides.length}, minmax(0, 1fr))` }} role="tablist" aria-label="Nets">
           {slides.map((s, k) => (
             <button key={s.n} role="tab" aria-selected={k === i} onClick={() => go(k)}
-              className={`spk-press flex min-w-0 flex-col items-center rounded-lg px-1 py-1.5 ${k === i ? "bg-fg text-ink" : "text-muted"}`}>
-              <span className="flex items-center gap-1 text-[13.5px] font-black">
+              className={`spk-press flex min-w-0 items-baseline justify-center gap-1.5 rounded-full border px-2 py-1.5 ${k === i ? "border-accent/60 bg-accent/[.07] text-fg" : "border-white/[.06] text-muted"}`}>
+              <span className="flex shrink-0 items-center gap-1 text-[13px] font-black">
                 Net {s.n}
-                {s.mine && <span className={`h-1.5 w-1.5 rounded-full ${k === i ? "bg-ink" : "bg-fg"}`} aria-label="your net" />}
+                {s.mine && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="your net" />}
               </span>
-              <span className={`w-full truncate text-center text-[10.5px] font-bold ${k === i ? "opacity-60" : "text-dim"}`}>{s.label}</span>
+              <span className="min-w-0 truncate text-[11.5px] font-semibold text-dim">{s.label}</span>
             </button>
           ))}
         </div>

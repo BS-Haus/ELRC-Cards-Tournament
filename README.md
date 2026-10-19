@@ -36,8 +36,8 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   **now bar** (`src/components/NowBar.tsx`, `nowFor` in `src/lib/views.ts`) says where you are: on now (lime),
   next, games before yours, your games done while the stage plays out, or waiting for the next draw.
   Tap it to go to your net. The event page shows how many games are left in the stage for everyone.
-  Style: lime means live or act now (primary buttons, the now bar, live dots); selected states are
-  white, gains green, losses red, titles gold; small labels all use `.spk-label`.
+  Style: lime means live or act now (primary buttons, the now bar, live dots); the selected net is a thin lime
+  outline, other selected states white, gains green, losses red, titles gold; small labels all use `.spk-label`.
 
 Both feed the same ratings (`src/lib/standings.ts`).
 
