@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getSession, isOrganiser } from "@/lib/auth/session";
-import { getEventView, allPlayers, weekendXp, drawPending } from "@/lib/data";
+import { getEventView, allPlayers, weekendXp, drawPending, ladderDay } from "@/lib/data";
 import { EventScreen } from "@/components/EventScreen";
+import { LadderScreen } from "@/components/LadderScreen";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const when = v.event.startsAt.toLocaleString("en-GB", { weekday: "long", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Europe/London" });
   const going = v.entries.filter((e) => e.state !== "out").length;
   return {
-    title: `${v.event.title} · Cards`,
+    title: `${v.event.title} · ${v.event.format === "ladder" ? "Ladder" : "Cards"}`,
     description: `${when}${v.event.location ? `, ${v.event.location}` : ""}. ${going} in so far. Tap to add yourself.`,
     openGraph: { title: v.event.title, description: `${when}${v.event.location ? ` · ${v.event.location}` : ""} · ${going} in so far` },
   };
@@ -28,6 +29,10 @@ export default async function EventPage({ params }: Props) {
   const [v, s] = await Promise.all([getEventView(id), getSession()]);
   if (!v) notFound();
   const org = isOrganiser(s);
+  if (v.event.format === "ladder") {
+    const [roster, day] = await Promise.all([org ? allPlayers() : [], ladderDay(id)]);
+    return <LadderScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} day={day} />;
+  }
   const [myXp, roster, hidden] = await Promise.all([s?.playerId ? weekendXp(id, s.playerId) : null, org ? allPlayers() : [], s?.playerId ? drawPending(id, s.playerId) : false]);
   return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} myXp={myXp} drawPending={hidden} />;
 }

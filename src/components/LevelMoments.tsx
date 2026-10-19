@@ -81,7 +81,7 @@ export function LevelMoments() {
 }
 
 /** The story itself, also used to replay a past game from a profile (`title`, `done`). */
-export function Reel({ m, onClose, title = "Your results", done = "Back to it", self = true }: { m: Moments; onClose: () => void; title?: string; done?: string; self?: boolean }) {
+export function Reel({ m, onClose, title = "Your results", done = "Back to it", self = true, extra }: { m: Moments; onClose: () => void; title?: string; done?: string; self?: boolean; extra?: React.ReactNode }) {
   const slides = m.slides;
   const [at, setAt] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -157,6 +157,7 @@ export function Reel({ m, onClose, title = "Your results", done = "Back to it", 
         <div key={at} className="flex min-h-0 w-full flex-1 flex-col"><Body s={s} m={m} self={self} /></div>
       </div>
       <div className="relative z-10 px-6 pb-[calc(28px+env(safe-area-inset-bottom))]">
+        {last && extra}
         {last
           ? <button onClick={onClose} className="spk-press h-14 w-full rounded-2xl bg-accent text-[16px] font-black text-ink">{done}</button>
           : <p className="text-center text-[12.5px] text-white/40">Tap to continue</p>}

@@ -7,7 +7,20 @@ every game, regroups by level, and finishes in Gold / Silver / Bronze finals.
 Built on the same stack and look as the club's ladder app ([spike-east](https://github.com/ttavni/spike-east)):
 Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 
-## How a weekend runs
+## Two formats
+- **Ladder** (the default): nets ranked top to bottom. Everyone's seeded onto a net by rating;
+  each round is one game per net. Win and you go up a net, lose and you go down (the top net's
+  winners stay, as do the bottom net's losers). The four on each net are split into the fairest
+  teams that don't repeat a partnership from earlier in the day, so it's a new partner every game.
+  Extra people sit out in turn and come back on the net they left. The next round draws itself the
+  moment the last net's score goes in. Games to 11, 15, 17 or 21. The scorer's phone shows one
+  small card (everyone's ± and where everyone goes next); the day ends with one story. Engine:
+  `src/lib/netLadder.ts`, screen: `src/components/LadderScreen.tsx`.
+- **Cards**: groups, then finals, as below. Best with a big turnout.
+
+Both feed the same ratings (`src/lib/standings.ts`).
+
+## How a cards weekend runs
 1. **Organiser posts an event** (Events → + New event) and shares the link in WhatsApp.
 2. **Players tap the link → Join** (name + a 4-digit code, no email) → **I'm in**.
 3. **On the day:** people tap **I'm here**, or the organiser checks them in. Walk-ins can be added
@@ -84,7 +97,8 @@ npm run dev                    # http://localhost:3000, organiser code: dev-orga
 | `npm run db:generate` | new migration from `src/db/schema.ts` |
 
 ## Where things live
-- `src/lib/cards.ts`: the format as pure functions (group sizes, schedules, tables, subs). Tested in `cards.test.ts`.
+- `src/lib/netLadder.ts`: the ladder as pure functions (seeding, up and down, sitting out, teams, the day's story). Tested in `netLadder.test.ts`.
+- `src/lib/cards.ts`: the cards format as pure functions (group sizes, schedules, tables, subs). Tested in `cards.test.ts`.
 - `src/lib/views.ts`, `src/lib/data.ts`: what each page shows, from the database.
 - `src/app/actions.ts`: every change anyone can make, with its permission check.
 - `src/components/EventScreen.tsx`: the event page (sign-up, live nets, groups, finals, organiser panel).

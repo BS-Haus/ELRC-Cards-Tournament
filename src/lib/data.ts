@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gt, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
 import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle } from "@/lib/cards";
@@ -9,7 +9,7 @@ export type PlayerLite = { id: string; name: string; color: string; claimed: boo
 export type EventRow = typeof events.$inferSelect;
 export type EntryState = "going" | "here" | "out";
 export type Entry = { playerId: string; state: EntryState; at: number };
-export type StageRow = { id: string; no: number; kind: StageKind };
+export type StageRow = { id: string; no: number; kind: StageKind; sitting: string[] };
 
 export type EventView = {
   event: EventRow;
@@ -54,8 +54,8 @@ export async function getEventView(id: string): Promise<EventView | null> {
     db.select().from(games).where(eq(games.eventId, id)),
     eventPhotosOf(id),
   ]);
-  const stageRows = sts.map((s) => ({ id: s.id, no: s.no, kind: s.kind as StageKind }));
-  const stMap = new Map(sts.map((s) => [s.id, { id: s.id, no: s.no, kind: s.kind as StageKind }]));
+  const stageRows = sts.map((s) => ({ id: s.id, no: s.no, kind: s.kind as StageKind, sitting: s.sitting ?? [] }));
+  const stMap = new Map(sts.map((s) => [s.id, { id: s.id, no: s.no, kind: s.kind as StageKind, sitting: s.sitting ?? [] }]));
   const ids = new Set<string>(ens.map((e) => e.playerId));
   gs.forEach((g) => [g.a1, g.a2, g.b1, g.b2].forEach((x) => ids.add(x)));
   const ps = ids.size ? await db.select().from(players).where(inArray(players.id, [...ids])) : [];
@@ -113,6 +113,7 @@ import { buildMoments, gameMoments, matchMoments, type MomentSlide } from "@/lib
 import { buildDrawStory, type DrawStory } from "@/lib/drawStory";
 import { ladder, type LadderRow, type PlacingRow } from "@/lib/ladder";
 import { rate, eventChange, PROV_N, type Ratings, type Ledger } from "@/lib/standings";
+import { roundsFrom, ladderStory, type LadderStoryData } from "@/lib/netLadder";
 
 // ---------------------------------------------------------------------------------------------
 // Players and profiles
@@ -138,7 +139,7 @@ async function everything() {
     db.select().from(stages),
     db.select().from(games),
   ]);
-  const stMap = new Map(sts.map((s) => [s.id, { id: s.id, no: s.no, kind: s.kind as StageKind }]));
+  const stMap = new Map(sts.map((s) => [s.id, { id: s.id, no: s.no, kind: s.kind as StageKind, sitting: s.sitting ?? [] }]));
   return { ps, evs, ens, sts, gs: gs.map((g) => ({ ...toGame(g, stMap), eventId: g.eventId, updatedAt: g.updatedAt.getTime() })) };
 }
 
@@ -342,18 +343,22 @@ export async function getStory(eventId: string): Promise<{ story: Story; names: 
 // ---------------------------------------------------------------------------------------------
 // Level moments: your games scored since you last looked, as a story (src/lib/moments.ts).
 
-export type Moments = { slides: MomentSlide[]; upTo: number; names: Record<string, PlayerLite>; me: PlayerLite };
+export type Moments = { slides: MomentSlide[]; upTo: number; names: Record<string, PlayerLite>; me: PlayerLite; ladder?: LadderNext };
+/** After a ladder game: the next round if this score finished the round (who's on which net),
+ *  or the nets still playing. */
+export type LadderNext = { round: number; next: { net: number; a: [string, string]; b: [string, string] }[] | null; sitting: string[]; waiting: number[] };
 
 export async function myMoments(playerId: string): Promise<Moments | null> {
   const [p] = await db.select().from(players).where(eq(players.id, playerId));
   if (!p) return null;
   // Cheap check first (this runs every few seconds per signed-in phone): anything new at all?
-  const [hit] = await db.select({ id: games.id }).from(games)
-    .where(and(eq(games.status, "done"), gt(games.updatedAt, p.xpSeenAt), or(eq(games.a1, playerId), eq(games.a2, playerId), eq(games.b1, playerId), eq(games.b2, playerId))))
+  // Ladder games never pop up on players' phones: the one card on the scorer's phone covers them.
+  const [hit] = await db.select({ id: games.id }).from(games).innerJoin(events, eq(events.id, games.eventId))
+    .where(and(eq(games.status, "done"), ne(events.format, "ladder"), gt(games.updatedAt, p.xpSeenAt), or(eq(games.a1, playerId), eq(games.a2, playerId), eq(games.b1, playerId), eq(games.b2, playerId))))
     .limit(1);
   if (!hit) return null;
   const { ps, evs, gs } = await everything();
-  const { slides, upTo } = buildMoments(momentEvents(evs, gs), ratingsOf(evs, gs), playerId, p.xpSeenAt.getTime());
+  const { slides, upTo } = buildMoments(momentEvents(evs.filter((e) => e.format !== "ladder"), gs), ratingsOf(evs, gs), playerId, p.xpSeenAt.getTime());
   if (!slides.length) return null;
   return { slides, upTo, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(p) };
 }
@@ -369,7 +374,7 @@ export async function myDrawStory(playerId: string): Promise<DrawFeed | null> {
   // Cheap check first: the newest stage drawn since they looked that has them in a game.
   const [hit] = await db.select({ id: stages.id, eventId: stages.eventId, no: stages.no }).from(stages)
     .innerJoin(games, eq(games.stageId, stages.id))
-    .where(and(gt(stages.createdAt, p.stageSeenAt), or(eq(games.a1, playerId), eq(games.a2, playerId), eq(games.b1, playerId), eq(games.b2, playerId))))
+    .where(and(gt(stages.createdAt, p.stageSeenAt), ne(stages.kind, "ladder"), or(eq(games.a1, playerId), eq(games.a2, playerId), eq(games.b1, playerId), eq(games.b2, playerId))))
     .orderBy(desc(stages.createdAt)).limit(1);
   if (!hit) return null;
   const { ps, evs, sts, gs } = await everything();
@@ -420,7 +425,70 @@ export async function gameResult(gameId: string, viewer: string | null): Promise
   const g = gs.find((x) => x.id === gameId);
   const me = viewer ? ps.find((x) => x.id === viewer) : undefined;
   if (!g || g.status !== "done" || !me) return null;
-  const slides = matchMoments(momentEvents(evs, gs), ratingsOf(evs, gs), gameId, viewer);
+  const ev = evs.find((e) => e.id === g.eventId);
+  // On a ladder it's one small card, like the ranked app's: the game for everyone, then where
+  // everyone goes next. Nothing personal follows it.
+  const isLadder = ev?.format === "ladder";
+  const slides = matchMoments(momentEvents(evs, gs), ratingsOf(evs, gs), gameId, isLadder ? null : viewer);
   if (!slides.length) return null;
-  return { slides, upTo: g.updatedAt, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(me), played: [...g.a, ...g.b].includes(me.id) };
+  let ladder: LadderNext | undefined;
+  if (isLadder) {
+    const sts = await db.select().from(stages).where(eq(stages.eventId, g.eventId));
+    const nextStage = sts.find((x) => x.no === g.stageNo + 1 && x.kind === "ladder");
+    const evGames = gs.filter((x) => x.eventId === g.eventId);
+    ladder = nextStage
+      ? { round: sts.filter((x) => x.kind === "ladder" && x.no <= nextStage.no).length, next: evGames.filter((x) => x.stageNo === nextStage.no).sort((x, y) => x.net - y.net).map((x) => ({ net: x.net, a: x.a, b: x.b })), sitting: nextStage.sitting ?? [], waiting: [] }
+      : { round: sts.filter((x) => x.kind === "ladder" && x.no <= g.stageNo).length, next: null, sitting: [], waiting: evGames.filter((x) => x.stageNo === g.stageNo && x.status === "todo").map((x) => x.net).sort((x, y) => x - y) };
+  }
+  return { slides, upTo: g.updatedAt, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(me), played: !isLadder && [...g.a, ...g.b].includes(me.id), ladder };
+}
+
+/** Everyone's rating now (placed or not: the ladder seeds by it either way), by player id. */
+export async function ratingNow(): Promise<Map<string, number>> {
+  const { evs, gs } = await everything();
+  const r = ratingsOf(evs, gs);
+  return new Map([...r.players.values()].map((p) => [p.id, p.rating]));
+}
+
+// ---------------------------------------------------------------------------------------------
+// The ladder (src/lib/netLadder.ts)
+
+/** One player's day on a ladder event: their rating (null while placing, with games so far
+ *  instead), what today has done to it, and their record today. */
+export type LadderDayRow = { id: string; rating: number | null; placed: number | null; today: number | null; w: number; l: number };
+
+/** Everyone in a ladder event (checked in or played), best rating first, placing players last. */
+export async function ladderDay(eventId: string): Promise<LadderDayRow[]> {
+  const { evs, ens, gs } = await everything();
+  const r = ratingsOf(evs, gs);
+  const ids = new Set<string>(ens.filter((e) => e.eventId === eventId && e.state !== "out").map((e) => e.playerId));
+  for (const g of gs) if (g.eventId === eventId && isDone(g)) [...g.a, ...g.b].forEach((id) => ids.add(id));
+  const rows = [...ids].map((id): LadderDayRow => {
+    const p = r.players.get(id);
+    const es = p?.entries.filter((e) => e.eventId === eventId) ?? [];
+    const placedNow = !!p && !p.provisional;
+    const ch = eventChange(r, id, eventId);
+    // Today's change only counts from a number that was on show: a game that placed you starts it.
+    const today = ch && placedNow ? p!.rating - (ch.gamesBefore >= PROV_N ? ch.before : es.find((e) => e.gamesBefore + 1 >= PROV_N)?.ratingAfter ?? p!.rating) : null;
+    return { id, rating: placedNow ? p!.rating : null, placed: placedNow ? null : p?.games ?? 0, today, w: es.filter((e) => e.won).length, l: es.filter((e) => !e.won).length };
+  });
+  return rows.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1) || (b.placed ?? 0) - (a.placed ?? 0) || a.id.localeCompare(b.id));
+}
+
+/** A finished (or running) ladder day's story, from the viewer's side when they played. */
+export async function getLadderStory(eventId: string, viewer: string | null): Promise<{ event: { id: string; title: string; startsAt: number }; story: LadderStoryData; names: Record<string, PlayerLite> } | null> {
+  const v = await getEventView(eventId);
+  if (!v || v.event.format !== "ladder") return null;
+  const [day, { ps, evs, gs }] = await Promise.all([ladderDay(eventId), everything()]);
+  const r = ratingsOf(evs, gs);
+  const rounds = roundsFrom(v.stages, v.games);
+  // Each game's side-A chance going in, keyed as the story keys them: round number, then net.
+  const roundOf = new Map(v.stages.filter((s) => s.kind === "ladder").sort((a, b) => a.no - b.no).map((s, i) => [s.no, i + 1]));
+  const winChance = new Map<string, number>();
+  for (const g of v.games) {
+    const e = r.players.get(g.a[0])?.entries.find((x) => x.gameId === g.id);
+    if (e && roundOf.has(g.stageNo)) winChance.set(`${roundOf.get(g.stageNo)}:${g.net}`, e.winProb);
+  }
+  const story = ladderStory(rounds, new Map(day.map((x) => [x.id, x.today])), winChance, viewer);
+  return { event: { id: v.event.id, title: v.event.title, startsAt: v.event.startsAt.getTime() }, story, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])) };
 }

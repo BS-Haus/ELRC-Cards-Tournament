@@ -20,7 +20,7 @@ import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
 import { motion, LayoutGroup } from "motion/react";
 import { PROV_N } from "@/lib/standings";
 
-const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded: "Seeded groups", final: "Finals" };
+const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded: "Seeded groups", final: "Finals", ladder: "Ladder" };
 
 /** `myXp`: your rating either side of this weekend so far, and your games in all (src/lib/standings.ts),
  *  loaded on the server. */

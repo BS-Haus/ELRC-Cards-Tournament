@@ -1,7 +1,8 @@
 // The cards format, as pure functions: no database, no React. Everything the event page shows
 // (who's on which net, group tables, finals winners) is derived from the list of games.
 
-export type StageKind = "random" | "seeded" | "final";
+/** "ladder" is one round of a ladder event (src/lib/netLadder.ts): one game per net. */
+export type StageKind = "random" | "seeded" | "final" | "ladder";
 export type GameStatus = "todo" | "done" | "void";
 
 export type Game = {
@@ -388,7 +389,7 @@ export function decideTie(table: Line[], tied: [string, string], rnd: () => numb
 
 /** "Group A", "A final" or "Group A decider": what a game is, for headings. */
 export const gameLabel = (g: Pick<Game, "kind" | "groupName" | "decider">) =>
-  `${g.kind === "final" ? `${g.groupName} final` : `Group ${g.groupName}`}${g.decider ? " decider" : ""}`;
+  `${g.kind === "final" ? `${g.groupName} final` : g.kind === "ladder" ? g.groupName : `Group ${g.groupName}`}${g.decider ? " decider" : ""}`;
 
 /** Deciders are short: to 11, win by two. */
 export const DECIDER_TO = 11;

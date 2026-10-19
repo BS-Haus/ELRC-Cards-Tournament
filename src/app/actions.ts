@@ -8,7 +8,8 @@ import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
 import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
-import { getEventView, groupsOf, myMoments, myDrawStory, gameStory, gameResult, type Moments, type DrawFeed } from "@/lib/data";
+import { getEventView, groupsOf, myMoments, myDrawStory, gameStory, gameResult, ratingNow, type Moments, type DrawFeed } from "@/lib/data";
+import { nextRound, roundsFrom, roundDone } from "@/lib/netLadder";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -129,7 +130,7 @@ export async function lockOrganiser(): Promise<Result> {
 // ---------------------------------------------------------------------------------------------
 // Events
 
-type EventInput = { title: string; startsAt: string; location: string; notes: string; nets: number; groupTo: number; finalTo: number };
+type EventInput = { title: string; startsAt: string; location: string; notes: string; nets: number; groupTo: number; finalTo: number; format?: "ladder" | "cards" };
 
 function parseEvent(x: EventInput): { ok: true; v: Omit<typeof events.$inferInsert, "id"> } | { ok: false; error: string } {
   const title = cleanName(x?.title);
@@ -143,6 +144,7 @@ function parseEvent(x: EventInput): { ok: true; v: Omit<typeof events.$inferInse
       title, startsAt: at,
       location: cleanName(x.location).slice(0, 80), notes: typeof x.notes === "string" ? x.notes.trim().slice(0, 500) : "",
       nets: int(x.nets, 1, 8, 2), groupTo: int(x.groupTo, 5, 25, 15), finalTo: int(x.finalTo, 5, 25, 15),
+      ...(x.format === "ladder" || x.format === "cards" ? { format: x.format } : {}),
     },
   };
 }
@@ -274,7 +276,7 @@ export async function addWalkIn(eventId: string, nameIn: string): Promise<Result
 // Stages. A drawn game never changes shape: late arrivals join the next stage, and anyone who
 // leaves is covered by a sub.
 
-export async function drawStage(eventId: string, kind: StageKind): Promise<Result> {
+export async function drawStage(eventId: string, kind: Exclude<StageKind, "ladder">): Promise<Result> {
   const no = await requireOrganiser(); if (no) return no;
   if (!isUuid(eventId) || !["random", "seeded", "final"].includes(kind)) return fail("Unknown event.");
   const v = await getEventView(eventId);
@@ -403,6 +405,7 @@ export async function redrawStage(eventId: string): Promise<Result> {
   const no = await requireOrganiser(); if (no) return no;
   const st = await latestStage(eventId); if (!st) return fail("There's no stage in play to redraw.");
   if (!st.inStage.some((g) => g.status === "done")) await db.delete(stages).where(eq(stages.id, st.stage.id));
+  if (st.stage.kind === "ladder") return fail("Use Next round on a ladder.");
   return drawStage(eventId, st.stage.kind);
 }
 
@@ -469,7 +472,17 @@ export async function enterScore(gameId: string, scoreA: number, scoreB: number)
   if (!validScore(scoreA, scoreB)) return fail("Scores must be whole numbers and can't be level.");
   const g = await gameFor(gameId); if (!g) return fail("Unknown game.");
   if (g.status === "void") return fail("This game was skipped.");
-  await db.update(games).set({ scoreA, scoreB, status: "done", enteredById: s.playerId, updatedAt: new Date() }).where(eq(games.id, gameId));
+  const [ev] = await db.select({ format: events.format }).from(events).where(eq(events.id, g.eventId));
+  if (ev?.format === "ladder") {
+    const rating = await ratingNow();
+    await db.transaction(async (tx) => {
+      await lockEvent(tx, g.eventId);
+      await tx.update(games).set({ scoreA, scoreB, status: "done", enteredById: s.playerId, updatedAt: new Date() }).where(eq(games.id, gameId));
+      await advanceLadder(tx, g.eventId, rating, false);
+    });
+  } else {
+    await db.update(games).set({ scoreA, scoreB, status: "done", enteredById: s.playerId, updatedAt: new Date() }).where(eq(games.id, gameId));
+  }
   refresh(g.eventId);
   return { ok: true };
 }
@@ -561,4 +574,79 @@ export async function replayGame(playerId: string, gameId: string): Promise<Mome
 export async function resultOf(gameId: string): Promise<(Moments & { played: boolean }) | null> {
   if (!isUuid(gameId)) return null;
   try { return await gameResult(gameId, (await me())?.playerId ?? null); } catch { return null; }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The ladder (src/lib/netLadder.ts): one game per net each round, winners up and losers down. The
+// next round is drawn the moment the last net's score goes in, so nobody has to press anything.
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** One draw at a time per event: two nets finishing together can't both draw the next round. */
+async function lockEvent(tx: Tx, eventId: string) {
+  await tx.execute(sql`select id from ${events} where id = ${eventId} for update`);
+}
+
+/**
+ * Draw the next ladder round if the current one is finished (or `force`: the organiser moving on
+ * without a net that hasn't played, whose game is skipped). The first round is seeded by rating.
+ */
+async function advanceLadder(tx: Tx, eventId: string, rating: Map<string, number>, force: boolean): Promise<boolean> {
+  const [ev] = await tx.select().from(events).where(eq(events.id, eventId));
+  if (!ev || ev.format !== "ladder" || ev.status === "done") return false;
+  const [ens, sts, gs] = await Promise.all([
+    tx.select().from(entries).where(eq(entries.eventId, eventId)),
+    tx.select().from(stages).where(eq(stages.eventId, eventId)),
+    tx.select().from(games).where(eq(games.eventId, eventId)),
+  ]);
+  const stageNo = new Map(sts.map((x) => [x.id, x.no]));
+  const view = gs.map((x) => ({ id: x.id, stageNo: stageNo.get(x.stageId)!, net: x.net, a: [x.a1, x.a2] as [string, string], b: [x.b1, x.b2] as [string, string], scoreA: x.scoreA, scoreB: x.scoreB, status: x.status }));
+  const rounds = roundsFrom(sts.map((x) => ({ no: x.no, kind: x.kind, sitting: x.sitting ?? [] })), view);
+  const last = rounds.at(-1);
+  if (last && !roundDone(last)) {
+    if (!force) return false;
+    const latest = Math.max(...sts.map((x) => x.no));
+    const todo = view.filter((x) => x.stageNo === latest && x.status === "todo").map((x) => x.id);
+    // Their players stay on the net they were on (nextRound reads an unplayed game that way).
+    if (todo.length) await tx.update(games).set({ status: "void" }).where(inArray(games.id, todo));
+  }
+  // Everyone checked in and not out: sitting players stay in, anyone who's left drops out.
+  const present = ens.filter((e) => e.state === "here").map((e) => e.playerId);
+  const next = nextRound(rounds, present, (id) => rating.get(id) ?? 800, ev.nets);
+  if (!next) return false;
+  const no = Math.max(0, ...sts.map((x) => x.no)) + 1;
+  const [st] = await tx.insert(stages).values({ eventId, no, kind: "ladder", sitting: next.sitting }).returning({ id: stages.id });
+  await tx.insert(games).values(next.games.map((g) => ({
+    eventId, stageId: st.id, groupNo: g.net - 1, groupName: `Net ${g.net}`, seq: 1, ord: g.net, net: g.net,
+    a1: g.a[0], a2: g.a[1], b1: g.b[0], b2: g.b[1],
+  })));
+  if (ev.status !== "live") await tx.update(events).set({ status: "live" }).where(eq(events.id, eventId));
+  return true;
+}
+
+/** Organiser: start the ladder with everyone checked in, seeded onto the nets by rating. */
+export async function startLadder(eventId: string): Promise<Result> {
+  const no = await requireOrganiser(); if (no) return no;
+  if (!isUuid(eventId)) return fail("Unknown event.");
+  const rating = await ratingNow();
+  const drawn = await db.transaction(async (tx) => {
+    await lockEvent(tx, eventId);
+    const [st] = await tx.select({ id: stages.id }).from(stages).where(eq(stages.eventId, eventId)).limit(1);
+    if (st) return false;
+    return advanceLadder(tx, eventId, rating, false);
+  });
+  if (!drawn) return fail("Check in at least 4 players first.");
+  refresh(eventId);
+  return { ok: true };
+}
+
+/** Organiser: draw the next round now, skipping any net that hasn't played (its players stay put). */
+export async function nextLadderRound(eventId: string): Promise<Result> {
+  const no = await requireOrganiser(); if (no) return no;
+  if (!isUuid(eventId)) return fail("Unknown event.");
+  const rating = await ratingNow();
+  const drawn = await db.transaction(async (tx) => { await lockEvent(tx, eventId); return advanceLadder(tx, eventId, rating, true); });
+  if (!drawn) return fail("Need at least 4 players checked in.");
+  refresh(eventId);
+  return { ok: true };
 }
