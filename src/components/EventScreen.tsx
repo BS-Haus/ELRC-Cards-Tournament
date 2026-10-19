@@ -10,7 +10,6 @@ import { Shuffle } from "@/components/DrawSlides";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { CheckIn, LiveBadge } from "@/components/CheckIn";
-import { ScoreBoxes } from "@/components/ScoreBoxes";
 import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
@@ -176,26 +175,28 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
 
           {drawPending && <DrawVeil kind={current?.kind} />}
 
-          {!drawPending && live && queues.some((q) => q.length) && (
-            <Section title="On the nets" aside="Tap a net to score it">
-              <div className="grid gap-2.5">
-                {queues.map((q, i) => q[0] ? (
-                  <Court
-                    key={i} title={`Net ${i + 1}`} tag={`${gameLabel(q[0])} · game ${q[0].seq}`}
-                    a={q[0].a} b={q[0].b} scoreA={null} scoreB={null} people={people} live
-                    warn={needsSub(q[0], out).length ? `${needsSub(q[0], out).map((id) => p(id)?.name).join(" & ")} left: tap to sub someone in` : undefined}
-                    note={q[1] ? <>Next: <span className="text-fg">{teamLine(q[1].a, people, q[1].subs, out)}</span> vs <span className="text-fg">{teamLine(q[1].b, people, q[1].subs, out)}</span></> : undefined}
-                    onTap={() => setOpen(q[0].id)}
-                  />
-                ) : <div key={i} className={`${card} p-4 text-[14px] text-muted`}><b className="text-fg">Net {i + 1}</b> · free</div>)}
-              </div>
-            </Section>
-          )}
-
+          {/* Net by net: the game on it now (tap to score), then the table and fixtures of each
+              group playing there. */}
           {current && !drawPending && (
-            <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`}>
-              <div className="grid gap-3">
-                {curGroups.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} cut={current.kind === "random" ? finalsCut(here.length, curGroups.length) : null} />)}
+            <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`} aside={live && queues.some((q) => q.length) ? "Tap a net to score it" : undefined}>
+              <div className="grid gap-6">
+                {netNumbers(queues, curGroups).map((n) => {
+                  const q = queues[n - 1] ?? [];
+                  return (
+                    <div key={n} className="grid gap-2.5">
+                      {live && q[0] && (
+                        <Court
+                          title={`Net ${n}`} tag={`${gameLabel(q[0])} · game ${q[0].seq}`}
+                          a={q[0].a} b={q[0].b} scoreA={null} scoreB={null} people={people} live
+                          warn={needsSub(q[0], out).length ? `${needsSub(q[0], out).map((id) => p(id)?.name).join(" & ")} left: tap to sub someone in` : undefined}
+                          note={q[1] ? <>Next: <span className="text-fg">{teamLine(q[1].a, people, q[1].subs, out)}</span> vs <span className="text-fg">{teamLine(q[1].b, people, q[1].subs, out)}</span></> : undefined}
+                          onTap={() => setOpen(q[0].id)}
+                        />
+                      )}
+                      {curGroups.filter((g) => g.net === n).map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} cut={current.kind === "random" ? finalsCut(here.length, curGroups.length) : null} />)}
+                    </div>
+                  );
+                })}
               </div>
             </Section>
           )}
@@ -305,7 +306,6 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
   veiled: boolean;
 }) {
   const { event: ev, games, people } = view;
-  const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
   const name = (id: string) => people[id]?.name ?? "Someone";
   const both = (ids: string[]) => ids.map(name).join(" & ");
   if (!me || !day) return <CheckIn me={me} state={state} eventId={ev.id} started />;
@@ -336,20 +336,14 @@ function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, or
         <Section title="Up next">
           {first ? (
             <div className="grid gap-2">
-              <div className={`min-w-0 rounded-2xl p-4 ${first.ahead === 0 ? "bg-accent text-ink" : card}`}>
-                <button onClick={() => onOpen(first.game.id)} className="spk-press block w-full text-left">
-                  <div className={`text-[12px] font-bold uppercase tracking-[.1em] ${first.ahead === 0 ? "opacity-70" : "text-accent"}`}>
-                    Net {first.net} · {first.ahead === 0 ? "you're on now" : first.ahead === 1 ? "you're next" : `${first.ahead} games before yours`}
-                  </div>
-                  <div className="mt-2 text-[20px] font-black leading-tight">With {name(first.partner)}</div>
-                  <div className={`mt-0.5 text-[15px] font-semibold ${first.ahead === 0 ? "opacity-75" : "text-muted"}`}>vs {both(first.opponents)}{first.sub ? " · you're subbing" : ""}</div>
-                </button>
-                {first.ahead === 0 && (
-                  <div className="mt-4">
-                    <ScoreBoxes key={first.game.id} game={first.game} to={toFor(first.game)} canScore onOpen={() => onOpen(first.game.id)} people={view.people} onAccent flip={!first.game.a.includes(me)} />
-                  </div>
-                )}
-              </div>
+              {/* The same court as the Overall tab's nets, your pair on the left. */}
+              <Court
+                title={`Net ${first.net}`} tag={first.ahead === 0 ? "You're on now" : first.ahead === 1 ? "You're next" : `${first.ahead} games before yours`}
+                a={[me, first.partner]} b={first.opponents} scoreA={null} scoreB={null} people={people}
+                live={first.ahead === 0} highlight={first.ahead === 0}
+                note={first.sub ? "You're subbing in this one: it doesn't count for you." : undefined}
+                onTap={() => onOpen(first.game.id)}
+              />
               {later.length > 0 && (
                 <div className={`${card} divide-y divide-white/[.04]`}>
                   {later.map((x) => (
@@ -458,6 +452,10 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
 
 /** `cut`: where the A final's line falls in a random group's table (finalsCut): the top `sure` are
  *  in, and with `extra` places left over, the next one might be. */
+/** The nets to show, in order: every net with a game waiting or a group of this stage on it. */
+const netNumbers = (queues: Game[][], groups: GroupView[]) =>
+  [...new Set([...queues.flatMap((q, i) => (q.length ? [i + 1] : [])), ...groups.map((g) => g.net)])].sort((a, b) => a - b);
+
 function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, cut = null }: { g: GroupView; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string; cut?: { sure: number; extra: number } | null }) {
   const final = g.kind === "final";
   const tint = final ? tierColor(g.name) : "#CBFB4F";

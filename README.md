@@ -16,7 +16,7 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   even (within `CLOSE_ENOUGH`, about 55/45), so it's a new partner every game and never stale.
   With extra people it's king of the court: the pair who lose on the bottom net sit out, and
   whoever sat out comes back on the bottom net. The next round draws itself the
-  moment the last net's score goes in. Games to 11, 15, 17 or 21. The **Live nets** tab is just
+  moment the last net's score goes in. Games to 11, 15, 17 or 21. The **Tournament** tab is just
   the nets: four faces each, ↑/↓ once a net's scored, everyone sliding to their new net when the
   round turns. Tap a net to score it in a sheet, and the result (who goes up, who goes down, each
   player's ±) shows in that sheet. The organiser can swap someone out of an unscored game there.
@@ -26,6 +26,8 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   (`mixedOrder`), and the organiser can add another round, mixed or by level, before the finals.
   Scoring: tap a net, score it in the sheet, and the result (each player's rating change) shows
   in a small sheet. The draw stories and the finals banners stay; nothing else pops up mid-day.
+  The **Tournament** tab goes net by net: the game on the net now (tap to score it), then the
+  table and fixtures of the group playing there. The You tab shows your next game as the same court.
 
 Both feed the same ratings (`src/lib/standings.ts`).
 
