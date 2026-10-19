@@ -77,6 +77,18 @@ export async function liveNowId(): Promise<string | null> {
   return liveEventId(rows, Date.now());
 }
 
+/** Today's event for the Me tab's check-in: the live one, or else one starting within the next
+ *  12 hours (or that started up to 6 hours ago and hasn't begun), so people can check in first. */
+export async function todayEventId(): Promise<string | null> {
+  const live = await liveNowId();
+  if (live) return live;
+  const now = Date.now();
+  const rows = await db.select({ id: events.id, startsAt: events.startsAt }).from(events).where(eq(events.status, "upcoming"));
+  const soon = rows.filter((e) => e.startsAt.getTime() - now < 12 * 3600_000 && now - e.startsAt.getTime() < 6 * 3600_000)
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return soon[0]?.id ?? null;
+}
+
 export async function getEventCards(me: string | null): Promise<{ upcoming: EventCard[]; live: EventCard[]; past: EventCard[] }> {
   const evs = await db.select().from(events).orderBy(desc(events.startsAt));
   const ens = evs.length ? await db.select().from(entries).where(inArray(entries.eventId, evs.map((e) => e.id))) : [];

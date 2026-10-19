@@ -13,7 +13,8 @@ import type { PlayerLite } from "@/lib/data";
 /** Scoring a game where it's shown (a net, your own next game): tap the winners, slide the losers'
  *  score, save. Subs, skipping and corrections stay in the full sheet (`onOpen`), which is also
  *  where a tap goes if you're not signed in. `flip`: team B on the left (your side first). */
-export function ScoreBoxes({ game, to, canScore, onOpen, people, onAccent = false, flip = false }: { game: Game; to: number; canScore: boolean; onOpen: () => void; people: Record<string, PlayerLite>; onAccent?: boolean; flip?: boolean }) {
+/** `onSaved`: show the result yourself (the ladder's net sheet) instead of the full-screen card. */
+export function ScoreBoxes({ game, to, canScore, onOpen, people, onAccent = false, flip = false, onSaved }: { game: Game; to: number; canScore: boolean; onOpen: () => void; people: Record<string, PlayerLite>; onAccent?: boolean; flip?: boolean; onSaved?: (gameId: string) => void }) {
   const { run, pending, toast } = useAction();
   const [pick, setPick] = useState<Pick>({ winner: null, loser: 0 });
   // The entry works left/right; map back to the game's own A/B.
@@ -22,7 +23,7 @@ export function ScoreBoxes({ game, to, canScore, onOpen, people, onAccent = fals
   const save = () => {
     if (!s) return;
     const [l, r] = s;
-    run(() => enterScore(game.id, flip ? r : l, flip ? l : r), "Score saved", (x) => { if (x.ok) { setPick({ winner: null, loser: 0 }); showResult(game.id); } });
+    run(() => enterScore(game.id, flip ? r : l, flip ? l : r), "Score saved", (x) => { if (x.ok) { setPick({ winner: null, loser: 0 }); if (onSaved) onSaved(game.id); else showResult(game.id); } });
   };
   if (!canScore) {
     return <button type="button" onClick={onOpen} className={`spk-press h-11 w-full rounded-xl text-[13.5px] font-bold ${onAccent ? "bg-ink/10" : "bg-raised text-muted"}`}>Sign in to enter the score</button>;

@@ -13,8 +13,11 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   winners stay, as do the bottom net's losers). The four on each net are split into the fairest
   teams that don't repeat a partnership from earlier in the day, so it's a new partner every game.
   Extra people sit out in turn and come back on the net they left. The next round draws itself the
-  moment the last net's score goes in. Games to 11, 15, 17 or 21. The scorer's phone shows one
-  small card (everyone's ± and where everyone goes next); the day ends with one story. Engine:
+  moment the last net's score goes in. Games to 11, 15, 17 or 21. The **Live nets** tab is just
+  the nets: four faces each, ↑/↓ once a net's scored, everyone sliding to their new net when the
+  round turns. Tap a net to score it in a sheet, and the result (who goes up, who goes down, each
+  player's ±) shows in that sheet. The organiser can swap someone out of an unscored game there.
+  Check-in and "I have to leave" live on Me. The day ends with one story. Engine:
   `src/lib/netLadder.ts`, screen: `src/components/LadderScreen.tsx`.
 - **Cards**: groups, then finals, as below. Best with a big turnout.
 

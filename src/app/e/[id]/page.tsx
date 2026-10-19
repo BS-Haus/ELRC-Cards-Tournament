@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getSession, isOrganiser } from "@/lib/auth/session";
-import { getEventView, allPlayers, weekendXp, drawPending, ladderDay } from "@/lib/data";
+import { getEventView, allPlayers, weekendXp, drawPending } from "@/lib/data";
 import { EventScreen } from "@/components/EventScreen";
 import { LadderScreen } from "@/components/LadderScreen";
 
@@ -30,8 +30,8 @@ export default async function EventPage({ params }: Props) {
   if (!v) notFound();
   const org = isOrganiser(s);
   if (v.event.format === "ladder") {
-    const [roster, day] = await Promise.all([org ? allPlayers() : [], ladderDay(id)]);
-    return <LadderScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} day={day} />;
+    const roster = org ? await allPlayers() : [];
+    return <LadderScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} />;
   }
   const [myXp, roster, hidden] = await Promise.all([s?.playerId ? weekendXp(id, s.playerId) : null, org ? allPlayers() : [], s?.playerId ? drawPending(id, s.playerId) : false]);
   return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} myXp={myXp} drawPending={hidden} />;

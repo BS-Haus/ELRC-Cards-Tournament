@@ -650,3 +650,32 @@ export async function nextLadderRound(eventId: string): Promise<Result> {
   refresh(eventId);
   return { ok: true };
 }
+
+/**
+ * Organiser: someone has to drop out of a game that hasn't been scored. `inId` (someone here and
+ * not playing this round) takes their place, and the game counts for them as normal. The player
+ * swapped out sits out instead, unless they've left.
+ */
+export async function swapLadderPlayer(gameId: string, outId: string, inId: string): Promise<Result> {
+  const no = await requireOrganiser(); if (no) return no;
+  if (!isUuid(gameId) || !isUuid(outId) || !isUuid(inId) || outId === inId) return fail("Pick who's coming off and who's going on.");
+  const g = await gameFor(gameId); if (!g) return fail("Unknown game.");
+  if (g.status !== "todo") return fail("This game already has a score.");
+  const [st] = await db.select().from(stages).where(eq(stages.id, g.stageId));
+  if (st?.kind !== "ladder") return fail("Not a ladder game.");
+  const slots = [g.a1, g.a2, g.b1, g.b2];
+  if (!slots.includes(outId)) return fail("They're not in this game.");
+  const round = await db.select().from(games).where(eq(games.stageId, st.id));
+  if (round.some((x) => x.status !== "void" && [x.a1, x.a2, x.b1, x.b2].includes(inId))) return fail("They're already playing this round.");
+  const ens = await db.select().from(entries).where(eq(entries.eventId, g.eventId));
+  if (ens.find((e) => e.playerId === inId)?.state !== "here") return fail("Check them in first.");
+  const swap = (id: string) => (id === outId ? inId : id);
+  const outStays = ens.find((e) => e.playerId === outId)?.state === "here";
+  const sitting = [...(st.sitting ?? []).filter((id) => id !== inId), ...(outStays ? [outId] : [])];
+  await db.transaction(async (tx) => {
+    await tx.update(games).set({ a1: swap(g.a1), a2: swap(g.a2), b1: swap(g.b1), b2: swap(g.b2), updatedAt: new Date() }).where(eq(games.id, gameId));
+    await tx.update(stages).set({ sitting }).where(eq(stages.id, st.id));
+  });
+  refresh(g.eventId);
+  return { ok: true };
+}

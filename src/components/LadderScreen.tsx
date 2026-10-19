@@ -3,27 +3,27 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { startLadder, nextLadderRound, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, setEntry, addWalkIn } from "@/app/actions";
+import { motion, LayoutGroup, AnimatePresence } from "motion/react";
+import { startLadder, nextLadderRound, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, setEntry, addWalkIn, resultOf, clearScore, swapLadderPlayer } from "@/app/actions";
 import { useAction } from "@/components/useAction";
-import { CheckIn, LiveBadge } from "@/components/CheckIn";
+import { LiveBadge } from "@/components/CheckIn";
 import { ScoreBoxes } from "@/components/ScoreBoxes";
-import { ScoreSheet } from "@/components/ScoreSheet";
-import { ResultCard, Disclosure } from "@/components/kit";
-import { Avatar, Section, card, btnPrimary, btnGhost, btnQuiet, input, fmtDate, LevelPill } from "@/components/ui";
-import { roundsFrom, roundDone, netsFor } from "@/lib/netLadder";
-import { myCheckIn } from "@/lib/views";
-import { tierOfRating } from "@/lib/levels";
+import { Disclosure, SOFT } from "@/components/kit";
+import { Avatar, Section, card, btnPrimary, btnGhost, btnQuiet, input, fmtDate } from "@/components/ui";
+import { netsFor } from "@/lib/netLadder";
 import { PROV_N } from "@/lib/standings";
-import type { EventView, PlayerLite, LadderDayRow } from "@/lib/data";
+import type { Game } from "@/lib/cards";
+import type { EventView, PlayerLite, Moments } from "@/lib/data";
 
-// A ladder event (src/lib/netLadder.ts): this round's nets, top to bottom, each scored right on its
-// card; who's sitting out; today's table; and the organiser's few buttons. The next round appears
-// by itself when the last net's score goes in.
+// A ladder event, as one screen: the nets stacked top to bottom with the four faces on each. A
+// scored net shows who's going up and who's going down; when the last score is in, the next round
+// is drawn and everyone slides to their new net. Tap a net to score it (or see its result) in a
+// sheet. Ratings, tables and check-in live on other tabs: this screen is just the nets.
 
 const GAME_LENGTHS = [11, 15, 17, 21];
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}`;
 
-export function LadderScreen({ view, me, org, roster, day }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; day: LadderDayRow[] }) {
+export function LadderScreen({ view, me, org, roster }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[] }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [open, setOpen] = useState<string | null>(null);
@@ -32,166 +32,256 @@ export function LadderScreen({ view, me, org, roster, day }: { view: EventView; 
 
   useEffect(() => {
     if (!live) return;
-    const t = setInterval(() => { if (!document.hidden && !open) router.refresh(); }, 5000);
+    const t = setInterval(() => { if (!document.hidden && !open) router.refresh(); }, 4000);
     return () => clearInterval(t);
   }, [live, open, router]);
 
-  const rounds = roundsFrom(stages, games);
-  const ladderStages = stages.filter((s) => s.kind === "ladder");
-  const current = ladderStages.at(-1);
+  const rounds = stages.filter((s) => s.kind === "ladder");
+  const current = rounds.at(-1);
   const now = current ? games.filter((g) => g.stageNo === current.no && g.status !== "void").sort((a, b) => a.net - b.net) : [];
-  const nets = now.length;
+  const scored = now.filter((g) => g.status === "done").length;
   const here = entries.filter((e) => e.state === "here").map((e) => e.playerId);
-  const myEntry = me ? myCheckIn(entries, games, me) : null;
   const openGame = games.find((g) => g.id === open) ?? null;
-  const p = (id: string) => people[id];
-  const names = (ids: string[]) => ids.map((id) => p(id)?.name ?? "?").join(" & ");
+  const playingNow = new Set(now.flatMap((g) => [...g.a, ...g.b]));
 
   return (
     <main>
       {toast}
-      <header className="px-5 pt-[calc(14px+env(safe-area-inset-top))] pb-4">
+      <header className="px-5 pt-[calc(14px+env(safe-area-inset-top))] pb-3">
         <div className="flex items-center justify-between">
           <Link href="/?all=1" className="spk-press text-[13px] font-bold text-muted">← All events</Link>
-          <span className="text-[12px] font-bold uppercase tracking-[.12em] text-dim">Ladder · to {ev.groupTo}</span>
+          {live ? <LiveBadge /> : done ? <span className="text-[11px] font-bold uppercase tracking-[.14em] text-gold">Finished</span> : <span className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">{fmtDate(ev.startsAt)}</span>}
         </div>
-        <div className="mt-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.14em]">
-          {live ? <LiveBadge /> : done ? <span className="text-gold">Finished</span> : <span className="text-accent">Coming up</span>}
-        </div>
-        <h1 className="mt-1 text-[28px] font-black leading-[1.05] tracking-[-.02em] text-balance">{ev.title}</h1>
-        <p className="mt-1.5 text-[14px] text-muted">{fmtDate(ev.startsAt)}{ev.location ? ` · ${ev.location}` : ""}</p>
-        {ev.notes && <p className="mt-2 whitespace-pre-line text-[14px] leading-relaxed text-fg/80">{ev.notes}</p>}
+        <h1 className="mt-3 text-[28px] font-black leading-[1.05] tracking-[-.02em]">{ev.title}</h1>
       </header>
 
-      {done && rounds.length > 0 && (
-        <div className="px-4 pb-5">
+      {done && (
+        <div className="px-4 pb-4">
           <Link href={`/e/${ev.id}/recap`} className="spk-press flex items-center gap-3 rounded-2xl bg-gradient-to-r from-accent to-[#9be15d] p-4 text-ink">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-accent" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
             </span>
-            <span className="min-w-0">
-              <span className="block text-[17px] font-black">Watch the day back</span>
-              <span className="block text-[13px] font-semibold opacity-70">Your day, and who earned the most</span>
-            </span>
+            <span className="text-[17px] font-black">Watch the day back</span>
           </Link>
         </div>
       )}
 
-      {!done && <CheckIn me={me} state={myEntry} eventId={ev.id} started={live} />}
-
-      {!current && !done && (
-        <Section title={`Coming · ${entries.filter((e) => e.state !== "out").length}`}>
-          <div className={`${card} p-4`}>
-            <div className="flex flex-wrap gap-2">
-              {entries.filter((e) => e.state !== "out").map((e) => (
-                <span key={e.playerId} className="flex items-center gap-1.5 rounded-full bg-panel py-1 pl-1 pr-3 text-[13px] font-semibold"><Avatar p={p(e.playerId)} size={22} />{p(e.playerId)?.name}{e.state === "here" && <span className="text-accent">✓</span>}</span>
-              ))}
-            </div>
-            <p className="mt-3 text-[13px] leading-relaxed text-muted">How it works: everyone's put on a net by rating, then win and you go up a net, lose and you go down. A new partner every game.</p>
-          </div>
-        </Section>
-      )}
+      {!current && !done && <Waiting view={view} me={me} />}
 
       {current && (
-        <Section title={`Round ${ladderStages.length}`} aside={live ? (roundDone(rounds.at(-1)!) ? "Drawing the next round…" : "Tap the winners, slide the score") : undefined}>
-          <div className="grid gap-2.5">
-            {now.map((g) => {
-              const scored = g.status === "done";
-              return (
-                <div key={g.id} className={`${card} overflow-hidden`}>
-                  <div className="p-4">
-                    <button onClick={() => setOpen(g.id)} className="spk-press flex w-full items-center justify-between text-[12px] font-bold uppercase tracking-[.1em]">
-                      <span className={g.net === 1 ? "text-accent" : "text-muted"}>Net {g.net}{g.net === 1 ? " · top" : g.net === nets ? " · bottom" : ""}</span>
-                      <span className="text-dim">{scored ? "Edit ›" : "More ›"}</span>
-                    </button>
-                    <div className="mt-3">
-                      {scored || !live
-                        ? <ResultCard a={g.a} b={g.b} scoreA={g.scoreA} scoreB={g.scoreB} people={people} flat />
-                        : <ScoreBoxes key={g.id} game={g} to={ev.groupTo} canScore={!!me} onOpen={() => setOpen(g.id)} people={people} />}
-                    </div>
-                  </div>
-                  {scored && (
-                    <div className="border-t border-white/[.05] bg-panel px-4 py-2 text-[12.5px] text-muted">
-                      <span className="text-win">↑</span> {names(g.scoreA! > g.scoreB! ? g.a : g.b)} {g.net === 1 ? "stay on top" : "go up"} · <span className="text-loss">↓</span> {names(g.scoreA! > g.scoreB! ? g.b : g.a)} {g.net === nets ? "stay" : "go down"}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+        <div className="px-4 pb-6">
+          <div className="mb-3 flex items-baseline justify-between px-1">
+            <span className="text-[13px] font-black uppercase tracking-[.16em] text-muted">Round {rounds.length}</span>
+            {live && <span className="text-[12.5px] font-bold text-dim">{scored === now.length ? "Next round coming up…" : `${scored} of ${now.length} nets in`}</span>}
+          </div>
+          <LayoutGroup>
+            <div className="grid gap-2.5">
+              {now.map((g) => <NetCourt key={g.net} g={g} nets={now.length} people={people} live={live} onTap={() => setOpen(g.id)} />)}
+            </div>
             {current.sitting.length > 0 && (
-              <div className={`${card} p-3.5 text-[13.5px] text-muted`}>
-                <b className="text-fg">Sitting out:</b> {names(current.sitting)}. Back in next round.
+              <div className="mt-3 flex items-center gap-3 rounded-2xl border border-dashed border-white/10 px-4 py-3">
+                <span className="shrink-0 text-[11px] font-black uppercase tracking-[.14em] text-dim">Sitting out</span>
+                <div className="flex flex-wrap gap-2">
+                  {current.sitting.map((id) => <Face key={id} id={id} p={people[id]} dim />)}
+                </div>
               </div>
             )}
-          </div>
-        </Section>
+          </LayoutGroup>
+          <Link href="/players" className="mt-4 block text-center text-[13px] font-bold text-dim">Ratings and the full ladder →</Link>
+        </div>
       )}
 
-      {day.length > 0 && (current || done) && (
-        <Section title="Today" aside={<Link href="/players" className="font-bold text-accent">Full ladder →</Link>}>
-          <div className={`${card} overflow-hidden`}>
-            {day.map((r, i) => (
-              <Link key={r.id} href={`/p/${r.id}`} className="spk-press flex items-center gap-3 border-t border-white/[.04] px-4 py-2.5 first:border-t-0">
-                <span className="w-5 shrink-0 text-center font-mono text-[13px] font-bold text-dim">{r.rating != null ? i + 1 : "🐣"}</span>
-                <Avatar p={p(r.id)} size={30} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14.5px] font-bold">{p(r.id)?.name ?? "Someone"}</span>
-                  <span className="mt-0.5 flex items-center gap-2">
-                    {r.rating != null ? <LevelPill level={tierOfRating(r.rating).level} /> : <span className="text-[11.5px] font-semibold text-dim">Placing · {r.placed}/{PROV_N}</span>}
-                    <span className="font-mono text-[11px] text-dim">{r.w}–{r.l}</span>
-                  </span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="block font-mono text-[16px] font-extrabold">{r.rating ?? "–"}</span>
-                  {r.today != null && <span className={`block font-mono text-[11px] font-bold ${r.today >= 0 ? "text-win" : "text-loss"}`}>{signed(r.today)}</span>}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </Section>
-      )}
+      {org && <Organiser view={view} roster={roster} here={here} playingNow={playingNow} run={run} pending={pending} />}
 
-      {rounds.length > 1 && (
-        <Section title="Earlier rounds">
-          <div className="grid gap-2">
-            {ladderStages.slice(0, -1).reverse().map((s, i) => (
-              <Disclosure key={s.id} title={`Round ${ladderStages.length - 1 - i}`} teaser={s.sitting.length ? `${s.sitting.length} sat out` : undefined}>
-                <div className="grid gap-2">
-                  {games.filter((g) => g.stageNo === s.no && g.status !== "void").sort((a, b) => a.net - b.net).map((g) => (
-                    <ResultCard key={g.id} a={g.a} b={g.b} scoreA={g.scoreA} scoreB={g.scoreB} people={people} left={`Net ${g.net}`} onClick={() => setOpen(g.id)} />
-                  ))}
-                </div>
-              </Disclosure>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {org && <Organiser view={view} roster={roster} here={here} run={run} pending={pending} />}
-
-      {openGame && (
-        <ScoreSheet game={openGame} people={people} to={ev.groupTo} canScore={!!me} org={org} candidates={[]} out={new Set()} onClose={() => setOpen(null)} />
-      )}
+      <AnimatePresence>
+        {openGame && <NetSheet key={openGame.id} g={openGame} nets={Math.max(1, games.filter((x) => x.stageNo === openGame.stageNo && x.status !== "void").length)} people={people} to={ev.groupTo} me={me} org={org} candidates={here.filter((id) => !playingNow.has(id))} onClose={() => { setOpen(null); router.refresh(); }} />}
+      </AnimatePresence>
     </main>
+  );
+}
+
+/** One face that slides to its new net when the round changes (shared layout id). */
+function Face({ id, p, size = 40, dim = false, badge }: { id: string; p?: PlayerLite; size?: number; dim?: boolean; badge?: "up" | "down" }) {
+  return (
+    <motion.div layoutId={`face-${id}`} transition={SOFT} className="relative flex flex-col items-center">
+      <Avatar p={p} size={size} dim={dim} />
+      {badge && (
+        <span className={`absolute -right-1 -top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full text-[11px] font-black ${badge === "up" ? "bg-win text-ink" : "bg-loss text-ink"}`} aria-label={badge === "up" ? "going up" : "going down"}>
+          {badge === "up" ? "↑" : "↓"}
+        </span>
+      )}
+    </motion.div>
+  );
+}
+
+/** A net as a little court: the net number on the left, each pair either side of the net, and
+ *  once it's scored, the winners lit with ↑ and the losers dimmed with ↓. */
+function NetCourt({ g, nets, people, live, onTap }: { g: Game; nets: number; people: Record<string, PlayerLite>; live: boolean; onTap: () => void }) {
+  const done = g.status === "done";
+  const aWon = done && g.scoreA! > g.scoreB!;
+  const side = (ids: string[], won: boolean, right: boolean) => (
+    <div className={`flex min-w-0 flex-1 flex-col gap-1.5 ${right ? "items-end" : "items-start"}`}>
+      <div className={`flex gap-1.5 ${right ? "flex-row-reverse" : ""}`}>
+        {ids.map((id) => <Face key={id} id={id} p={people[id]} size={38} dim={done && !won} badge={done ? (won ? (g.net === 1 ? undefined : "up") : g.net === nets ? undefined : "down") : undefined} />)}
+      </div>
+      <span className={`w-full truncate text-[12.5px] font-bold ${right ? "text-right" : ""} ${done ? (won ? "text-fg" : "text-dim") : "text-fg/85"}`}>{ids.map((id) => people[id]?.name ?? "?").join(" & ")}</span>
+    </div>
+  );
+  return (
+    <motion.button
+      layout transition={SOFT} whileTap={{ scale: 0.98 }} onClick={onTap}
+      className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left ${done ? "border-white/[.05] bg-surface/60" : g.net === 1 ? "border-accent/30 bg-accent/[.06]" : "border-white/[.07] bg-surface"}`}
+      aria-label={`Net ${g.net}${done ? `, ${g.scoreA}–${g.scoreB}` : ", tap to score"}`}
+    >
+      <div className="flex w-9 shrink-0 flex-col items-center">
+        <span className={`font-mono text-[24px] font-black leading-none ${g.net === 1 ? "text-accent" : "text-fg"}`}>{g.net}</span>
+        <span className="mt-1 text-[8.5px] font-black uppercase tracking-[.12em] text-dim">{g.net === 1 ? "Top" : g.net === nets ? "Bottom" : "Net"}</span>
+      </div>
+      {side(g.a, aWon, false)}
+      <div className="flex w-14 shrink-0 flex-col items-center">
+        {done ? (
+          <span className="tnum font-mono text-[15px] font-black"><span className={aWon ? "text-accent" : "text-dim"}>{g.scoreA}</span><span className="text-dimmer">–</span><span className={!aWon ? "text-accent" : "text-dim"}>{g.scoreB}</span></span>
+        ) : (
+          <span className={`flex h-12 w-12 items-center justify-center rounded-full border-2 ${live ? "spk-live border-accent/70 text-accent" : "border-white/15 text-dim"}`} aria-hidden="true">
+            <span className="h-6 w-6 rounded-full border border-current" />
+          </span>
+        )}
+        {!done && live && <span className="mt-1 text-[9px] font-black uppercase tracking-[.1em] text-accent">Score</span>}
+      </div>
+      {side(g.b, done && !aWon, true)}
+    </motion.button>
+  );
+}
+
+/** Before it starts: who's coming, and where check-in lives. */
+function Waiting({ view, me }: { view: EventView; me: string | null }) {
+  const coming = view.entries.filter((e) => e.state !== "out");
+  return (
+    <Section title={`Coming · ${coming.length}`}>
+      <div className={`${card} p-4`}>
+        <div className="flex flex-wrap gap-2">
+          {coming.map((e) => (
+            <span key={e.playerId} className="flex items-center gap-1.5 rounded-full bg-panel py-1 pl-1 pr-3 text-[13px] font-semibold"><Avatar p={view.people[e.playerId]} size={22} />{view.people[e.playerId]?.name}{e.state === "here" && <span className="text-accent">✓</span>}</span>
+          ))}
+        </div>
+        <p className="mt-3 text-[13.5px] leading-relaxed text-muted">Everyone starts on a net by rating. Win and you go up, lose and you go down, with a new partner every game.</p>
+        <Link href="/me" className={`${btnPrimary} mt-3 w-full`}>{me ? "Check in on Me" : "Sign up to play"}</Link>
+      </div>
+    </Section>
+  );
+}
+
+/** Tap a net: score it (tap the winners, slide the score), then see the result right here: who's
+ *  going up and down, and everyone's ±. A scored net opens straight to its result. */
+function NetSheet({ g, nets, people, to, me, org, candidates, onClose }: { g: Game; nets: number; people: Record<string, PlayerLite>; to: number; me: string | null; org: boolean; candidates: string[]; onClose: () => void }) {
+  const { run, pending, toast } = useAction();
+  const [res, setRes] = useState<Moments | null>(null);
+  const [loading, setLoading] = useState(g.status === "done");
+  const [swapOut, setSwapOut] = useState<string | null>(null);
+  const load = async (id: string) => { setLoading(true); try { setRes(await resultOf(id)); } finally { setLoading(false); } };
+  useEffect(() => { if (g.status === "done") load(g.id); }, [g.id, g.status]);
+
+  const slide = res?.slides[0];
+  const match = slide && (slide.kind === "game" || slide.kind === "match") ? slide.match : null;
+  return (
+    <motion.div className="fixed inset-0 z-50 flex items-end bg-black/60" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+      {toast}
+      <motion.div
+        initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={SOFT}
+        className="mx-auto w-full max-w-[480px] rounded-t-3xl border-t border-white/[.08] bg-surface p-5 pb-[calc(20px+env(safe-area-inset-bottom))]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-[13px] font-black uppercase tracking-[.16em] text-accent">Net {g.net}</span>
+          <button onClick={onClose} className="spk-press -mr-2 p-2 text-muted" aria-label="Close">✕</button>
+        </div>
+
+        {match ? (
+          <div>
+            <div className="text-[22px] font-black leading-tight">
+              {(match.scoreA > match.scoreB ? match.a : match.b).map((id) => people[id]?.name ?? "?").join(" & ")} win{" "}
+              <span className="tnum font-mono text-accent">{Math.max(match.scoreA, match.scoreB)}–{Math.min(match.scoreA, match.scoreB)}</span>
+            </div>
+            <div className="mt-4 grid gap-2">
+              {[...match.lines].sort((x, y) => Number(y.won) - Number(x.won)).map((l) => {
+                const move = l.won ? (g.net === 1 ? "Stays on top" : `Up to Net ${g.net - 1}`) : g.net >= nets ? "Stays at the bottom" : `Down to Net ${g.net + 1}`;
+                return (
+                  <motion.div key={l.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={SOFT} className="flex items-center gap-3 rounded-xl bg-panel px-3 py-2.5">
+                    <Avatar p={people[l.id]} size={32} dim={!l.won} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14.5px] font-bold">{people[l.id]?.name}</span>
+                      <span className={`block text-[12px] font-bold ${l.won ? "text-win" : "text-loss"}`}>{l.won ? "↑" : "↓"} {move}</span>
+                    </span>
+                    {l.placingGame != null
+                      ? <span className="shrink-0 text-[12px] font-bold text-dim">🐣 {l.placingGame}/{PROV_N}</span>
+                      : <span className={`tnum shrink-0 font-mono text-[17px] font-black ${l.delta >= 0 ? "text-accent" : "text-muted"}`}>{signed(l.delta)}</span>}
+                  </motion.div>
+                );
+              })}
+            </div>
+            {res?.ladder && (
+              <p className="mt-4 text-center text-[13px] font-semibold text-muted">
+                {res.ladder.next ? `Round ${res.ladder.round} is up. Check the nets.` : res.ladder.waiting.length ? `Waiting on Net ${res.ladder.waiting.join(", ")}. Everyone moves when they're in.` : ""}
+              </p>
+            )}
+            <button onClick={onClose} className={`${btnPrimary} mt-4 h-12 w-full`}>{res?.ladder?.next ? "See the nets" : "Done"}</button>
+            {org && g.status === "done" && !res?.ladder?.next && (
+              <button disabled={pending} onClick={() => run(() => clearScore(g.id), "Score cleared", (r) => r.ok && onClose())} className={`${btnQuiet} mt-1 w-full`}>Clear this score</button>
+            )}
+          </div>
+        ) : loading ? (
+          <div className="py-10 text-center text-[14px] text-muted">Loading…</div>
+        ) : !me ? (
+          <Link href="/me" className={`${btnPrimary} w-full`}>Sign in to score</Link>
+        ) : (
+          <>
+            <ScoreBoxes game={g} to={to} canScore people={people} onOpen={() => {}} onSaved={load} />
+            {org && (
+              <div className="mt-4 border-t border-white/[.06] pt-3">
+                {!swapOut ? (
+                  <>
+                    <div className="mb-2 text-[12px] font-bold text-dim">Someone has to drop out? Tap them to swap someone in.</div>
+                    <div className="flex flex-wrap gap-2">
+                      {[...g.a, ...g.b].map((id) => (
+                        <button key={id} onClick={() => setSwapOut(id)} className="spk-press flex items-center gap-1.5 rounded-full bg-panel py-1 pl-1 pr-3 text-[13px] font-semibold"><Avatar p={people[id]} size={22} />{people[id]?.name}</button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="mb-2 text-[12px] font-bold text-dim">Who takes {people[swapOut]?.name}&apos;s place?</div>
+                    <div className="flex flex-wrap gap-2">
+                      {candidates.length ? candidates.map((id) => (
+                        <button key={id} disabled={pending} onClick={() => run(() => swapLadderPlayer(g.id, swapOut, id), "Swapped", (r) => r.ok && onClose())} className="spk-press flex items-center gap-1.5 rounded-full bg-panel py-1 pl-1 pr-3 text-[13px] font-semibold"><Avatar p={people[id]} size={22} />{people[id]?.name}</button>
+                      )) : <span className="text-[13px] text-muted">Nobody's free. Check someone in first.</span>}
+                      <button onClick={() => setSwapOut(null)} className="text-[13px] font-bold text-muted">Cancel</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </motion.div>
+    </motion.div>
   );
 }
 
 type Run = ReturnType<typeof useAction>["run"];
 
-function Organiser({ view, roster, here, run, pending }: { view: EventView; roster: PlayerLite[]; here: string[]; run: Run; pending: boolean }) {
+function Organiser({ view, roster, here, playingNow, run, pending }: { view: EventView; roster: PlayerLite[]; here: string[]; playingNow: Set<string>; run: Run; pending: boolean }) {
   const { event: ev, entries, stages, games, people } = view;
   const [name, setName] = useState("");
   const [confirm, setConfirm] = useState<string | null>(null);
   const twice = (key: string, fn: () => void) => { if (confirm === key) { setConfirm(null); fn(); } else { setConfirm(key); setTimeout(() => setConfirm((c) => (c === key ? null : c)), 3500); } };
   const current = stages.filter((s) => s.kind === "ladder").at(-1);
-  const done = ev.status === "done";
   const unplayed = current ? games.filter((g) => g.stageNo === current.no && g.status === "todo").length : 0;
   const used = netsFor(here.length, ev.nets);
   const save = (patch: Partial<{ nets: number; groupTo: number }>, msg: string) =>
     run(() => updateEvent(ev.id, { title: ev.title, startsAt: new Date(ev.startsAt).toISOString(), location: ev.location, notes: ev.notes, nets: patch.nets ?? ev.nets, groupTo: patch.groupTo ?? ev.groupTo, finalTo: ev.finalTo }), msg);
   const sorted = [...entries].sort((a, b) => (people[a.playerId]?.name ?? "").localeCompare(people[b.playerId]?.name ?? ""));
 
-  if (done) {
+  if (ev.status === "done") {
     return (
       <Section title="Organiser">
         <button disabled={pending} onClick={() => run(() => reopenEvent(ev.id), "Event reopened")} className={btnGhost}>Reopen</button>
@@ -200,21 +290,17 @@ function Organiser({ view, roster, here, run, pending }: { view: EventView; rost
   }
   return (
     <Section title="Organiser">
-      <div className={`${card} grid gap-3 p-4`}>
-        <p className="text-[13.5px] leading-relaxed text-muted">
-          {here.length} here → {used ? `${used} net${used === 1 ? "" : "s"} of 4` : "need 4 to start"}{used && here.length > used * 4 ? `, ${here.length - used * 4} sitting out each round (in turn)` : ""}.
-          {current ? (unplayed ? ` ${unplayed} net${unplayed === 1 ? "" : "s"} still to score this round.` : " The next round draws itself when the last score goes in.") : " Check people in, then start."}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {!current && <button disabled={pending || here.length < 4} onClick={() => run(() => startLadder(ev.id), "Ladder started")} className={btnPrimary}>Start the ladder</button>}
-          {current && unplayed > 0 && <button disabled={pending} onClick={() => twice("next", () => run(() => nextLadderRound(ev.id), "Next round drawn"))} className={btnGhost}>{confirm === "next" ? "Tap again: skip unscored nets" : "Next round now"}</button>}
-          {current && <button disabled={pending} onClick={() => twice("undo", () => run(() => undoStage(ev.id), "Round taken back"))} className={btnQuiet}>{confirm === "undo" ? "Tap again to undo" : "Undo last round"}</button>}
-          {current && <button disabled={pending} onClick={() => twice("finish", () => run(() => finishEvent(ev.id), "Day finished"))} className={btnQuiet}>{confirm === "finish" ? "Tap again to finish" : "Finish the day"}</button>}
-          {!current && <button disabled={pending} onClick={() => twice("delete", () => run(() => deleteEvent(ev.id), "Event deleted", (r) => { if (r.ok) location.href = "/?all=1"; }))} className={btnQuiet}>{confirm === "delete" ? "Tap again to delete" : "Delete event"}</button>}
+      <div className="grid gap-2">
+        <div className={`${card} p-4`}>
+          <p className="text-[13px] text-muted">{here.length} here · {used ? `${used} net${used === 1 ? "" : "s"}` : "need 4"}{used && here.length > used * 4 ? ` · ${here.length - used * 4} sit out in turn` : ""}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {!current && <button disabled={pending || here.length < 4} onClick={() => run(() => startLadder(ev.id), "Ladder started")} className={btnPrimary}>Start the ladder</button>}
+            {current && unplayed > 0 && <button disabled={pending} onClick={() => twice("next", () => run(() => nextLadderRound(ev.id), "Next round drawn"))} className={btnGhost}>{confirm === "next" ? "Tap again: skip unscored" : "Next round now"}</button>}
+            {current && <button disabled={pending} onClick={() => twice("undo", () => run(() => undoStage(ev.id), "Round taken back"))} className={btnQuiet}>{confirm === "undo" ? "Tap again to undo" : "Undo round"}</button>}
+            {current && <button disabled={pending} onClick={() => twice("finish", () => run(() => finishEvent(ev.id), "Day finished"))} className={btnQuiet}>{confirm === "finish" ? "Tap again to finish" : "Finish the day"}</button>}
+            {!current && <button disabled={pending} onClick={() => twice("delete", () => run(() => deleteEvent(ev.id), "Event deleted", (r) => { if (r.ok) location.href = "/?all=1"; }))} className={btnQuiet}>{confirm === "delete" ? "Tap again to delete" : "Delete event"}</button>}
+          </div>
         </div>
-      </div>
-
-      <div className="mt-2 grid gap-2">
         <Disclosure title="Games and nets" teaser={`to ${ev.groupTo} · ${ev.nets} nets`}>
           <div className="grid gap-3">
             <div className="flex items-center justify-between gap-3">
@@ -233,13 +319,10 @@ function Organiser({ view, roster, here, run, pending }: { view: EventView; rost
                 <button disabled={pending || ev.nets >= 8} onClick={() => save({ nets: ev.nets + 1 }, `${ev.nets + 1} nets`)} className={`${btnGhost} min-h-9 w-9 px-0`} aria-label="One more net">+</button>
               </div>
             </div>
-            <p className="text-[12.5px] text-dim">Win by 2. Changes apply from the next game; scores already in stay.</p>
           </div>
         </Disclosure>
-
         <Disclosure title="Check-in" teaser={`${here.length} here`} defaultOpen={!current}>
-          <p className="text-[13px] text-muted">Mark people <b className="text-fg">here</b> as they arrive: they join from the next round, on the net their rating puts them. Mark someone <b className="text-fg">out</b> when they leave.</p>
-          <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) run(() => addWalkIn(ev.id, name), `${name.trim()} checked in`, (r) => r.ok && setName("")); }}>
+          <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) run(() => addWalkIn(ev.id, name), `${name.trim()} checked in`, (r) => r.ok && setName("")); }}>
             <input className={input} list="ladder-roster" value={name} onChange={(e) => setName(e.target.value)} placeholder="Add someone by name" aria-label="Add someone by name" />
             <datalist id="ladder-roster">{roster.map((r) => <option key={r.id} value={r.name} />)}</datalist>
             <button disabled={pending || !name.trim()} className={`${btnPrimary} shrink-0`}>Add</button>
@@ -248,7 +331,7 @@ function Organiser({ view, roster, here, run, pending }: { view: EventView; rost
             {sorted.map((e) => (
               <div key={e.playerId} className="flex items-center gap-2.5 py-2">
                 <Avatar p={people[e.playerId]} size={26} dim={e.state === "out"} />
-                <span className={`min-w-0 flex-1 truncate text-[14px] font-semibold ${e.state === "out" ? "text-dim" : ""}`}>{people[e.playerId]?.name}</span>
+                <span className={`min-w-0 flex-1 truncate text-[14px] font-semibold ${e.state === "out" ? "text-dim" : ""}`}>{people[e.playerId]?.name}{playingNow.has(e.playerId) && e.state === "out" && <span className="ml-1.5 text-[11px] font-bold text-loss">swap them out of their net</span>}</span>
                 <div className="flex rounded-lg border border-white/[.06] bg-panel p-0.5 text-[12px] font-bold">
                   {(["here", "out"] as const).map((s) => (
                     <button key={s} disabled={pending} onClick={() => run(() => setEntry(ev.id, e.playerId, s))} className={`rounded-md px-2.5 py-1.5 ${e.state === s ? (s === "out" ? "bg-loss text-ink" : "bg-accent text-ink") : "text-muted"}`} aria-pressed={e.state === s}>
