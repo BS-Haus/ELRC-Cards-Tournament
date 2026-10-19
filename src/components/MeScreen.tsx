@@ -13,12 +13,13 @@ import { PlayerBody } from "@/components/PlayerBody";
 import type { Profile, Season } from "@/lib/data";
 import { tierFor } from "@/lib/levels";
 import { PROV_N } from "@/lib/standings";
-import type { EntryState, EventPhoto } from "@/lib/data";
+import type { EntryState, EventPhoto, EventView } from "@/lib/data";
+import { MyDay } from "@/components/MyDay";
 import { EventPhotos } from "@/components/EventPhotos";
 
 export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
   me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null;
-  today: { id: string; title: string; state: EntryState | null; started: boolean; photos: EventPhoto[] } | null; season: Season | null;
+  today: { id: string; title: string; state: EntryState | null; started: boolean; photos: EventPhoto[]; view: EventView; xp: { before: number; after: number; games: number } | null; veiled: boolean } | null; season: Season | null;
   profile: Pick<Profile, "player" | "tierWins" | "bestPartner" | "recent" | "names" | "form" | "trail" | "biggestWin" | "bestRun"> | null;
 }) {
   const router = useRouter();
@@ -47,10 +48,19 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
         <>
         {today && (
           <>
-            <h2 className="px-5 pb-2.5 text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</h2>
-            <CheckIn me={me.id} state={today.state} eventId={today.id} started={today.started} title={today.title}>
-              <EventPhotos bare eventId={today.id} photos={today.photos} me={me.id} org={org} />
-            </CheckIn>
+            {!today.started && <h2 className="px-5 pb-2.5 text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</h2>}
+            {/* While it's on, your day lives here: next game, check-in and photos, your games. */}
+            {today.started ? (
+              <MyDay view={today.view} me={me.id} org={org} xp={today.xp} veiled={today.veiled}>
+                <CheckIn me={me.id} state={today.state} eventId={today.id} started title={today.title}>
+                  <EventPhotos bare eventId={today.id} photos={today.photos} me={me.id} org={org} />
+                </CheckIn>
+              </MyDay>
+            ) : (
+              <CheckIn me={me.id} state={today.state} eventId={today.id} started={false} title={today.title}>
+                <EventPhotos bare eventId={today.id} photos={today.photos} me={me.id} org={org} />
+              </CheckIn>
+            )}
           </>
         )}
         {season && profile && <PlayerBody season={season} pr={profile} mine />}

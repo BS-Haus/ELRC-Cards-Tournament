@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider, swapPlayers, movePlayer, redrawStage } from "@/app/actions";
 import { useAction } from "@/components/useAction";
-import { pingMoments } from "@/components/LevelMoments";
-import { Shuffle } from "@/components/DrawSlides";
+import { DrawVeil, ordinal, signalMyTurn } from "@/components/MyDay";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { CheckIn, LiveBadge } from "@/components/CheckIn";
@@ -14,11 +13,10 @@ import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { finalsCut, netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
-import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView, type MyDay, type MyGame } from "@/lib/views";
+import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
 import { motion, LayoutGroup } from "motion/react";
-import { PROV_N } from "@/lib/standings";
 
 const STAGE_TITLE: Record<StageKind, string> = { random: "Mixed groups", seeded: "Groups by level", final: "Finals", ladder: "Ladder" };
 
@@ -86,14 +84,12 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
   const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
   const live = ev.status === "live";
   const done = ev.status === "done";
-  // Once groups are drawn the page has two jobs, so two tabs: the whole event (nets, tables,
-  // results) and your own day (status, what's next for you, your games, photos). Before the
-  // draw it's just sign-up, so no tabs. Players open it on their own day while it's live.
+  // Once groups are drawn this page is the shared screen: every net, its table and fixtures. Your
+  // own day (what's next for you, your games) is on Me (src/components/MyDay.tsx).
   const started = !!current || done;
-  const takingPart = !!me && (inPool.has(me) || iPlayed);
-  const [tab, setTab] = useState<"event" | "you">(live && takingPart ? "you" : "event");
   const mine = useMemo(() => (me ? myDay(games, ev.nets, me) : null), [games, ev.nets, me]);
-  const myTurn = !!mine?.next.length && mine.next[0].ahead === 0;
+  const myTurn = live && !drawPending && mine?.next[0]?.ahead === 0;
+  useEffect(() => { signalMyTurn(myTurn); return () => signalMyTurn(false); }, [myTurn]);
 
   const share = async () => {
     const url = `${location.origin}/e/${ev.id}`;
@@ -138,9 +134,7 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
         </>
       )}
 
-      {started && <Tabs tab={tab} setTab={setTab} done={done} nudge={myTurn} />}
-
-      {started && tab === "event" && (
+      {started && (
         <>
           {(done || finals?.groups.some((g) => g.winner)) && games.some(isDone) && (
             <div className="px-4 pb-5">
@@ -152,6 +146,15 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
                   <span className="block text-[17px] font-black">{done ? "Watch the tournament story" : "The story so far"}</span>
                   <span className="block text-[13px] font-semibold opacity-70">Who won, the stories of the day, records broken</span>
                 </span>
+              </Link>
+            </div>
+          )}
+
+          {done && iPlayed && me && (
+            <div className="-mt-2 px-4 pb-5">
+              <Link href={`/e/${ev.id}/recap?p=${me}`} className={`${card} spk-press flex items-center justify-between gap-3 p-4`}>
+                <span className="text-[15px] font-black">Your review</span>
+                <span className="text-[13px] font-bold text-accent">Every game, your partners →</span>
               </Link>
             </div>
           )}
@@ -248,13 +251,6 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
         </>
       )}
 
-      {started && tab === "you" && (
-        <YouTab
-          view={view} me={me} state={myEntry} day={mine} iPlayed={iPlayed} waiting={!!me && waiting.includes(me)}
-          groups={curGroups} live={live} done={done} org={org} run={run} pending={pending} onOpen={setOpen} xp={myXp} veiled={drawPending}
-        />
-      )}
-
       {openGame && (
         <ScoreSheet
           game={openGame} people={people} to={toFor(openGame)} canScore={!!me} org={org}
@@ -269,158 +265,6 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
 // ---------------------------------------------------------------------------------------------
 
 type Run = ReturnType<typeof useAction>["run"];
-
-const TAB_ICON = {
-  overall: "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
-  results: "M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2Z",
-  you: "M20 21v-1a6 6 0 0 0-6-6h-4a6 6 0 0 0-6 6v1M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
-};
-
-/** The event's own navigation, under the header: the whole event (Overall, Results once done), or
- *  your day. LIVE is said once, by the pulsing badge in the header, not by a tab. Drawn as a tab bar
- *  (icons, underline, full width) rather than a toggle, so it reads as a place to go. */
-function Tabs({ tab, setTab, done, nudge }: { tab: "event" | "you"; setTab: (t: "event" | "you") => void; done: boolean; nudge: boolean }) {
-  return (
-    // Saved to the home screen the status bar is see-through, so the bar sticks just below it and a
-    // strip of background covers the status bar itself; otherwise the page scrolls up behind the
-    // clock and the tabs slide under it. In a browser tab the inset is 0 and both do nothing.
-    <div className="sticky top-[env(safe-area-inset-top)] z-20 mb-4 border-b border-white/[.08] bg-bg/95 backdrop-blur-md before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-[env(safe-area-inset-top)] before:bg-bg before:content-['']" role="tablist">
-      <div className="grid grid-cols-2">
-        {(["event", "you"] as const).map((t) => {
-          const on = tab === t;
-          const icon = t === "you" ? TAB_ICON.you : done ? TAB_ICON.results : TAB_ICON.overall;
-          return (
-            <button key={t} role="tab" aria-selected={on} onClick={() => { setTab(t); window.scrollTo({ top: 0 }); }} className={`spk-press relative flex items-center justify-center gap-2 py-3.5 text-[15px] font-bold ${on ? "text-fg" : "text-dim"}`}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={on ? "text-accent" : ""}><path d={icon} /></svg>
-              {t === "event" ? (done ? "Results" : "Overall") : "You"}
-              {t === "you" && nudge && !on && <span className="spk-live h-2 w-2 rounded-full bg-accent" aria-label="your game is on" />}
-              {on && <span className="absolute inset-x-6 -bottom-px h-[3px] rounded-full bg-accent" aria-hidden="true" />}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
-
-/** Your own day: are you in, what's next for you and where, how it's gone so far, and the photos. */
-function YouTab({ view, me, state, day, iPlayed, waiting, groups, live, done, org, run, pending, onOpen, xp, veiled }: {
-  view: EventView; me: string | null; state: EntryState | null; day: MyDay | null; iPlayed: boolean; waiting: boolean;
-  groups: GroupView[]; live: boolean; done: boolean; org: boolean; run: Run; pending: boolean; onOpen: (id: string) => void;
-  xp: { before: number; after: number; games: number } | null;
-  veiled: boolean;
-}) {
-  const { event: ev, games, people } = view;
-  const name = (id: string) => people[id]?.name ?? "Someone";
-  const both = (ids: string[]) => ids.map(name).join(" & ");
-  if (!me || !day) return <CheckIn me={me} state={state} eventId={ev.id} started />;
-  const [first, ...later] = day.next;
-  const myGroup = groups.find((g) => g.table.some((r) => r.id === me));
-  const place = myGroup ? myGroup.table.findIndex((r) => r.id === me) + 1 : 0;
-  const moved = xp ? xp.after - xp.before : 0;
-  const pd = day.line.pf - day.line.pa;
-  return (
-    <>
-      {done && iPlayed && (
-        <div className="px-4 pb-5">
-          <Link href={`/e/${ev.id}/recap?p=${me}`} className="spk-press flex items-center gap-3 rounded-2xl bg-gradient-to-r from-accent to-[#9be15d] p-4 text-ink">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink text-accent" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[17px] font-black">Watch your review</span>
-              <span className="block text-[13px] font-semibold opacity-70">Every game, your partners, what it did to your rating</span>
-            </span>
-          </Link>
-        </div>
-      )}
-
-      {veiled && <DrawVeil kind={view.stages.at(-1)?.kind} />}
-
-      {live && !veiled && (
-        <Section title="Up next">
-          {first ? (
-            <div className="grid gap-2">
-              {/* The same court as the Overall tab's nets, your pair on the left. */}
-              <Court
-                title={`Net ${first.net}`} tag={first.ahead === 0 ? "You're on now" : first.ahead === 1 ? "You're next" : `${first.ahead} games before yours`}
-                a={[me, first.partner]} b={first.opponents} scoreA={null} scoreB={null} people={people}
-                live={first.ahead === 0} highlight={first.ahead === 0}
-                note={first.sub ? "You're subbing in this one: it doesn't count for you." : undefined}
-                onTap={() => onOpen(first.game.id)}
-              />
-              {later.length > 0 && (
-                <div className={`${card} divide-y divide-white/[.04]`}>
-                  {later.map((x) => (
-                    <div key={x.game.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13.5px]">
-                      <span className="min-w-0 truncate">With <b>{name(x.partner)}</b> <span className="text-muted">vs {both(x.opponents)}</span></span>
-                      <span className="shrink-0 text-[12px] text-dim">Net {x.net}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className={`${card} p-4 text-[14px] text-muted`}>
-              {waiting ? "You're in for the next stage. It starts when the organiser draws it." : state === "out" ? <>You&apos;re marked as left. Back? Check in on <Link href="/me" className="font-bold text-accent">Me</Link>.</> : day.played.length ? "No more games for you in this stage." : <>Nothing on for you yet. Check in on <Link href="/me" className="font-bold text-accent">Me</Link> and you&apos;ll be in the next stage.</>}
-            </div>
-          )}
-        </Section>
-      )}
-
-      {day.played.length > 0 && (
-        <Section title="Your games" aside={!veiled && myGroup && place ? `${ordinal(place)} in ${myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}` : undefined}>
-          <div className={`${card} overflow-hidden`}>
-            <div className="grid grid-cols-3 text-center">
-              {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], xp && xp.games < PROV_N ? [`${xp.games}/${PROV_N}`, "placing"] : [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "rating today"]] as const).map(([v, l]) => (
-                <div key={l} className="py-3">
-                  <div className="tnum text-[20px] font-black">{v}</div>
-                  <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">{l}</div>
-                </div>
-              ))}
-            </div>
-            {day.played.map((x) => <MyGameRow key={x.game.id} x={x} name={name} onOpen={onOpen} />)}
-          </div>
-        </Section>
-      )}
-
-    </>
-  );
-}
-
-function MyGameRow({ x, name, onOpen }: { x: MyGame; name: (id: string) => string; onOpen: (id: string) => void }) {
-  return (
-    <button onClick={() => onOpen(x.game.id)} className="spk-press flex w-full items-center gap-3 border-t border-white/[.04] px-4 py-2.5 text-left">
-      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-black ${x.won ? "bg-win/15 text-win" : "bg-loss/15 text-loss"}`}>{x.won ? "W" : "L"}</span>
-      <span className="min-w-0 flex-1 truncate text-[13.5px]">
-        With <b>{name(x.partner)}</b> <span className="text-muted">vs {x.opponents.map(name).join(" & ")}</span>
-        {(x.sub || x.game.decider) && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-[.08em] text-dim">{x.sub ? "sub" : "decider"}</span>}
-      </span>
-      <span className="tnum shrink-0 font-mono text-[13px] font-bold">{x.score![0]}–{x.score![1]}</span>
-    </button>
-  );
-}
-
-/** In place of a stage you haven't seen drawn yet: the draw story is how you find out your group,
- *  so this asks for it (it also pops up on its own within a few seconds). */
-function DrawVeil({ kind }: { kind?: StageKind }) {
-  const what = kind === "final" ? "finals" : "groups";
-  return (
-    <div className="px-4 pb-6">
-      <motion.button
-        onClick={pingMoments} whileTap={{ scale: 0.98 }}
-        className="relative flex w-full flex-col items-center gap-3 overflow-hidden rounded-[18px] border border-accent/30 bg-accent/[.06] px-5 py-8 text-center"
-      >
-        <Shuffle n={10} compact />
-        <span className="text-[19px] font-black">The {what} are drawn</span>
-        <span className="max-w-[30ch] text-[13.5px] text-muted">Watch the draw to find out your {kind === "final" ? "final" : "group"}, your net and your first game.</span>
-        <span className="mt-1 rounded-full bg-accent px-5 py-2.5 text-[14px] font-extrabold text-ink">Watch the draw</span>
-      </motion.button>
-    </div>
-  );
-}
 
 function Chip({ p, note }: { p?: PlayerLite; note?: string }) {
   return (
@@ -464,7 +308,7 @@ const netNumbers = (queues: Game[][], groups: GroupView[]) =>
   [...new Set([...queues.flatMap((q, i) => (q.length ? [i + 1] : [])), ...groups.map((g) => g.net)])].sort((a, b) => a - b);
 
 type NetSlide = { n: number; label: string; live: boolean; mine: boolean; body: React.ReactNode };
-const SLIDE_GAP = 10;
+const SLIDE_GAP = 8;
 
 /** The nets as a carousel: each net is a slide a little narrower than the screen, so the next one
  *  peeks in at the edge, with dots underneath. Swipe, or tap a net in the switch above (it sticks
@@ -493,7 +337,7 @@ function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
   const go = (k: number) => ref.current?.scrollTo({ left: k * step(), behavior: "smooth" });
   return (
     <>
-      <div className="sticky top-[calc(env(safe-area-inset-top)+51px)] z-10 -mx-4 mb-3 bg-bg px-4 py-2">
+      <div className="sticky top-[env(safe-area-inset-top)] z-10 -mx-4 mb-3 bg-bg px-4 py-2 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-[env(safe-area-inset-top)] before:bg-bg before:content-['']">
         <div className="grid gap-1 rounded-xl border border-white/[.06] bg-panel p-1" style={{ gridTemplateColumns: `repeat(${slides.length}, minmax(0, 1fr))` }} role="tablist" aria-label="Nets">
           {slides.map((s, k) => (
             <button key={s.n} role="tab" aria-selected={k === i} onClick={() => go(k)}
@@ -514,12 +358,10 @@ function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
         style={{ height: h, gap: SLIDE_GAP }}
       >
         {slides.map((s, k) => (
-          <div key={s.n} className={`w-[calc(100%-44px)] shrink-0 snap-center snap-always transition-opacity duration-300 ${k === i ? "" : "opacity-60"}`} onClickCapture={k === i ? undefined : (e) => { e.stopPropagation(); e.preventDefault(); go(k); }}>
+          <div key={s.n} className={`w-[calc(100%-12px)] shrink-0 snap-center snap-always transition-opacity duration-300 ${k === i ? "" : "opacity-60"}`} onClickCapture={k === i ? undefined : (e) => { e.stopPropagation(); e.preventDefault(); go(k); }}>
             {s.body}
           </div>
         ))}
-        {/* The right margin after the last net (a scroller drops its own end padding). */}
-        <div className="w-1.5 shrink-0" aria-hidden="true" />
       </div>
       <div className="mt-3 flex justify-center gap-1.5" aria-hidden="true">
         {slides.map((s, k) => <span key={s.n} className={`h-1.5 rounded-full transition-all duration-300 ${k === i ? "w-5 bg-accent" : "w-1.5 bg-white/20"}`} />)}
