@@ -14,7 +14,7 @@ const play = (r: Round, aWins: (net: number) => boolean = () => true): PlayedRou
 
 describe("the first round", () => {
   it("seeds the best four on Net 1 and so on down, with fair teams", () => {
-    const r = firstRound(ids(12), rating, 3);
+    const r = firstRound(ids(12), rating, 3, () => 0); // 0 = always the fairest split
     expect(r.games.map((g) => [...g.a, ...g.b].sort())).toEqual([ids(12).slice(0, 4), ids(12).slice(4, 8), ids(12).slice(8, 12)]);
     // Best with worst against the middle two.
     expect(r.games[0].a.concat(r.games[0].b).length).toBe(4);
@@ -120,13 +120,31 @@ describe("people arriving and leaving", () => {
 });
 
 describe("pickTeams", () => {
-  it("prefers the closest match when nobody has partnered yet", () => {
-    const t = pickTeams(["p00", "p01", "p02", "p03"], rating, new Set());
+  it("with no randomness, picks the closest match when nobody has partnered yet", () => {
+    const t = pickTeams(["p00", "p01", "p02", "p03"], rating, new Set(), () => 0);
     expect([t.a, t.b].map((x) => x.slice().sort().join())).toEqual(expect.arrayContaining(["p00,p03", "p01,p02"]));
   });
   it("gives up balance before it repeats a partnership", () => {
-    const t = pickTeams(["p00", "p01", "p02", "p03"], rating, new Set([key("p00", "p03")]));
+    const t = pickTeams(["p00", "p01", "p02", "p03"], rating, new Set([key("p00", "p03")]), () => 0.99);
     expect([t.a, t.b].map((x) => x.slice().sort().join())).not.toContain("p00,p03");
+  });
+});
+
+describe("variety", () => {
+  const big = (id: string) => ({ a: 1300, b: 1000, c: 900, d: 600 } as Record<string, number>)[id];
+  it("picks at random among splits close to even, never a lopsided one", () => {
+    // Close (all within CLOSE_ENOUGH): every split turns up.
+    const seen = new Set<string>();
+    for (let i = 0; i < 30; i++) {
+      const t = pickTeams(["p00", "p01", "p02", "p03"], rating, new Set(), () => (i % 3) / 3);
+      seen.add([t.a, t.b].map((x) => x.slice().sort().join()).sort().join("|"));
+    }
+    expect(seen.size).toBe(3);
+    // Far apart: only the fair split (a+d vs b+c, 1900 v 1900); a+b vs c+d (2300 v 1500) never.
+    for (const x of [0, 0.5, 0.99]) {
+      const t = pickTeams(["a", "b", "c", "d"], big, new Set(), () => x);
+      expect([t.a, t.b].map((y) => y.slice().sort().join())).toContain("a,d");
+    }
   });
 });
 

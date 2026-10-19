@@ -26,21 +26,28 @@ export function partnersSoFar(rounds: PlayedRound[]): Set<string> {
   return out;
 }
 
+/** How far from dead even a split may be and still be picked: team ratings (the partners'
+ *  summed) within this many points, about 55/45 in a game to 15. Within it, the split is random,
+ *  so the same four on a net don't always pair the same way and the day doesn't go stale. */
+export const CLOSE_ENOUGH = 60;
+
 /**
  * Four players on a net, split into two teams: never a partnership from earlier today if there's
- * a split that avoids one, and then the closest match by rating (team strength is the sum of the
- * two partners', as in the ratings themselves).
+ * a split that avoids one; then, among those, any split within CLOSE_ENOUGH of the fairest, at
+ * random (team strength is the sum of the two partners', as in the ratings themselves).
  */
-export function pickTeams(four: string[], rating: (id: string) => number, partnered: Set<string>): { a: [string, string]; b: [string, string] } {
+export function pickTeams(four: string[], rating: (id: string) => number, partnered: Set<string>, rnd: () => number = Math.random): { a: [string, string]; b: [string, string] } {
   const [p, q, r, s] = four;
-  const splits: [[string, string], [string, string]][] = [[[p, q], [r, s]], [[p, r], [q, s]], [[p, s], [q, r]]];
-  let best = splits[0], cost = Infinity;
-  for (const [a, b] of splits) {
-    const repeats = Number(partnered.has(pairKey(a[0], a[1]))) + Number(partnered.has(pairKey(b[0], b[1])));
-    const c = repeats * 1e6 + Math.abs(rating(a[0]) + rating(a[1]) - rating(b[0]) - rating(b[1]));
-    if (c < cost) { cost = c; best = [a, b]; }
-  }
-  return { a: best[0], b: best[1] };
+  const splits = ([[[p, q], [r, s]], [[p, r], [q, s]], [[p, s], [q, r]]] as [[string, string], [string, string]][]).map(([a, b]) => ({
+    a, b,
+    repeats: Number(partnered.has(pairKey(a[0], a[1]))) + Number(partnered.has(pairKey(b[0], b[1]))),
+    gap: Math.abs(rating(a[0]) + rating(a[1]) - rating(b[0]) - rating(b[1])),
+  }));
+  const fewest = Math.min(...splits.map((x) => x.repeats));
+  const fresh = splits.filter((x) => x.repeats === fewest).sort((x, y) => x.gap - y.gap);
+  const close = fresh.filter((x) => x.gap <= fresh[0].gap + CLOSE_ENOUGH);
+  const pick = close[Math.min(close.length - 1, Math.floor(rnd() * close.length))];
+  return { a: pick.a, b: pick.b };
 }
 
 /** A stable shuffle key, so who sits out varies by round without randomness in the tests. */
@@ -64,13 +71,13 @@ function chooseSitters(ids: string[], count: number, sits: Map<string, number>, 
 }
 
 /** The first round: everyone here ordered by rating, the best four on Net 1 and so on down. */
-export function firstRound(present: string[], rating: (id: string) => number, nets: number): Round {
+export function firstRound(present: string[], rating: (id: string) => number, nets: number, rnd: () => number = Math.random): Round {
   const n = netsFor(present.length, nets);
   const byRating = [...present].sort((x, y) => rating(y) - rating(x) || x.localeCompare(y));
   // Extra people sit out the first round: from the bottom of the ratings, so the top nets start
   // full of the people they're meant for. They come back in next round.
   const playing = byRating.slice(0, n * 4), sitting = byRating.slice(n * 4);
-  const games = Array.from({ length: n }, (_, i) => ({ net: i + 1, ...pickTeams(playing.slice(i * 4, i * 4 + 4), rating, new Set()) }));
+  const games = Array.from({ length: n }, (_, i) => ({ net: i + 1, ...pickTeams(playing.slice(i * 4, i * 4 + 4), rating, new Set(), rnd) }));
   return { games, sitting };
 }
 
@@ -79,9 +86,9 @@ export function firstRound(present: string[], rating: (id: string) => number, ne
  * here now: anyone who's left is dropped, and anyone new comes in on the net their rating puts
  * them on. Returns null if there aren't four people to play.
  */
-export function nextRound(rounds: PlayedRound[], present: string[], rating: (id: string) => number, nets: number): Round | null {
+export function nextRound(rounds: PlayedRound[], present: string[], rating: (id: string) => number, nets: number, rnd: () => number = Math.random): Round | null {
   const last = rounds.at(-1);
-  if (!last) return present.length >= 4 ? firstRound(present, rating, nets) : null;
+  if (!last) return present.length >= 4 ? firstRound(present, rating, nets, rnd) : null;
   const here = new Set(present);
   const n = netsFor(present.length, nets);
   if (!n) return null;
@@ -130,7 +137,7 @@ export function nextRound(rounds: PlayedRound[], present: string[], rating: (id:
   const playing = ids.filter((id) => !sitting.has(id))
     .sort((x, y) => target.get(x)! - target.get(y)! || rating(y) - rating(x) || x.localeCompare(y));
   const partnered = partnersSoFar(rounds);
-  const games = Array.from({ length: n }, (_, i) => ({ net: i + 1, ...pickTeams(playing.slice(i * 4, i * 4 + 4), rating, partnered) }));
+  const games = Array.from({ length: n }, (_, i) => ({ net: i + 1, ...pickTeams(playing.slice(i * 4, i * 4 + 4), rating, partnered, rnd) }));
   return { games, sitting: ids.filter((id) => sitting.has(id)) };
 }
 

@@ -10,8 +10,9 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 ## Two formats
 - **Ladder** (the default): nets ranked top to bottom. Everyone's seeded onto a net by rating;
   each round is one game per net. Win and you go up a net, lose and you go down (the top net's
-  winners stay, as do the bottom net's losers). The four on each net are split into the fairest
-  teams that don't repeat a partnership from earlier in the day, so it's a new partner every game.
+  winners stay, as do the bottom net's losers). The four on each net are split into teams that
+  don't repeat a partnership from earlier in the day, picked at random among the splits close to
+  even (within `CLOSE_ENOUGH`, about 55/45), so it's a new partner every game and never stale.
   With extra people it's king of the court: the pair who lose on the bottom net sit out, and
   whoever sat out comes back on the bottom net. The next round draws itself the
   moment the last net's score goes in. Games to 11, 15, 17 or 21. The **Live nets** tab is just
