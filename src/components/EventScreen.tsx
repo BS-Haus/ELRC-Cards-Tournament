@@ -198,7 +198,6 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
                           title={`Net ${n}`} tag={`${gameLabel(q[0])} · game ${q[0].seq}`}
                           a={q[0].a} b={q[0].b} scoreA={null} scoreB={null} people={people} live
                           warn={needsSub(q[0], out).length ? `${needsSub(q[0], out).map((id) => p(id)?.name).join(" & ")} left: tap to sub someone in` : undefined}
-                          note={q[1] ? <>Next: <span className="text-fg">{teamLine(q[1].a, people, q[1].subs, out)}</span> vs <span className="text-fg">{teamLine(q[1].b, people, q[1].subs, out)}</span></> : undefined}
                           onTap={() => setOpen(q[0].id)}
                         />
                       )}

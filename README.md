@@ -27,7 +27,7 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   Scoring: tap a net, score it in the sheet, and the result (each player's rating change) shows
   in a small sheet. The draw stories and the finals banners stay; nothing else pops up mid-day.
   The **Tournament** tab goes net by net, a carousel with the next net peeking in and dots underneath
-  (swipe, or tap a net in the switch that sticks under the tabs; it opens on your net): the game on the net now (tap to score it), then the
+  (swipe, or tap a net in the switch that sticks to the top; it opens on your net): the game on the net now (tap to score it), then the
   table and fixtures of the group playing there. It has no tabs of its own: your day (next game as
   the same court, check-in and photos, your games and stats) is on Me while a tournament is on
   (`src/components/MyDay.tsx`), with a dot on Me when your game is on.
