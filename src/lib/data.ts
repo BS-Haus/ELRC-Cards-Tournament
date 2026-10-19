@@ -438,8 +438,8 @@ export async function gameResult(gameId: string, viewer: string | null): Promise
   const viewerRow = viewer ? ps.find((x) => x.id === viewer) : undefined;
   if (!g || g.status !== "done") return null;
   const ev = evs.find((e) => e.id === g.eventId);
-  // Anyone can look at a ladder net's result, signed in or not; elsewhere it's the scorer's card.
-  const me = viewerRow ?? (ev?.format === "ladder" ? ps.find((x) => x.id === g.a[0]) : undefined);
+  // Anyone can look at a game's result, signed in or not.
+  const me = viewerRow ?? ps.find((x) => x.id === g.a[0]);
   if (!me) return null;
   // On a ladder it's one small card, like the ranked app's: the game for everyone, then where
   // everyone goes next. Nothing personal follows it.

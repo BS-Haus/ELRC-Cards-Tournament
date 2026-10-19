@@ -8,7 +8,8 @@ Built on the same stack and look as the club's ladder app ([spike-east](https://
 Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 
 ## Two formats
-- **Ladder** (the default): nets ranked top to bottom. Everyone's seeded onto a net by rating;
+- **Ladder** (parked for now: the new-event form only offers Cards; flip `LADDER_ON` in
+  `src/components/HomeBits.tsx` to bring the choice back): nets ranked top to bottom. Everyone's seeded onto a net by rating;
   each round is one game per net. Win and you go up a net, lose and you go down (the top net's
   winners stay, as do the bottom net's losers). The four on each net are split into teams that
   don't repeat a partnership from earlier in the day, picked at random among the splits close to
@@ -21,7 +22,10 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   player's ±) shows in that sheet. The organiser can swap someone out of an unscored game there.
   Check-in and "I have to leave" live on Me. The day ends with one story. Engine:
   `src/lib/netLadder.ts`, screen: `src/components/LadderScreen.tsx`.
-- **Cards**: groups, then finals, as below. Best with a big turnout.
+- **Cards** (what new events use): groups, then finals, as below. Groups are mixed by rating
+  (`mixedOrder`), and the organiser can add another round, mixed or by level, before the finals.
+  Scoring: tap a net, score it in the sheet, and the result (each player's rating change) shows
+  in a small sheet. The draw stories and the finals banners stay; nothing else pops up mid-day.
 
 Both feed the same ratings (`src/lib/standings.ts`).
 

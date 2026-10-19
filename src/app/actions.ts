@@ -539,11 +539,10 @@ export type Feed = { levels: Moments | null; draw: DrawFeed | null };
  *  Polled by every signed-in phone, so the empty case is two small queries. */
 export async function checkMoments(): Promise<Feed | null> {
   const s = await me(); if (!s) return null;
-  const [levels, draw] = await Promise.all([
-    myMoments(s.playerId!).catch(() => null),
-    myDrawStory(s.playerId!).catch(() => null),
-  ]);
-  return levels || draw ? { levels, draw } : null;
+  // Only the draw stories pop up during the day now. Each game's result shows once, in a small
+  // sheet on the phone that scored it; your own story of the day is at the end (the recap).
+  const draw = await myDrawStory(s.playerId!).catch(() => null);
+  return draw ? { levels: null, draw } : null;
 }
 
 /** Mark draw stories up to `at` (the stage's creation time, ms) as seen. Never moves backwards. */

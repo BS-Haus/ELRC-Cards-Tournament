@@ -35,11 +35,15 @@ function nextSunday(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T11:00`;
 }
 
+const LADDER_ON = false;
+
 export function NewEvent() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const { run, pending, toast } = useAction();
-  const [f, setF] = useState({ title: "Saturday ladder", startsAt: nextSunday(), location: "Victoria Park", notes: "", nets: 3, groupTo: 15, finalTo: 15, format: "ladder" as "ladder" | "cards" });
+  // The ladder format is parked (src/lib/netLadder.ts): every new event is cards for now. Set
+  // LADDER_ON to bring back the choice.
+  const [f, setF] = useState({ title: "Saturday cards", startsAt: nextSunday(), location: "Victoria Park", notes: "", nets: 3, groupTo: 15, finalTo: 15, format: "cards" as "ladder" | "cards" });
   if (!open) return <button onClick={() => setOpen(true)} className="spk-press font-bold text-accent">+ New event</button>;
   const field = (k: keyof typeof f, label: string, type = "text") => (
     <label className="grid gap-1 text-[12.5px] font-semibold text-muted">
@@ -64,15 +68,15 @@ export function NewEvent() {
         {field("title", "Name")}
         {field("startsAt", "Date and time", "datetime-local")}
         {field("location", "Where")}
-        {/* Ladder is the everyday format; cards (groups, then finals) suits a big field. */}
-        <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[.06] bg-panel p-1" role="radiogroup" aria-label="Format">
+        {/* Cards: groups, then finals. The ladder is parked; LADDER_ON brings back this choice. */}
+        {LADDER_ON && <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[.06] bg-panel p-1" role="radiogroup" aria-label="Format">
           {(["ladder", "cards"] as const).map((x) => (
             <button key={x} type="button" role="radio" aria-checked={f.format === x} onClick={() => setF({ ...f, format: x, title: f.title === "Saturday ladder" || f.title === "Saturday cards" ? `Saturday ${x}` : f.title })} className={`spk-press h-10 rounded-lg text-[14px] font-black ${f.format === x ? "bg-accent text-ink" : "text-muted"}`}>
               {x === "ladder" ? "Ladder" : "Cards"}
             </button>
           ))}
-        </div>
-        <p className="-mt-1 text-[12.5px] text-dim">{f.format === "ladder" ? "Nets top to bottom: win and go up, lose and go down. A new partner every game." : "Groups, then A/B finals. Best with a big turnout."}</p>
+        </div>}
+        {LADDER_ON && <p className="-mt-1 text-[12.5px] text-dim">{f.format === "ladder" ? "Nets top to bottom: win and go up, lose and go down. A new partner every game." : "Groups, then A/B finals. Best with a big turnout."}</p>}
         {f.format === "ladder" ? (
           <div className="grid grid-cols-2 gap-2">
             {field("nets", "Nets", "number")}
