@@ -142,7 +142,7 @@ export function Ladder({ rows, placing, people }: { rows: LadderRow[]; placing: 
 
       {placing.length > 0 && (
         <div className="mt-5">
-          <div className="mb-2 pl-0.5 text-[11px] font-bold uppercase tracking-[.08em] text-dim">Getting placed · {PROV_N} games</div>
+          <div className="mb-2 pl-0.5 spk-label text-dim">Getting placed · {PROV_N} games</div>
           <motion.div variants={listV} initial="initial" animate="animate" className="flex flex-col gap-[7px]">
             {placing.map((r) => (
               <motion.div key={r.id} layout="position" variants={rowV} whileTap={{ scale: 0.97 }}>

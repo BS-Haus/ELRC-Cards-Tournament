@@ -33,7 +33,7 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
         <header className="flex flex-col items-center px-5 pt-[calc(22px+env(safe-area-inset-top))] pb-5 text-center">
           <AvatarPicker me={me} rank={season ? tierFor(season).level : undefined} tag={season ? (season.games < PROV_N ? `${season.games}/${PROV_N}` : String(season.rating)) : undefined} />
           <h1 className="mt-5 text-[26px] font-black leading-tight tracking-[-.02em]">{me.name}</h1>
-          <div className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">East London Roundnet</div>
+          <div className="spk-label text-accent">East London Roundnet</div>
           {next && <Link href={next} className="mt-3 text-[13px] font-bold text-accent">← Back to the event</Link>}
         </header>
       ) : (
@@ -47,7 +47,7 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
         {/* Before it starts: the sign-up card. Once it's on: your day, right under your rating. */}
         {today && !today.started && (
           <>
-            <h2 className="px-5 pb-2.5 text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</h2>
+            <h2 className="px-5 pb-2.5 spk-label text-muted">Today</h2>
             <CheckIn me={me.id} state={today.state} eventId={today.id} started={false} title={today.title}>
               <EventPhotos bare eventId={today.id} photos={today.photos} me={me.id} org={org} />
             </CheckIn>

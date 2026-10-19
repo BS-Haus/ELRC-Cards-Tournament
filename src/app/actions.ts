@@ -8,7 +8,8 @@ import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
 import { planStage, shuffle, mixedOrder, validScore, withSub, drawPool, seedOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
-import { getEventView, groupsOf, myMoments, myDrawStory, gameStory, gameResult, ratingNow, type Moments, type DrawFeed } from "@/lib/data";
+import { getEventView, groupsOf, myMoments, myDrawStory, gameStory, gameResult, ratingNow, todayEventId, drawPending, type Moments, type DrawFeed } from "@/lib/data";
+import { nowFor, type NowState } from "@/lib/views";
 import { nextRound, roundsFrom, roundDone } from "@/lib/netLadder";
 
 export type Result = { ok: true; id?: string } | { ok: false; error: string };
@@ -543,6 +544,21 @@ export async function checkMoments(): Promise<Feed | null> {
   // sheet on the phone that scored it; your own story of the day is at the end (the recap).
   const draw = await myDrawStory(s.playerId!).catch(() => null);
   return draw ? { levels: null, draw } : null;
+}
+
+export type NowFeed = { eventId: string; title: string; state: NowState; names: Record<string, string> };
+
+/** The "now" bar: where you are at today's live tournament (src/lib/views.ts nowFor). Polled by
+ *  every signed-in phone, so it's null fast when there's no tournament on. */
+export async function myNow(): Promise<NowFeed | null> {
+  const s = await me(); if (!s) return null;
+  const id = await todayEventId(); if (!id) return null;
+  const v = await getEventView(id);
+  if (!v || v.event.status !== "live" || v.event.format === "ladder") return null;
+  const state = nowFor(v, s.playerId!, await drawPending(id, s.playerId!));
+  if (!state) return null;
+  const names = state.kind === "game" ? Object.fromEntries([state.partner, ...state.opponents].map((x) => [x, v.people[x]?.name ?? "Someone"])) : {};
+  return { eventId: id, title: v.event.title, state, names };
 }
 
 /** Mark draw stories up to `at` (the stage's creation time, ms) as seen. Never moves backwards. */

@@ -57,17 +57,17 @@ export function PlayerBody({ season: s, pr, mine = false, today }: { season: Sea
   return (
     <section className="px-4 pb-6">
       {/* HERO: the one number, where it puts them, and how they're going. */}
-      <div className="mb-2.5 rounded-[18px] border border-accent/25 bg-accent/[.05] px-4 pt-4 pb-3.5">
+      <div className="mb-2.5 rounded-[18px] border border-white/[.08] bg-surface px-4 pt-4 pb-3.5">
         <div className="flex items-end justify-between gap-3">
           {lv.placing ? (
             <div>
               <div className="font-mono text-[44px] font-extrabold leading-none text-fg">{s.games}<span className="text-[24px] text-dim">/{PROV_N}</span></div>
-              <div className="mt-1.5 text-[10px] font-bold uppercase tracking-[.08em] text-dimmer">Placement games · 🐣 Fresh Meat</div>
+              <div className="mt-1.5 spk-label text-dimmer">Placement games · 🐣 Fresh Meat</div>
             </div>
           ) : (
             <div>
-              <AnimatedNumber value={s.rating} className="block font-mono text-[44px] font-extrabold leading-none text-accent" />
-              <div className="mt-1.5 text-[10px] font-bold uppercase tracking-[.08em] text-dimmer">Rating{s.position > 0 ? ` · ${ordinal(s.position)} of ${s.of}` : ""}</div>
+              <AnimatedNumber value={s.rating} className="block font-mono text-[44px] font-extrabold leading-none text-fg" />
+              <div className="mt-1.5 spk-label text-dimmer">Rating{s.position > 0 ? ` · ${ordinal(s.position)} of ${s.of}` : ""}</div>
             </div>
           )}
           {last && (

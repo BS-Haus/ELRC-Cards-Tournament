@@ -7,7 +7,7 @@ import { LadderScreen } from "@/components/LadderScreen";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ net?: string }> };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -23,8 +23,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function EventPage({ params }: Props) {
-  const { id } = await params;
+export default async function EventPage({ params, searchParams }: Props) {
+  const [{ id }, { net }] = await Promise.all([params, searchParams]);
+  // ?net=2: open on that net (the now bar's link to your game).
+  const focusNet = Number.isInteger(Number(net)) && Number(net) > 0 ? Number(net) : null;
   if (!UUID_RE.test(id)) notFound();
   const [v, s] = await Promise.all([getEventView(id), getSession()]);
   if (!v) notFound();
@@ -34,5 +36,5 @@ export default async function EventPage({ params }: Props) {
     return <LadderScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} />;
   }
   const [myXp, roster, hidden] = await Promise.all([s?.playerId ? weekendXp(id, s.playerId) : null, org ? allPlayers() : [], s?.playerId ? drawPending(id, s.playerId) : false]);
-  return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} myXp={myXp} drawPending={hidden} />;
+  return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} myXp={myXp} drawPending={hidden} focusNet={focusNet} />;
 }

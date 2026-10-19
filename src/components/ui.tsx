@@ -31,7 +31,7 @@ export function Header({ eyebrow, title, right }: { eyebrow?: string; title: str
   return (
     <header className="flex items-end justify-between gap-3 px-5 pt-[calc(18px+env(safe-area-inset-top))] pb-4">
       <div className="min-w-0">
-        {eyebrow && <div className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">{eyebrow}</div>}
+        {eyebrow && <div className="spk-label text-accent">{eyebrow}</div>}
         <h1 className="mt-1 text-[28px] font-black leading-[1.05] tracking-[-.02em] text-balance">{title}</h1>
       </div>
       {right}
@@ -43,7 +43,7 @@ export function Section({ title, aside, children }: { title: string; aside?: Rea
   return (
     <section className="px-4 pb-6">
       <div className="mb-2.5 flex items-baseline justify-between gap-3 px-1">
-        <h2 className="text-[12px] font-bold uppercase tracking-[.12em] text-muted">{title}</h2>
+        <h2 className="spk-label text-muted">{title}</h2>
         {aside && <div className="text-[12px] text-dim">{aside}</div>}
       </div>
       {children}

@@ -20,7 +20,7 @@ export function PodiumStand({ first, second, third, size = "md" }: { first: P; s
           </span>
           <span className={`mt-1.5 w-full truncate text-center font-black ${place === 1 ? (lg ? "text-[19px]" : "text-[15px]") : lg ? "text-[16px]" : "text-[13.5px]"}`}>{p?.name ?? "–"}</span>
           <div
-            className={`mt-2 flex w-full items-start justify-center rounded-t-2xl pt-2 font-black ${place === 1 ? "bg-accent text-ink" : place === 2 ? "bg-white/[.14] text-fg" : "bg-white/[.08] text-fg/80"}`}
+            className={`mt-2 flex w-full items-start justify-center rounded-t-2xl pt-2 font-black ${place === 1 ? "bg-gold text-ink" : place === 2 ? "bg-white/[.14] text-fg" : "bg-white/[.08] text-fg/80"}`}
             style={{ height: H * (place === 1 ? 1 : place === 2 ? 0.74 : 0.58), fontSize: lg ? 30 : 24 }}
           >
             {place}
@@ -42,7 +42,7 @@ export function FinalWinners({ finals }: { finals: { name: string; winner: P; ti
           <div key={f.name} className="flex min-w-0 items-center gap-2.5 rounded-2xl p-3" style={{ background: `${c}14`, border: `1px solid ${c}40` }}>
             {f.winner ? <Avatar p={f.winner} size={32} /> : <span className="text-[20px]">🤝</span>}
             <div className="min-w-0">
-              <div className="text-[10.5px] font-bold uppercase tracking-[.12em]" style={{ color: c }}>{f.name} final winner</div>
+              <div className="spk-label" style={{ color: c }}>{f.name} final winner</div>
               <div className="truncate text-[15px] font-black">{f.winner?.name ?? f.tied ?? "Still playing"}</div>
             </div>
           </div>

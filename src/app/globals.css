@@ -97,3 +97,9 @@ button:disabled { cursor: default; }
 @media (prefers-reduced-motion: reduce) { .spk-draw { animation: none; } }
 /* Score rail (ScoreEntry.tsx): a horizontal dial, no scrollbar. */
 .spk-rail::-webkit-scrollbar { display: none; }
+
+/* The one small label: section titles, stat captions, tags. Colour utilities (text-accent…) still
+   win, since this sits in the components layer. */
+@layer components {
+  .spk-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--color-muted); line-height: 1.3; }
+}

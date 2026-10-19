@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planStage, type Game } from "./cards";
-import { myDay, liveEventId, LIVE_FOR_MS, todayTable } from "./views";
+import { myDay, liveEventId, LIVE_FOR_MS, todayTable, stageLeft, nowFor } from "./views";
 import type { EventView } from "./data";
 
 const ids = Array.from({ length: 8 }, (_, i) => `p${i}`);
@@ -77,5 +77,35 @@ describe("todayTable", () => {
     expect(t.where[g.a[0]]).toMatchObject({ group: `Group ${g.groupName}`, place: 1 });
     const onNow = games.filter((x) => x.id !== g.id).sort((x, y) => x.ord - y.ord).find((x) => x.net === g.net)!;
     expect([...onNow.a, ...onNow.b].every((id) => !t.where[id] || t.where[id].onNow)).toBe(true);
+  });
+});
+
+describe("stageLeft and nowFor", () => {
+  const v = (gs: Game[], extra: Partial<EventView> = {}) => ({ event: { nets: 2, status: "live" }, stages: [{ no: 1, kind: "random" }], entries: ids.map((id) => ({ playerId: id, state: "here", at: 0 })), games: gs, ...extra }) as unknown as EventView;
+  const me = plan[0].ids[0];
+  const mine = games.filter((g) => [...g.a, ...g.b].includes(me));
+  const doneAll = (gs: Game[], keep: (g: Game) => boolean) => gs.map((g) => (keep(g) ? g : { ...g, status: "done" as const, scoreA: 15, scoreB: 9 }));
+
+  it("counts the games left in the stage and the longest queue on a net", () => {
+    const s = stageLeft(v(games))!;
+    expect(s.left).toBe(games.length);
+    expect(s.rounds).toBe(Math.max(...[1, 2].map((n) => games.filter((g) => g.net === n).length)));
+    expect(stageLeft(v(doneAll(games, () => false)))).toMatchObject({ left: 0, rounds: 0 });
+  });
+
+  it("says your next game, then waiting once yours are done, then between stages", () => {
+    expect(nowFor(v(games), me, false)).toMatchObject({ kind: "game", net: plan[0].net });
+    const othersLeft = doneAll(games, (g) => !mine.includes(g) && g.net !== plan[0].net);
+    expect(nowFor(v(othersLeft), me, false)).toMatchObject({ kind: "waiting" });
+    expect(nowFor(v(doneAll(games, () => false)), me, false)).toEqual({ kind: "between" });
+  });
+
+  it("says nothing once you've left, after the finals, or when it isn't live; asks you to watch a new draw", () => {
+    const left = v(games, { entries: ids.map((id) => ({ playerId: id, state: id === me ? "out" : "here", at: 0 })) } as Partial<EventView>);
+    expect(nowFor(v(doneAll(games, () => false)), me, false)).not.toBeNull();
+    expect(nowFor({ ...left, games: doneAll(games, () => false) } as EventView, me, false)).toBeNull();
+    expect(nowFor(v(doneAll(games, () => false), { stages: [{ no: 1, kind: "final" }] } as Partial<EventView>), me, false)).toBeNull();
+    expect(nowFor({ ...v(games), event: { nets: 2, status: "done" } } as unknown as EventView, me, false)).toBeNull();
+    expect(nowFor(v(games), me, true)).toEqual({ kind: "veiled", final: false });
   });
 });

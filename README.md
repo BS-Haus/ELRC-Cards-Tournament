@@ -32,7 +32,12 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   circling their edge. The page has no tabs of its own: your day is on Me while a tournament is
   on, right under your rating (`src/components/MyDay.tsx`): a small Today card (won–lost, points,
   rating today, with your check-in folded underneath), then your results. Organiser tools sit at the
-  bottom of Me. A dot on Tournament means your game is on.
+  bottom of Me. Above the bottom nav, on every screen, the
+  **now bar** (`src/components/NowBar.tsx`, `nowFor` in `src/lib/views.ts`) says where you are: on now (lime),
+  next, games before yours, your games done while the stage plays out, or waiting for the next draw.
+  Tap it to go to your net. The event page shows how many games are left in the stage for everyone.
+  Style: lime means live or act now (primary buttons, the now bar, live dots); selected states are
+  white, gains green, losses red, titles gold; small labels all use `.spk-label`.
 
 Both feed the same ratings (`src/lib/standings.ts`).
 

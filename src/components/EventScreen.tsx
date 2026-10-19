@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { setEntry, addWalkIn, drawStage, undoStage, finishEvent, reopenEvent, deleteEvent, updateEvent, addDecider, swapPlayers, movePlayer, redrawStage } from "@/app/actions";
 import { useAction } from "@/components/useAction";
-import { DrawVeil, ordinal, signalMyTurn } from "@/components/MyDay";
+import { DrawVeil, ordinal } from "@/components/MyDay";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { CheckIn, LiveBadge } from "@/components/CheckIn";
@@ -13,7 +13,7 @@ import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { finalsCut, netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
-import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView } from "@/lib/views";
+import { groupsOf, finalsOf, myDay, myCheckIn, stageLeft, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
 import { motion, LayoutGroup } from "motion/react";
@@ -24,7 +24,8 @@ const STAGE_TITLE: Record<StageKind, string> = { random: "Mixed groups", seeded:
  *  loaded on the server. */
 /** `drawPending`: you're in the newest stage but haven't watched its draw story yet, so its groups,
  *  nets and your next game stay hidden: the story is how you find out. */
-export function EventScreen({ view, me, org, roster, myXp = null, drawPending = false }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number; games: number } | null; drawPending?: boolean }) {
+/** `focusNet`: open the nets carousel on this net (from the now bar). */
+export function EventScreen({ view, me, org, roster, myXp = null, drawPending = false, focusNet = null }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number; games: number } | null; drawPending?: boolean; focusNet?: number | null }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [open, setOpen] = useState<string | null>(null); // game id in the score sheet
@@ -59,6 +60,7 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
   const queues = netQueues(games, ev.nets);
   const subAlerts = games.filter((g) => needsSub(g, out).length);
   const finals = finalsOf(view);
+  const left = stageLeft(view);
 
   // Crown each final's winner the moment it's decided, on every phone that's watching. Winners
   // already decided when the page opened don't pop up; only ones that arrive while you watch.
@@ -88,8 +90,6 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
   // own day (what's next for you, your games) is on Me (src/components/MyDay.tsx).
   const started = !!current || done;
   const mine = useMemo(() => (me ? myDay(games, ev.nets, me) : null), [games, ev.nets, me]);
-  const myTurn = live && !drawPending && mine?.next[0]?.ahead === 0;
-  useEffect(() => { signalMyTurn(myTurn); return () => signalMyTurn(false); }, [myTurn]);
 
   const share = async () => {
     const url = `${location.origin}/e/${ev.id}`;
@@ -108,7 +108,7 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
           <Link href="/?all=1" className="spk-press text-[13px] font-bold text-muted">← All events</Link>
           <button onClick={share} className="spk-press rounded-full border border-white/[.08] bg-raised px-3.5 py-1.5 text-[13px] font-bold">Share link</button>
         </div>
-        <div className="mt-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.14em]">
+        <div className="mt-4 flex items-center gap-2 spk-label">
           {live ? <LiveBadge /> : done ? <span className="text-gold">Finished</span> : <span className="text-accent">Coming up</span>}
         </div>
         <h1 className="mt-1 text-[28px] font-black leading-[1.05] tracking-[-.02em] text-balance">{ev.title}</h1>
@@ -120,7 +120,7 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
         <button onClick={() => setCrown(null)} className="spk-crown fixed inset-x-4 top-[calc(16px+env(safe-area-inset-top))] z-40 mx-auto flex max-w-[448px] items-center gap-3 rounded-3xl p-4 text-left shadow-2xl" style={{ background: tierColor(crown.tier), color: "#0c0e10" }} aria-live="polite">
           <span className="text-[34px]" aria-hidden="true">🏆</span>
           <span className="min-w-0">
-            <span className="block text-[12px] font-black uppercase tracking-[.16em] opacity-70">{crown.tier} final</span>
+            <span className="block spk-label opacity-70">{crown.tier} final</span>
             <span className="block truncate text-[20px] font-black">{crown.id === me ? `You win the ${crown.tier} final!` : `${p(crown.id)?.name ?? "Someone"} wins the ${crown.tier} final!`}</span>
           </span>
         </button>
@@ -181,9 +181,11 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
           {/* Net by net, one slide each (swipe, or tap a net's pill): the game on it now (tap to
               score), then the table and fixtures of each group playing there. Opens on your net. */}
           {current && !drawPending && (
-            <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`} aside={live && queues.some((q) => q.length) ? "Tap a net to score it" : undefined}>
+            <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`} >
+              {live && left && <StageProgress left={left} />}
               <NetCarousel
-                start={mine?.next[0]?.net ?? curGroups.find((g) => !!me && g.table.some((r) => r.id === me))?.net ?? 0}
+                focus={focusNet}
+                start={focusNet ?? mine?.next[0]?.net ?? curGroups.find((g) => !!me && g.table.some((r) => r.id === me))?.net ?? 0}
                 slides={netNumbers(queues, curGroups).map((n) => {
                   const q = queues[n - 1] ?? [];
                   const onNet = curGroups.filter((g) => g.net === n);
@@ -306,6 +308,24 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
 const netNumbers = (queues: Game[][], groups: GroupView[]) =>
   [...new Set([...queues.flatMap((q, i) => (q.length ? [i + 1] : [])), ...groups.map((g) => g.net)])].sort((a, b) => a - b);
 
+/** How far through the stage the nets are, for everyone: games left and roughly how long, or that
+ *  it's finished and the organiser draws next. Saves asking "how long till finals?". */
+function StageProgress({ left }: { left: { kind: StageKind; left: number; rounds: number } }) {
+  const next = left.kind === "final" ? "the end" : "the next stage";
+  return (
+    <div className="mb-3 flex items-baseline justify-between gap-3 px-1">
+      {left.left > 0 ? (
+        <>
+          <span className="shrink-0 whitespace-nowrap text-[14px] font-bold">{left.left} {left.left === 1 ? "game" : "games"} left</span>
+          <span className="truncate text-right text-[12.5px] text-muted">~{left.rounds} {left.rounds === 1 ? "round" : "rounds"}, then {next}</span>
+        </>
+      ) : (
+        <span className="text-[14px] font-bold">{left.kind === "final" ? "Finals done" : "Stage done: the organiser draws the next one"}</span>
+      )}
+    </div>
+  );
+}
+
 type NetSlide = { n: number; label: string; live: boolean; mine: boolean; body: React.ReactNode };
 const SLIDE_GAP = 8;
 
@@ -314,7 +334,7 @@ const SLIDE_GAP = 8;
  *  under the tabs, so you can change net from halfway down a table). Opens on `start` (your net)
  *  and stays wherever you swipe to through the page's refreshes. Its height follows the net on
  *  screen, so a short group next to a long one leaves no gap. One net: just the net. */
-function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
+function NetCarousel({ slides, start, focus = null }: { slides: NetSlide[]; start: number; focus?: number | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(() => Math.max(0, slides.findIndex((s) => s.n === start)));
   const [h, setH] = useState<number>();
@@ -322,6 +342,14 @@ function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
   // Land on your net without a scroll animation, once.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (ref.current) ref.current.scrollLeft = at * step(); }, []);
+  // Sent here for a net (the now bar): slide to it and bring the carousel into view.
+  useEffect(() => {
+    const k = slides.findIndex((s) => s.n === focus);
+    if (focus == null || k < 0 || !ref.current) return;
+    ref.current.scrollTo({ left: k * step(), behavior: "smooth" });
+    ref.current.parentElement?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
   useEffect(() => {
     const el = ref.current?.children[at] as HTMLElement | undefined;
     if (!el) return;
@@ -340,10 +368,10 @@ function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
         <div className="grid gap-1 rounded-xl border border-white/[.06] bg-panel p-1" style={{ gridTemplateColumns: `repeat(${slides.length}, minmax(0, 1fr))` }} role="tablist" aria-label="Nets">
           {slides.map((s, k) => (
             <button key={s.n} role="tab" aria-selected={k === i} onClick={() => go(k)}
-              className={`spk-press flex min-w-0 flex-col items-center rounded-lg px-1 py-1.5 ${k === i ? "bg-accent text-ink" : "text-muted"}`}>
+              className={`spk-press flex min-w-0 flex-col items-center rounded-lg px-1 py-1.5 ${k === i ? "bg-fg text-ink" : "text-muted"}`}>
               <span className="flex items-center gap-1 text-[13.5px] font-black">
                 Net {s.n}
-                {s.mine && <span className={`h-1.5 w-1.5 rounded-full ${k === i ? "bg-ink" : "bg-accent"}`} aria-label="your net" />}
+                {s.mine && <span className={`h-1.5 w-1.5 rounded-full ${k === i ? "bg-ink" : "bg-fg"}`} aria-label="your net" />}
               </span>
               <span className={`w-full truncate text-center text-[10.5px] font-bold ${k === i ? "opacity-60" : "text-dim"}`}>{s.label}</span>
             </button>
@@ -402,7 +430,7 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, cut
         </div>
       )}
       <div className="tnum text-[14px]">
-        <div className="grid grid-cols-[28px_1fr_36px_44px_44px] items-center px-4 py-1 text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">
+        <div className="grid grid-cols-[28px_1fr_36px_44px_44px] items-center px-4 py-1 spk-label text-dim">
           <span>#</span><span>Player</span><span className="text-right">Pts</span><span className="text-right">W–L</span><span className="text-right">+/−</span>
         </div>
         <LayoutGroup id={`group-${g.stageNo}-${g.groupNo}`}>
@@ -425,7 +453,7 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, cut
             return [row, (
               <motion.div key="cut" layout="position" transition={SOFT} className="flex items-center gap-2 px-4 py-1" aria-label="A final cut-off">
                 <span className="h-px flex-1 border-t border-dashed border-accent/70" />
-                <span className="text-[10px] font-extrabold uppercase tracking-[.1em] text-accent">↑ A final{cut.extra ? ` · plus best ${ordinal(cut.sure + 1)}` : ""}</span>
+                <span className="spk-label text-accent">↑ A final{cut.extra ? ` · plus best ${ordinal(cut.sure + 1)}` : ""}</span>
                 <span className="h-px w-3 border-t border-dashed border-accent/70" />
               </motion.div>
             )];
@@ -456,11 +484,11 @@ function GameRow({ g, people, out, onOpen }: { g: Game; people: Record<string, P
       layout="position" transition={SOFT} whileTap={{ scale: 0.98 }} onClick={() => onOpen(g.id)} aria-label={`${gameLabel(g)}, game ${g.seq}${fin ? `, ${g.scoreA}–${g.scoreB}` : ""}`}
       className={`grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-white/[.03] px-4 py-2.5 text-left text-[13.5px] last:border-0 ${g.status === "void" ? "opacity-40" : ""}`}
     >
-      <span className={fin && aWon ? "font-bold text-accent" : "text-fg/85"}>{g.decider && <span className="mr-1.5 rounded bg-accent/15 px-1 py-0.5 text-[10px] font-bold uppercase tracking-[.08em] text-accent">Decider</span>}{teamLine(g.a, people, g.subs, out)}</span>
+      <span className={fin ? (aWon ? "font-bold text-fg" : "text-dim") : "text-fg/85"}>{g.decider && <span className="mr-1.5 rounded bg-accent/15 px-1 py-0.5 spk-label text-accent">Decider</span>}{teamLine(g.a, people, g.subs, out)}</span>
       <span className={`tnum min-w-[58px] rounded-lg px-2 py-1 text-center font-mono text-[13px] font-bold ${fin ? "bg-raised" : g.status === "void" ? "text-dim" : "border border-dashed border-white/15 text-dim"}`}>
         {fin ? `${g.scoreA}–${g.scoreB}` : g.status === "void" ? "skipped" : "score"}
       </span>
-      <span className={`text-right ${fin && !aWon ? "font-bold text-accent" : "text-fg/85"}`}>{teamLine(g.b, people, g.subs, out)}</span>
+      <span className={`text-right ${fin ? (!aWon ? "font-bold text-fg" : "text-dim") : "text-fg/85"}`}>{teamLine(g.b, people, g.subs, out)}</span>
     </motion.button>
   );
 }
@@ -473,7 +501,7 @@ function Podium({ groups, people }: { groups: GroupView[]; people: Record<string
     <Section title="Results">
       {a && (a.winner ? (
         <div className={`${card} overflow-hidden px-3 pt-4`}>
-          <div className="mb-2 text-center text-[11px] font-bold uppercase tracking-[.16em] text-accent">{a.name} final</div>
+          <div className="mb-2 text-center spk-label text-accent">{a.name} final</div>
           <PodiumStand first={people[a.winner]} second={people[others[0]]} third={people[others[1]]} />
         </div>
       ) : (
@@ -562,7 +590,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
                   {(current ? (["here", "out"] as const) : (["going", "here", "out"] as const)).map((s) => {
                     const shown = e.state !== "out" && pool.has(e.playerId) ? "here" : e.state;
                     return (
-                    <button key={s} disabled={pending} onClick={() => run(() => setEntry(ev.id, e.playerId, s))} className={`rounded-md px-2.5 py-1.5 ${shown === s ? (s === "out" ? "bg-loss text-ink" : "bg-accent text-ink") : "text-muted"}`} aria-pressed={shown === s}>
+                    <button key={s} disabled={pending} onClick={() => run(() => setEntry(ev.id, e.playerId, s))} className={`rounded-md px-2.5 py-1.5 ${shown === s ? (s === "out" ? "bg-loss text-ink" : "bg-fg text-ink") : "text-muted"}`} aria-pressed={shown === s}>
                       {s === "going" ? "Coming" : s === "here" ? "Here" : "Out"}
                     </button>
                     );
@@ -618,7 +646,7 @@ function EditGroups({ view, run, pending, pool }: { view: EventView; run: Run; p
   };
   const chip = (id: string) => (
     <button key={id} disabled={pending} onClick={() => tap(id)} aria-pressed={sel === id}
-      className={`spk-press inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-[13.5px] font-semibold ${sel === id ? "bg-accent text-ink" : "border border-white/[.08] bg-raised"}`}>
+      className={`spk-press inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-[13.5px] font-semibold ${sel === id ? "bg-fg text-ink" : "border border-white/[.08] bg-raised"}`}>
       <Avatar p={people[id]} size={24} />{name(id)}
     </button>
   );
@@ -678,7 +706,7 @@ function GameLength({ view, run, pending }: { view: EventView; run: Run; pending
       <span className="text-[13.5px] font-semibold text-muted">{label}</span>
       <div className="flex rounded-lg border border-white/[.06] bg-panel p-0.5 text-[13px] font-bold">
         {[7, 9, 11, 15, 21].map((n) => (
-          <button key={n} disabled={pending || e[k] === n} onClick={() => set(k, n)} aria-pressed={e[k] === n} className={`tnum min-w-9 rounded-md px-2 py-1.5 ${e[k] === n ? "bg-accent text-ink" : "text-muted"}`}>{n}</button>
+          <button key={n} disabled={pending || e[k] === n} onClick={() => set(k, n)} aria-pressed={e[k] === n} className={`tnum min-w-9 rounded-md px-2 py-1.5 ${e[k] === n ? "bg-fg text-ink" : "text-muted"}`}>{n}</button>
         ))}
       </div>
     </div>

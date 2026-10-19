@@ -47,7 +47,7 @@ export function Court({ title, tag, a, b, scoreA, scoreB, people, live, highligh
     >
       <div className="mb-3 flex items-center gap-2 px-3">
         <span className={`text-[15px] font-black ${highlight ? "text-accent" : "text-fg"}`}>{title}</span>
-        {tag && <span className="rounded-full bg-white/[.06] px-2 py-0.5 text-[10px] font-black uppercase tracking-[.1em] text-dim">{tag}</span>}
+        {tag && <span className="rounded-full bg-white/[.06] px-2 py-0.5 spk-label text-dim">{tag}</span>}
       </div>
       <div className="flex w-full items-center gap-2 px-3">
         {side(a, aWon)}
@@ -59,7 +59,7 @@ export function Court({ title, tag, a, b, scoreA, scoreB, people, live, highligh
               <span className="h-7 w-7 rounded-full border border-current" />
             </span>
           )}
-          {!done && live && <span className="mt-1.5 text-[9.5px] font-black uppercase tracking-[.12em] text-accent">Score</span>}
+          {!done && live && <span className="mt-1.5 spk-label text-accent">Score</span>}
         </div>
         {side(b, done && !aWon)}
       </div>
@@ -111,7 +111,7 @@ export function MatchResult({ res, people, move, onDone, doneLabel = "Done" }: {
             </span>
             {l.placingGame != null
               ? <span className="shrink-0 text-[12px] font-bold text-dim">🐣 {l.placingGame}/{PROV_N}</span>
-              : <span className={`tnum shrink-0 font-mono text-[17px] font-black ${l.delta >= 0 ? "text-accent" : "text-muted"}`}>{signed(l.delta)}</span>}
+              : <span className={`tnum shrink-0 font-mono text-[17px] font-black ${l.delta >= 0 ? "text-win" : "text-loss"}`}>{signed(l.delta)}</span>}
           </motion.div>
         ))}
       </div>

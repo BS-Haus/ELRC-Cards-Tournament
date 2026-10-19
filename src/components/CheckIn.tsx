@@ -9,7 +9,7 @@ import type { EntryState } from "@/lib/data";
 /** The pulsing LIVE pill: the event header, and anywhere a live event is named. */
 export function LiveBadge() {
   return (
-    <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[.14em] text-accent">
+    <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-accent/15 px-2.5 py-1 spk-label text-accent">
       <span className="spk-ping h-2 w-2 rounded-full bg-accent" aria-hidden="true" />Live
     </span>
   );
@@ -46,7 +46,7 @@ export function CheckIn({ me, state, eventId, started, title, children }: { me: 
         <div className={`${card} p-4`}>
           {head}
           <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[.06] bg-panel p-1" role="radiogroup" aria-label="Your check-in">
-            <button role="radio" aria-checked={here} disabled={pending || here} onClick={() => set("here", "Checked in. You'll join the next stage")} className={`spk-press flex h-11 items-center justify-center gap-1.5 rounded-lg text-[14.5px] font-black ${here ? "bg-accent text-ink" : "text-muted"}`}>
+            <button role="radio" aria-checked={here} disabled={pending || here} onClick={() => set("here", "Checked in. You'll join the next stage")} className={`spk-press flex h-11 items-center justify-center gap-1.5 rounded-lg text-[14.5px] font-black ${here ? "bg-fg text-ink" : "text-muted"}`}>
               {here && <span aria-hidden="true">✓</span>}{here ? "Checked in" : "I'm here"}
             </button>
             <button role="radio" aria-checked={state === "out"} disabled={pending || state === "out"} onClick={() => set("out", "Marked as left. Your remaining games will get a sub")} className={`spk-press h-11 rounded-lg text-[14.5px] font-black ${state === "out" ? "bg-loss/20 text-loss" : "text-muted"}`}>
