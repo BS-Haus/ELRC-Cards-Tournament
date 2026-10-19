@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NowBar } from "@/components/NowBar";
 
 const items = [
   // "/" opens today's live event if there is one, else the list (src/app/page.tsx).
@@ -15,7 +14,6 @@ export function Nav() {
   const path = usePathname();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[.06] bg-bg/95 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-      <NowBar />
       <div className="mx-auto flex max-w-[480px]">
         {items.map((it) => {
           const on = it.match(path);

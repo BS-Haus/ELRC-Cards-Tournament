@@ -99,36 +99,3 @@ export function todayTable(v: EventView): { rows: Line[]; out: Set<string>; wher
   return { rows: rank(tally(v.games, ids).values()), out: new Set(v.entries.filter((e) => e.state === "out").map((e) => e.playerId)), where };
 }
 
-/** What's left of the latest stage: games still to play, and the most any one net has queued (the
- *  stage ends once that net is through them). Null before anything's drawn. */
-export function stageLeft(v: EventView): { stageNo: number; kind: StageKind; left: number; rounds: number } | null {
-  const st = v.stages.at(-1);
-  if (!st) return null;
-  const todo = v.games.filter((g) => g.stageNo === st.no && g.status === "todo");
-  const perNet = new Map<number, number>();
-  for (const g of todo) perNet.set(g.net, (perNet.get(g.net) ?? 0) + 1);
-  return { stageNo: st.no, kind: st.kind, left: todo.length, rounds: Math.max(0, ...perNet.values()) };
-}
-
-/** What the "now" bar says for you at a live event: the newest draw still to watch, your next game
- *  (on now, next, or how many before it), your games done while the stage plays out, or the stage
- *  done and the next not drawn yet. Null when there's nothing to say (not playing, left, over). */
-export type NowState =
-  | { kind: "veiled"; final: boolean }
-  | { kind: "game"; net: number; ahead: number; partner: string; opponents: [string, string]; gameId: string; sub: boolean }
-  | { kind: "waiting"; rounds: number }
-  | { kind: "between" };
-
-export function nowFor(v: EventView, me: string, veiled: boolean): NowState | null {
-  if (v.event.status !== "live") return null;
-  const st = stageLeft(v);
-  if (!st) return null;
-  if (veiled) return { kind: "veiled", final: st.kind === "final" };
-  const day = myDay(v.games, v.event.nets, me);
-  const n = day.next[0];
-  if (n) return { kind: "game", net: n.net, ahead: n.ahead, partner: n.partner, opponents: n.opponents, gameId: n.game.id, sub: n.sub };
-  if (myCheckIn(v.entries, v.games, me) === "out") return null;
-  if (!drawPool(v.entries, v.games).includes(me) && !day.played.length) return null;
-  if (st.left > 0) return { kind: "waiting", rounds: st.rounds };
-  return st.kind === "final" ? null : { kind: "between" };
-}

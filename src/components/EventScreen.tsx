@@ -13,7 +13,7 @@ import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { finalsCut, netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
-import { groupsOf, finalsOf, myDay, myCheckIn, stageLeft, type GroupView } from "@/lib/views";
+import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
 import { motion, LayoutGroup } from "motion/react";
@@ -24,8 +24,7 @@ const STAGE_TITLE: Record<StageKind, string> = { random: "Mixed groups", seeded:
  *  loaded on the server. */
 /** `drawPending`: you're in the newest stage but haven't watched its draw story yet, so its groups,
  *  nets and your next game stay hidden: the story is how you find out. */
-/** `focusNet`: open the nets carousel on this net (from the now bar). */
-export function EventScreen({ view, me, org, roster, myXp = null, drawPending = false, focusNet = null }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number; games: number } | null; drawPending?: boolean; focusNet?: number | null }) {
+export function EventScreen({ view, me, org, roster, myXp = null, drawPending = false }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number; games: number } | null; drawPending?: boolean }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [open, setOpen] = useState<string | null>(null); // game id in the score sheet
@@ -60,7 +59,6 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
   const queues = netQueues(games, ev.nets);
   const subAlerts = games.filter((g) => needsSub(g, out).length);
   const finals = finalsOf(view);
-  const left = stageLeft(view);
 
   // Crown each final's winner the moment it's decided, on every phone that's watching. Winners
   // already decided when the page opened don't pop up; only ones that arrive while you watch.
@@ -182,10 +180,8 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
               score), then the table and fixtures of each group playing there. Opens on your net. */}
           {current && !drawPending && (
             <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`} >
-              {live && left && <StageProgress left={left} />}
               <NetCarousel
-                focus={focusNet}
-                start={focusNet ?? mine?.next[0]?.net ?? curGroups.find((g) => !!me && g.table.some((r) => r.id === me))?.net ?? 0}
+                start={mine?.next[0]?.net ?? curGroups.find((g) => !!me && g.table.some((r) => r.id === me))?.net ?? 0}
                 slides={netNumbers(queues, curGroups).map((n) => {
                   const q = queues[n - 1] ?? [];
                   const onNet = curGroups.filter((g) => g.net === n);
@@ -308,24 +304,6 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
 const netNumbers = (queues: Game[][], groups: GroupView[]) =>
   [...new Set([...queues.flatMap((q, i) => (q.length ? [i + 1] : [])), ...groups.map((g) => g.net)])].sort((a, b) => a - b);
 
-/** How far through the stage the nets are, for everyone: games left and roughly how long, or that
- *  it's finished and the organiser draws next. Saves asking "how long till finals?". */
-function StageProgress({ left }: { left: { kind: StageKind; left: number; rounds: number } }) {
-  const next = left.kind === "final" ? "the end" : "the next stage";
-  return (
-    <div className="mb-3 flex items-baseline justify-between gap-3 px-1">
-      {left.left > 0 ? (
-        <>
-          <span className="shrink-0 whitespace-nowrap text-[14px] font-bold">{left.left} {left.left === 1 ? "game" : "games"} left</span>
-          <span className="truncate text-right text-[12.5px] text-muted">~{left.rounds} {left.rounds === 1 ? "round" : "rounds"}, then {next}</span>
-        </>
-      ) : (
-        <span className="text-[14px] font-bold">{left.kind === "final" ? "Finals done" : "Stage done: the organiser draws the next one"}</span>
-      )}
-    </div>
-  );
-}
-
 type NetSlide = { n: number; label: string; live: boolean; mine: boolean; body: React.ReactNode };
 const SLIDE_GAP = 8;
 
@@ -334,7 +312,7 @@ const SLIDE_GAP = 8;
  *  under the tabs, so you can change net from halfway down a table). Opens on `start` (your net)
  *  and stays wherever you swipe to through the page's refreshes. Its height follows the net on
  *  screen, so a short group next to a long one leaves no gap. One net: just the net. */
-function NetCarousel({ slides, start, focus = null }: { slides: NetSlide[]; start: number; focus?: number | null }) {
+function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(() => Math.max(0, slides.findIndex((s) => s.n === start)));
   const [h, setH] = useState<number>();
@@ -342,14 +320,6 @@ function NetCarousel({ slides, start, focus = null }: { slides: NetSlide[]; star
   // Land on your net without a scroll animation, once.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (ref.current) ref.current.scrollLeft = at * step(); }, []);
-  // Sent here for a net (the now bar): slide to it and bring the carousel into view.
-  useEffect(() => {
-    const k = slides.findIndex((s) => s.n === focus);
-    if (focus == null || k < 0 || !ref.current) return;
-    ref.current.scrollTo({ left: k * step(), behavior: "smooth" });
-    ref.current.parentElement?.scrollIntoView({ behavior: "smooth", block: "start" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus]);
   useEffect(() => {
     const el = ref.current?.children[at] as HTMLElement | undefined;
     if (!el) return;

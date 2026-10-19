@@ -26,7 +26,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
-        <div className="mx-auto min-h-dvh max-w-[480px] bg-bg pb-[calc(84px+env(safe-area-inset-bottom)+var(--now-h,0px))]">{children}</div>
+        <div className="mx-auto min-h-dvh max-w-[480px] bg-bg pb-[calc(84px+env(safe-area-inset-bottom))]">{children}</div>
         <Nav />
         <LevelMoments />
         <GameResult />
