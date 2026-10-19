@@ -20,7 +20,7 @@ import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
 import { motion, LayoutGroup } from "motion/react";
 import { PROV_N } from "@/lib/standings";
 
-const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded: "Seeded groups", final: "Finals", ladder: "Ladder" };
+const STAGE_TITLE: Record<StageKind, string> = { random: "Mixed groups", seeded: "Groups by level", final: "Finals", ladder: "Ladder" };
 
 /** `myXp`: your rating either side of this weekend so far, and your games in all (src/lib/standings.ts),
  *  loaded on the server. */
@@ -624,13 +624,16 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
           </p>
           <p className="mt-1 text-[13px] text-dim">{plan}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {!current && <button disabled={pending || here < 4} onClick={() => run(() => drawStage(ev.id, "random"), "Groups drawn")} className={btnPrimary}>Draw random groups</button>}
+            {!current && <button disabled={pending || here < 4} onClick={() => run(() => drawStage(ev.id, "random"), "Groups drawn")} className={btnPrimary}>Draw mixed groups</button>}
             {/* Two stages is the format: random groups, then A / B finals. A middle
                 "regroup by level" stage only earns its place in a big field (16+). */}
             {current && current.kind !== "final" && (
               <>
                 <button disabled={pending || here < 4} onClick={() => twice("final", () => run(() => drawStage(ev.id, "final"), "Finals drawn"))} className={stageDone ? btnPrimary : btnGhost}>{confirm === "final" ? "Tap again for finals" : "Start finals"}</button>
-                {here >= 16 && current.kind === "random" && <button disabled={pending} onClick={() => twice("seeded", () => run(() => drawStage(ev.id, "seeded"), "Next stage drawn"))} className={btnGhost}>{confirm === "seeded" ? "Tap again to draw" : "Extra stage: regroup by level"}</button>}
+                {/* Another round before the finals, whenever there are two or more groups: mixed
+                    again (levels spread, new groups) or by level (groups by the table). */}
+                {sizes.length >= 2 && <button disabled={pending} onClick={() => twice("random", () => run(() => drawStage(ev.id, "random"), "Another mixed round drawn"))} className={btnGhost}>{confirm === "random" ? "Tap again to draw" : "Another round: mixed"}</button>}
+                {sizes.length >= 2 && <button disabled={pending} onClick={() => twice("seeded", () => run(() => drawStage(ev.id, "seeded"), "Another round drawn by level"))} className={btnGhost}>{confirm === "seeded" ? "Tap again to draw" : "Another round: by level"}</button>}
               </>
             )}
             {current && <button disabled={pending} onClick={() => twice("undo", () => run(() => undoStage(ev.id), "Stage taken back"))} className={btnQuiet}>{confirm === "undo" ? "Tap again to undo" : "Undo last draw"}</button>}

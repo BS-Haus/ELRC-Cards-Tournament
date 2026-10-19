@@ -7,7 +7,7 @@ import { players, events, entries, stages, games, eventPhotos } from "@/db/schem
 import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin";
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
-import { planStage, shuffle, validScore, withSub, drawPool, seedOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
+import { planStage, shuffle, mixedOrder, validScore, withSub, drawPool, seedOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
 import { getEventView, groupsOf, myMoments, myDrawStory, gameStory, gameResult, ratingNow, type Moments, type DrawFeed } from "@/lib/data";
 import { nextRound, roundsFrom, roundDone } from "@/lib/netLadder";
 
@@ -284,7 +284,9 @@ export async function drawStage(eventId: string, kind: Exclude<StageKind, "ladde
   // Everyone checked in, plus everyone still in the tournament from the stage before (drawPool).
   const present = drawPool(v.entries, v.games);
   if (present.length < 4) return fail("Check in at least 4 players first.");
-  const order = kind === "random" ? shuffle(present) : seedOrder(v.games, present, kind);
+  const ratingOf = kind === "random" ? await ratingNow() : new Map<string, number>();
+  // A mixed stage spreads the levels across the groups by rating (mixedOrder); the others seed.
+  const order = kind === "random" ? mixedOrder(present, (id) => (ratingOf.get(id) ?? 800)) : seedOrder(v.games, present, kind);
   const carried = present.filter((id) => v.entries.find((e) => e.playerId === id)?.state !== "here");
   const plan = planStage(kind, order, v.event.nets);
   const stageNo = (v.stages.at(-1)?.no ?? 0) + 1;
