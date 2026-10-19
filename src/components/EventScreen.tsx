@@ -464,17 +464,18 @@ const netNumbers = (queues: Game[][], groups: GroupView[]) =>
   [...new Set([...queues.flatMap((q, i) => (q.length ? [i + 1] : [])), ...groups.map((g) => g.net)])].sort((a, b) => a - b);
 
 type NetSlide = { n: number; label: string; live: boolean; mine: boolean; body: React.ReactNode };
-const SLIDE_GAP = 16;
+const SLIDE_GAP = 10;
 
-/** The nets side by side: swipe between them, or tap a net's pill (they stick under the tabs, so
- *  you can switch from halfway down a table). Opens on `start` (your net) and stays wherever you
- *  swipe to through the page's refreshes. Its height follows the net on screen, so a short group
- *  next to a long one leaves no gap. One net: no pills, no swiping. */
+/** The nets as a carousel: each net is a slide a little narrower than the screen, so the next one
+ *  peeks in at the edge, with dots underneath. Swipe, or tap a net in the switch above (it sticks
+ *  under the tabs, so you can change net from halfway down a table). Opens on `start` (your net)
+ *  and stays wherever you swipe to through the page's refreshes. Its height follows the net on
+ *  screen, so a short group next to a long one leaves no gap. One net: just the net. */
 function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(() => Math.max(0, slides.findIndex((s) => s.n === start)));
   const [h, setH] = useState<number>();
-  const step = () => (ref.current ? ref.current.clientWidth + SLIDE_GAP : 1);
+  const step = () => ((ref.current?.children[0] as HTMLElement | undefined)?.offsetWidth ?? 1) + SLIDE_GAP;
   // Land on your net without a scroll animation, once.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (ref.current) ref.current.scrollLeft = at * step(); }, []);
@@ -492,17 +493,16 @@ function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
   const go = (k: number) => ref.current?.scrollTo({ left: k * step(), behavior: "smooth" });
   return (
     <>
-      <div className="sticky top-[calc(env(safe-area-inset-top)+51px)] z-10 -mx-4 mb-2.5 bg-bg px-4 py-2">
-        <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Nets">
+      <div className="sticky top-[calc(env(safe-area-inset-top)+51px)] z-10 -mx-4 mb-3 bg-bg px-4 py-2">
+        <div className="grid gap-1 rounded-xl border border-white/[.06] bg-panel p-1" style={{ gridTemplateColumns: `repeat(${slides.length}, minmax(0, 1fr))` }} role="tablist" aria-label="Nets">
           {slides.map((s, k) => (
             <button key={s.n} role="tab" aria-selected={k === i} onClick={() => go(k)}
-              className={`spk-press flex shrink-0 flex-col items-start rounded-xl px-3 py-1.5 text-left ${k === i ? "bg-accent text-ink" : "border border-white/[.08] bg-surface text-fg"}`}>
-              <span className="flex items-center gap-1.5 text-[14px] font-black">
+              className={`spk-press flex min-w-0 flex-col items-center rounded-lg px-1 py-1.5 ${k === i ? "bg-accent text-ink" : "text-muted"}`}>
+              <span className="flex items-center gap-1 text-[13.5px] font-black">
                 Net {s.n}
-                {s.live && <span className={`spk-live h-1.5 w-1.5 rounded-full ${k === i ? "bg-ink" : "bg-accent"}`} aria-label="game on" />}
-                {s.mine && <span className={`text-[10px] font-black uppercase tracking-[.08em] ${k === i ? "opacity-60" : "text-accent"}`}>you</span>}
+                {s.mine && <span className={`h-1.5 w-1.5 rounded-full ${k === i ? "bg-ink" : "bg-accent"}`} aria-label="your net" />}
               </span>
-              <span className={`max-w-[9rem] truncate text-[11px] font-bold ${k === i ? "opacity-60" : "text-dim"}`}>{s.label}</span>
+              <span className={`w-full truncate text-center text-[10.5px] font-bold ${k === i ? "opacity-60" : "text-dim"}`}>{s.label}</span>
             </button>
           ))}
         </div>
@@ -510,10 +510,19 @@ function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
       <div
         ref={ref}
         onScroll={() => { const k = Math.round((ref.current?.scrollLeft ?? 0) / step()); if (k !== at) setAt(k); }}
-        className="flex snap-x snap-mandatory items-start overflow-x-auto overflow-y-hidden overscroll-x-contain transition-[height] duration-300 [scrollbar-width:none]"
+        className="-mx-4 flex snap-x snap-mandatory items-start overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 transition-[height] duration-300 [scrollbar-width:none]"
         style={{ height: h, gap: SLIDE_GAP }}
       >
-        {slides.map((s) => <div key={s.n} className="w-full shrink-0 snap-start snap-always">{s.body}</div>)}
+        {slides.map((s, k) => (
+          <div key={s.n} className={`w-[calc(100%-44px)] shrink-0 snap-center snap-always transition-opacity duration-300 ${k === i ? "" : "opacity-60"}`} onClickCapture={k === i ? undefined : (e) => { e.stopPropagation(); e.preventDefault(); go(k); }}>
+            {s.body}
+          </div>
+        ))}
+        {/* The right margin after the last net (a scroller drops its own end padding). */}
+        <div className="w-1.5 shrink-0" aria-hidden="true" />
+      </div>
+      <div className="mt-3 flex justify-center gap-1.5" aria-hidden="true">
+        {slides.map((s, k) => <span key={s.n} className={`h-1.5 rounded-full transition-all duration-300 ${k === i ? "w-5 bg-accent" : "w-1.5 bg-white/20"}`} />)}
       </div>
     </>
   );
