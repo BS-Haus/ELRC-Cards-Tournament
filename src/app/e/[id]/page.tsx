@@ -33,6 +33,6 @@ export default async function EventPage({ params }: Props) {
     const roster = org ? await allPlayers() : [];
     return <LadderScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} />;
   }
-  const [myXp, roster, hidden] = await Promise.all([s?.playerId ? weekendXp(id, s.playerId) : null, org ? allPlayers() : [], s?.playerId ? drawPending(id, s.playerId) : false]);
-  return <EventScreen view={v} me={s?.playerId ?? null} org={org} roster={roster} myXp={myXp} drawPending={hidden} />;
+  const [myXp, hidden] = await Promise.all([s?.playerId ? weekendXp(id, s.playerId) : null, s?.playerId ? drawPending(id, s.playerId) : false]);
+  return <EventScreen view={v} me={s?.playerId ?? null} org={org} myXp={myXp} drawPending={hidden} />;
 }

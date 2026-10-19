@@ -39,7 +39,7 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
       <div role="dialog" aria-label={`${label}, game ${game.seq}`} className="spk-sheet mx-auto max-h-[92dvh] w-full max-w-[480px] overflow-y-auto rounded-t-3xl border-t border-white/[.08] bg-surface p-5 pb-[calc(20px+env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15" />
         <div className="flex items-baseline justify-between">
-          <div className="text-[12px] font-bold uppercase tracking-[.12em] text-accent">{label} · game {game.seq}</div>
+          <div className="spk-label text-accent">{label} · game {game.seq}</div>
           <div className="text-[12px] text-dim">to {to}, win by 2</div>
         </div>
 
@@ -56,7 +56,7 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
           </div>
         ) : (
           <>
-            <div className="mt-5 rounded-[18px] border border-white/[.06] bg-panel p-4">
+            <div className="mt-5">
               <ScoreEntry a={game.a} b={game.b} people={people} to={to} value={pick} onChange={setPick} />
             </div>
 
@@ -64,11 +64,16 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
               {sc == null ? "Tap the winning team" : `Save ${sc[0]}–${sc[1]}`}
             </button>
 
+            {done && <p className="mt-2 text-center text-[12.5px] text-dim">Pick the right score and save again to correct it.</p>}
             {done && org && <button disabled={pending} onClick={() => run(() => clearScore(game.id), "Score cleared", (r) => r.ok && onClose())} className={`${btnQuiet} mt-2 w-full`}>Clear this score</button>}
 
+            {/* The rare stuff, folded away so the sheet is just the score. */}
             {game.status === "todo" && (
-              <div className="mt-5 border-t border-white/[.06] pt-4">
-                <div className="text-[15px] font-extrabold">Someone can&apos;t play?</div>
+              <details className="group mt-5 border-t border-white/[.06] pt-3" open={[...game.a, ...game.b].some((id) => out.has(id))}>
+                <summary className="spk-press flex cursor-pointer list-none items-center justify-between py-1 text-[14px] font-bold text-muted">
+                  Someone can&apos;t play?
+                  <span className="text-dimmer transition group-open:rotate-90" aria-hidden="true">›</span>
+                </summary>
                 <p className="mt-1 text-[13px] text-muted">Swap in a sub. It counts in everyone's rating, sub included, but the sub isn't added to this group's table.</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {[...game.a, ...game.b].map((id) => (
@@ -98,7 +103,7 @@ export function ScoreSheet({ game, people, to, canScore, org, candidates, out, o
                   </div>
                 )}
                 <button disabled={pending} onClick={() => run(() => setSkipped(game.id, true), "Game skipped", (r) => r.ok && onClose())} className={`${btnQuiet} mt-3 px-0`}>Skip this game instead</button>
-              </div>
+              </details>
             )}
           </>
         )}

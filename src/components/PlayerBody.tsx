@@ -23,7 +23,8 @@ type Pr = Pick<Profile, "player" | "tierWins" | "bestPartner" | "recent" | "name
  * folded rows, each with a teaser, so the page says plenty at a glance and the detail is a tap
  * away. Each game shows what it did to the rating; tapping it replays its story.
  */
-export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr: Pr; mine?: boolean }) {
+/** `today` sits right under the rating card: on Me during a tournament, your day (src/components/MyDay). */
+export function PlayerBody({ season: s, pr, mine = false, today }: { season: Season; pr: Pr; mine?: boolean; today?: React.ReactNode }) {
   const [story, setStory] = useState<Moments | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const replay = async (g: ProfileGame) => {
@@ -48,6 +49,7 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
           <div className="text-[15px] font-bold text-num">No games yet</div>
           <div className="mt-1 text-[13px] text-dim">{mine ? "Play your first weekend and your climb starts here." : `${player.name}'s climb starts with their first weekend.`}</div>
         </div>
+        {today && <div className="mt-2.5 flex flex-col gap-2">{today}</div>}
       </section>
     );
   }
@@ -55,17 +57,17 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
   return (
     <section className="px-4 pb-6">
       {/* HERO: the one number, where it puts them, and how they're going. */}
-      <div className="mb-2.5 rounded-[18px] border border-accent/25 bg-accent/[.05] px-4 pt-4 pb-3.5">
+      <div className="mb-2.5 rounded-[18px] border border-white/[.08] bg-surface px-4 pt-4 pb-3.5">
         <div className="flex items-end justify-between gap-3">
           {lv.placing ? (
             <div>
               <div className="font-mono text-[44px] font-extrabold leading-none text-fg">{s.games}<span className="text-[24px] text-dim">/{PROV_N}</span></div>
-              <div className="mt-1.5 text-[10px] font-bold uppercase tracking-[.08em] text-dimmer">Placement games · 🐣 Fresh Meat</div>
+              <div className="mt-1.5 spk-label text-dimmer">Placement games · 🐣 Fresh Meat</div>
             </div>
           ) : (
             <div>
-              <AnimatedNumber value={s.rating} className="block font-mono text-[44px] font-extrabold leading-none text-accent" />
-              <div className="mt-1.5 text-[10px] font-bold uppercase tracking-[.08em] text-dimmer">Rating{s.position > 0 ? ` · ${ordinal(s.position)} of ${s.of}` : ""}</div>
+              <AnimatedNumber value={s.rating} className="block font-mono text-[44px] font-extrabold leading-none text-fg" />
+              <div className="mt-1.5 spk-label text-dimmer">Rating{s.position > 0 ? ` · ${ordinal(s.position)} of ${s.of}` : ""}</div>
             </div>
           )}
           {last && (
@@ -91,6 +93,8 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
           <Sparkline points={pr.trail} w={64} />
         </div>
       </div>
+
+      {today && <div className="mb-2 flex flex-col gap-2">{today}</div>}
 
       {/* Everything else is opt-in. Teasers keep the page informative while it's closed. */}
       <div className="flex flex-col gap-2">

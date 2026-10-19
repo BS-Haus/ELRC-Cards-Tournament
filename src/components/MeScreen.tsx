@@ -13,12 +13,13 @@ import { PlayerBody } from "@/components/PlayerBody";
 import type { Profile, Season } from "@/lib/data";
 import { tierFor } from "@/lib/levels";
 import { PROV_N } from "@/lib/standings";
-import type { EntryState, EventPhoto } from "@/lib/data";
+import type { EntryState, EventPhoto, EventView } from "@/lib/data";
+import { MyDay } from "@/components/MyDay";
 import { EventPhotos } from "@/components/EventPhotos";
 
 export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
   me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null;
-  today: { id: string; title: string; state: EntryState | null; started: boolean; photos: EventPhoto[] } | null; season: Season | null;
+  today: { id: string; title: string; state: EntryState | null; started: boolean; photos: EventPhoto[]; view: EventView; xp: { before: number; after: number; games: number } | null; veiled: boolean } | null; season: Season | null;
   profile: Pick<Profile, "player" | "tierWins" | "bestPartner" | "recent" | "names" | "form" | "trail" | "biggestWin" | "bestRun"> | null;
 }) {
   const router = useRouter();
@@ -32,30 +33,36 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
         <header className="flex flex-col items-center px-5 pt-[calc(22px+env(safe-area-inset-top))] pb-5 text-center">
           <AvatarPicker me={me} rank={season ? tierFor(season).level : undefined} tag={season ? (season.games < PROV_N ? `${season.games}/${PROV_N}` : String(season.rating)) : undefined} />
           <h1 className="mt-5 text-[26px] font-black leading-tight tracking-[-.02em]">{me.name}</h1>
-          <div className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">East London Roundnet</div>
+          <div className="spk-label text-accent">East London Roundnet</div>
           {next && <Link href={next} className="mt-3 text-[13px] font-bold text-accent">← Back to the event</Link>}
         </header>
       ) : (
         <Header eyebrow="East London Roundnet" title="Join in" />
       )}
 
-      <OrganiserRow org={org} orgUntil={orgUntil} run={run} pending={pending} />
-
       {!me ? (
         <JoinFlow onDone={go} />
       ) : (
         <>
-        {today && (
+        {/* Before it starts: the sign-up card. Once it's on: your day, right under your rating. */}
+        {today && !today.started && (
           <>
-            <h2 className="px-5 pb-2.5 text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</h2>
-            <CheckIn me={me.id} state={today.state} eventId={today.id} started={today.started} title={today.title}>
+            <h2 className="px-5 pb-2.5 spk-label text-muted">Today</h2>
+            <CheckIn me={me.id} state={today.state} eventId={today.id} started={false} title={today.title}>
               <EventPhotos bare eventId={today.id} photos={today.photos} me={me.id} org={org} />
             </CheckIn>
           </>
         )}
-        {season && profile && <PlayerBody season={season} pr={profile} mine />}
+        {(() => {
+          const day = today?.started ? <MyDay view={today.view} me={me.id} org={org} xp={today.xp} veiled={today.veiled} /> : undefined;
+          if (season && profile) return <PlayerBody season={season} pr={profile} mine today={day} />;
+          return day ? <div className="flex flex-col gap-2 px-4 pb-6">{day}</div> : null;
+        })()}
         </>
       )}
+
+      {/* Organiser tools: only a few people need them, so they sit at the bottom. */}
+      <OrganiserRow org={org} orgUntil={orgUntil} run={run} pending={pending} />
 
       {me && (
         <div className="px-4 pt-2 pb-8">
@@ -82,7 +89,7 @@ function OrganiserRow({ org, orgUntil, run, pending }: { org: boolean; orgUntil:
             {org && <span className="text-[12.5px] font-semibold text-muted">on until {fmtTime(orgUntil!)}</span>}
           </span>
           {org
-            ? <button disabled={pending} onClick={() => run(() => lockOrganiser(), "Locked")} className="spk-press text-[13px] font-bold text-muted">Lock</button>
+            ? <span className="flex items-center gap-4"><Link href="/organise" className="spk-press text-[13px] font-bold text-accent">Organise →</Link><button disabled={pending} onClick={() => run(() => lockOrganiser(), "Locked")} className="spk-press text-[13px] font-bold text-muted">Lock</button></span>
             : <button onClick={() => setOpen(!open)} className="spk-press text-[13px] font-bold text-accent">{open ? "Cancel" : "Unlock"}</button>}
         </div>
         {!org && open && (
@@ -92,6 +99,19 @@ function OrganiserRow({ org, orgUntil, run, pending }: { org: boolean; orgUntil:
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+/** On the Organise tab: how long the tools stay unlocked, and Lock (the tab goes with it). */
+export function OrganiserLock({ until }: { until: number | null }) {
+  const router = useRouter();
+  const { run, pending, toast } = useAction();
+  return (
+    <div className={`${card} flex min-h-12 items-center justify-between gap-3 px-4 py-2`}>
+      {toast}
+      <span className="text-[13.5px] text-muted">Unlocked{until ? ` until ${fmtTime(until)}` : ""}</span>
+      <button disabled={pending} onClick={() => run(() => lockOrganiser(), "Locked", (r) => { if (r.ok) router.push("/me"); })} className="spk-press text-[13px] font-bold text-muted">Lock</button>
     </div>
   );
 }

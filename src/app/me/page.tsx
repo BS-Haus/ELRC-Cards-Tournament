@@ -3,7 +3,7 @@ import { MeScreen } from "@/components/MeScreen";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { players } from "@/db/schema";
-import { photoUrl, todayEventId, getEventView, getProfile, getSeason } from "@/lib/data";
+import { photoUrl, todayEventId, getEventView, getProfile, getSeason, weekendXp, drawPending } from "@/lib/data";
 import { myCheckIn } from "@/lib/views";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,9 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   // On the day, your check-in lives here, not under the event's tabs: it's about you, not the event.
   const liveId = p ? await todayEventId() : null;
   const v = liveId ? await getEventView(liveId) : null;
-  const today = v && p ? { id: v.event.id, title: v.event.title, state: myCheckIn(v.entries, v.games, p.id), started: v.stages.length > 0, photos: v.photos } : null;
+  // Once it's started, your day there too: your next game, your games so far (src/components/MyDay).
+  const [xp, veiled] = v && p && v.stages.length ? await Promise.all([weekendXp(v.event.id, p.id), drawPending(v.event.id, p.id)]) : [null, false];
+  const today = v && p ? { id: v.event.id, title: v.event.title, state: myCheckIn(v.entries, v.games, p.id), started: v.stages.length > 0, photos: v.photos, view: v, xp, veiled } : null;
   // Every weekend you've played, summarised: rank, numbers, the climb (src/components/PlayerBody).
   const pr = p ? await getProfile(p.id) : null;
   const season = pr ? await getSeason(pr) : null;

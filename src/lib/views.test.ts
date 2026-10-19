@@ -79,3 +79,4 @@ describe("todayTable", () => {
     expect([...onNow.a, ...onNow.b].every((id) => !t.where[id] || t.where[id].onNow)).toBe(true);
   });
 });
+

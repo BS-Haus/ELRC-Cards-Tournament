@@ -25,7 +25,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
       <header className="flex flex-col items-center px-5 pt-[calc(22px+env(safe-area-inset-top))] pb-5 text-center">
         <RankAvatar p={player} rank={tierFor(pr).level} tag={pr.games < PROV_N ? `${pr.games}/${PROV_N}` : String(pr.rating)} />
         <h1 className="mt-5 text-[26px] font-black leading-tight tracking-[-.02em]">{player.name}</h1>
-        <div className="text-[11px] font-bold uppercase tracking-[.14em] text-accent">{mine ? "Your profile" : "Player"}</div>
+        <div className="spk-label text-accent">{mine ? "Your profile" : "Player"}</div>
         {!player.claimed && <p className="mt-2 text-[13px] text-dim">Added on the day. Join with this name on the Me tab to make it yours.</p>}
         {mine && !player.photo && <Link href="/me" className="mt-2 text-[13px] font-bold text-accent">+ Add a profile photo</Link>}
       </header>

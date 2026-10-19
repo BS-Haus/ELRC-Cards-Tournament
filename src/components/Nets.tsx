@@ -25,9 +25,11 @@ export function Face({ id, p, size = 46, dim = false }: { id: string; p?: Player
 
 /** A net as a court: its name centred on top, one pair either side, and a ring to tap and score
  *  (or the score, once it's in). `note` is a line under it: what's next, or a warning. */
-export function Court({ title, tag, a, b, scoreA, scoreB, people, live, highlight = false, note, warn, onTap }: {
+export function Court({ title, tag, a, b, scoreA, scoreB, people, live, highlight = false, note, warn, onTap, orbit = false }: {
   title: string; tag?: string; a: string[]; b: string[]; scoreA: number | null; scoreB: number | null;
   people: Record<string, PlayerLite>; live: boolean; highlight?: boolean; note?: React.ReactNode; warn?: string; onTap: () => void;
+  /** A slow green light circling the edge: this net's game is on. */
+  orbit?: boolean;
 }) {
   const done = scoreA != null && scoreB != null;
   const aWon = done && scoreA! > scoreB!;
@@ -40,12 +42,12 @@ export function Court({ title, tag, a, b, scoreA, scoreB, people, live, highligh
   return (
     <motion.button
       layout transition={SOFT} whileTap={{ scale: 0.98 }} onClick={onTap}
-      className={`flex w-full flex-col items-center overflow-hidden rounded-3xl border pt-3 ${note || warn ? "pb-0" : "pb-4"} ${highlight ? "border-accent/30 bg-accent/[.06]" : "border-white/[.07] bg-surface"}`}
+      className={`${orbit ? "spk-orbit " : ""}flex w-full flex-col items-center overflow-hidden rounded-3xl border pt-3 ${note || warn ? "pb-0" : "pb-4"} ${highlight ? "border-accent/30 bg-accent/[.06]" : "border-white/[.07] bg-surface"}`}
       aria-label={`${title}${done ? `, ${scoreA}–${scoreB}` : ", tap to score"}`}
     >
       <div className="mb-3 flex items-center gap-2 px-3">
         <span className={`text-[15px] font-black ${highlight ? "text-accent" : "text-fg"}`}>{title}</span>
-        {tag && <span className="rounded-full bg-white/[.06] px-2 py-0.5 text-[10px] font-black uppercase tracking-[.1em] text-dim">{tag}</span>}
+        {tag && <span className="rounded-full bg-white/[.06] px-2 py-0.5 spk-label text-dim">{tag}</span>}
       </div>
       <div className="flex w-full items-center gap-2 px-3">
         {side(a, aWon)}
@@ -57,7 +59,7 @@ export function Court({ title, tag, a, b, scoreA, scoreB, people, live, highligh
               <span className="h-7 w-7 rounded-full border border-current" />
             </span>
           )}
-          {!done && live && <span className="mt-1.5 text-[9.5px] font-black uppercase tracking-[.12em] text-accent">Score</span>}
+          {!done && live && <span className="mt-1.5 spk-label text-accent">Score</span>}
         </div>
         {side(b, done && !aWon)}
       </div>
@@ -109,7 +111,7 @@ export function MatchResult({ res, people, move, onDone, doneLabel = "Done" }: {
             </span>
             {l.placingGame != null
               ? <span className="shrink-0 text-[12px] font-bold text-dim">🐣 {l.placingGame}/{PROV_N}</span>
-              : <span className={`tnum shrink-0 font-mono text-[17px] font-black ${l.delta >= 0 ? "text-accent" : "text-muted"}`}>{signed(l.delta)}</span>}
+              : <span className={`tnum shrink-0 font-mono text-[17px] font-black ${l.delta >= 0 ? "text-win" : "text-loss"}`}>{signed(l.delta)}</span>}
           </motion.div>
         ))}
       </div>

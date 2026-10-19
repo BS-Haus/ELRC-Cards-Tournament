@@ -98,3 +98,4 @@ export function todayTable(v: EventView): { rows: Line[]; out: Set<string>; wher
   }
   return { rows: rank(tally(v.games, ids).values()), out: new Set(v.entries.filter((e) => e.state === "out").map((e) => e.playerId)), where };
 }
+

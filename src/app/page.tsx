@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession, isOrganiser } from "@/lib/auth/session";
 import { getEventCards, liveNowId, type EventCard } from "@/lib/data";
 import { Header, Section, card, fmtDate } from "@/components/ui";
-import { RsvpButton, NewEvent } from "@/components/HomeBits";
+import { RsvpButton } from "@/components/HomeBits";
 
 export const dynamic = "force-dynamic";
 
@@ -56,12 +56,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
         </Section>
       )}
 
-      <Section title="Coming up" aside={org ? <NewEvent /> : undefined}>
+      <Section title="Coming up" aside={org ? <Link href="/organise" className="font-bold text-accent">Organise →</Link> : undefined}>
         {upcoming.length ? (
           <div className="grid gap-2.5">{upcoming.map((e) => <Row key={e.id} e={e} signedIn={!!s?.playerId} />)}</div>
         ) : (
           <div className={`${card} p-5 text-[14px] text-muted`}>
-            Nothing scheduled yet. {org ? "Tap New event to post the next one." : "The next session will appear here once it's posted in the WhatsApp group."}
+            Nothing scheduled yet. {org ? "Post the next one from Organise." : "The next session will appear here once it's posted in the WhatsApp group."}
           </div>
         )}
       </Section>
