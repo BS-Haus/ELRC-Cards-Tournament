@@ -26,7 +26,8 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   (`mixedOrder`), and the organiser can add another round, mixed or by level, before the finals.
   Scoring: tap a net, score it in the sheet, and the result (each player's rating change) shows
   in a small sheet. The draw stories and the finals banners stay; nothing else pops up mid-day.
-  The **Tournament** tab goes net by net: the game on the net now (tap to score it), then the
+  The **Tournament** tab goes net by net, one slide per net (swipe, or tap the net pills that stick
+  under the tabs; it opens on your net): the game on the net now (tap to score it), then the
   table and fixtures of the group playing there. The You tab shows your next game as the same court.
 
 Both feed the same ratings (`src/lib/standings.ts`).

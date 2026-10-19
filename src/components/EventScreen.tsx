@@ -175,15 +175,21 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
 
           {drawPending && <DrawVeil kind={current?.kind} />}
 
-          {/* Net by net: the game on it now (tap to score), then the table and fixtures of each
-              group playing there. */}
+          {/* Net by net, one slide each (swipe, or tap a net's pill): the game on it now (tap to
+              score), then the table and fixtures of each group playing there. Opens on your net. */}
           {current && !drawPending && (
             <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`} aside={live && queues.some((q) => q.length) ? "Tap a net to score it" : undefined}>
-              <div className="grid gap-6">
-                {netNumbers(queues, curGroups).map((n) => {
+              <NetCarousel
+                start={mine?.next[0]?.net ?? curGroups.find((g) => !!me && g.table.some((r) => r.id === me))?.net ?? 0}
+                slides={netNumbers(queues, curGroups).map((n) => {
                   const q = queues[n - 1] ?? [];
-                  return (
-                    <div key={n} className="grid gap-2.5">
+                  const onNet = curGroups.filter((g) => g.net === n);
+                  return {
+                    n, live: live && !!q[0],
+                    label: onNet.map((g) => (g.kind === "final" ? `${g.name} final` : `Group ${g.name}`)).join(" · ") || (q[0] ? gameLabel(q[0]) : "Free"),
+                    mine: !!me && onNet.some((g) => g.table.some((r) => r.id === me)),
+                    body: (
+                    <div className="grid gap-2.5">
                       {live && q[0] && (
                         <Court
                           title={`Net ${n}`} tag={`${gameLabel(q[0])} · game ${q[0].seq}`}
@@ -193,11 +199,12 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
                           onTap={() => setOpen(q[0].id)}
                         />
                       )}
-                      {curGroups.filter((g) => g.net === n).map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} cut={current.kind === "random" ? finalsCut(here.length, curGroups.length) : null} />)}
+                      {onNet.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} cut={current.kind === "random" ? finalsCut(here.length, curGroups.length) : null} />)}
                     </div>
-                  );
+                    ),
+                  };
                 })}
-              </div>
+              />
             </Section>
           )}
 
@@ -455,6 +462,62 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
 /** The nets to show, in order: every net with a game waiting or a group of this stage on it. */
 const netNumbers = (queues: Game[][], groups: GroupView[]) =>
   [...new Set([...queues.flatMap((q, i) => (q.length ? [i + 1] : [])), ...groups.map((g) => g.net)])].sort((a, b) => a - b);
+
+type NetSlide = { n: number; label: string; live: boolean; mine: boolean; body: React.ReactNode };
+const SLIDE_GAP = 16;
+
+/** The nets side by side: swipe between them, or tap a net's pill (they stick under the tabs, so
+ *  you can switch from halfway down a table). Opens on `start` (your net) and stays wherever you
+ *  swipe to through the page's refreshes. Its height follows the net on screen, so a short group
+ *  next to a long one leaves no gap. One net: no pills, no swiping. */
+function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState(() => Math.max(0, slides.findIndex((s) => s.n === start)));
+  const [h, setH] = useState<number>();
+  const step = () => (ref.current ? ref.current.clientWidth + SLIDE_GAP : 1);
+  // Land on your net without a scroll animation, once.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ref.current) ref.current.scrollLeft = at * step(); }, []);
+  useEffect(() => {
+    const el = ref.current?.children[at] as HTMLElement | undefined;
+    if (!el) return;
+    const fit = () => setH(el.offsetHeight);
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [at, slides.length]);
+  const i = Math.min(at, slides.length - 1);
+  if (slides.length < 2) return <>{slides[0]?.body}</>;
+  const go = (k: number) => ref.current?.scrollTo({ left: k * step(), behavior: "smooth" });
+  return (
+    <>
+      <div className="sticky top-[calc(env(safe-area-inset-top)+51px)] z-10 -mx-4 mb-2.5 bg-bg px-4 py-2">
+        <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Nets">
+          {slides.map((s, k) => (
+            <button key={s.n} role="tab" aria-selected={k === i} onClick={() => go(k)}
+              className={`spk-press flex shrink-0 flex-col items-start rounded-xl px-3 py-1.5 text-left ${k === i ? "bg-accent text-ink" : "border border-white/[.08] bg-surface text-fg"}`}>
+              <span className="flex items-center gap-1.5 text-[14px] font-black">
+                Net {s.n}
+                {s.live && <span className={`spk-live h-1.5 w-1.5 rounded-full ${k === i ? "bg-ink" : "bg-accent"}`} aria-label="game on" />}
+                {s.mine && <span className={`text-[10px] font-black uppercase tracking-[.08em] ${k === i ? "opacity-60" : "text-accent"}`}>you</span>}
+              </span>
+              <span className={`max-w-[9rem] truncate text-[11px] font-bold ${k === i ? "opacity-60" : "text-dim"}`}>{s.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div
+        ref={ref}
+        onScroll={() => { const k = Math.round((ref.current?.scrollLeft ?? 0) / step()); if (k !== at) setAt(k); }}
+        className="flex snap-x snap-mandatory items-start overflow-x-auto overflow-y-hidden overscroll-x-contain transition-[height] duration-300 [scrollbar-width:none]"
+        style={{ height: h, gap: SLIDE_GAP }}
+      >
+        {slides.map((s) => <div key={s.n} className="w-full shrink-0 snap-start snap-always">{s.body}</div>)}
+      </div>
+    </>
+  );
+}
 
 function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, cut = null }: { g: GroupView; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string; cut?: { sure: number; extra: number } | null }) {
   const final = g.kind === "final";
