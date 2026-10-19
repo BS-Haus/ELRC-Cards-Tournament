@@ -37,7 +37,8 @@ function nextSunday(): string {
 
 const LADDER_ON = false;
 
-export function NewEvent() {
+/** `organise`: posted from the Organise tab, so it lands back there on the new event. */
+export function NewEvent({ organise = false }: { organise?: boolean } = {}) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const { run, pending, toast } = useAction();
@@ -60,7 +61,7 @@ export function NewEvent() {
         onSubmit={(e) => {
           e.preventDefault();
           run(() => createEvent({ ...f, startsAt: new Date(f.startsAt).toISOString() }), "Event posted", (r) => {
-            if (r.ok && r.id) { setOpen(false); router.push(`/e/${r.id}`); }
+            if (r.ok && r.id) { setOpen(false); router.push(organise ? `/organise?e=${r.id}` : `/e/${r.id}`); }
           });
         }}
       >

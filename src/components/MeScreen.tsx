@@ -89,7 +89,7 @@ function OrganiserRow({ org, orgUntil, run, pending }: { org: boolean; orgUntil:
             {org && <span className="text-[12.5px] font-semibold text-muted">on until {fmtTime(orgUntil!)}</span>}
           </span>
           {org
-            ? <button disabled={pending} onClick={() => run(() => lockOrganiser(), "Locked")} className="spk-press text-[13px] font-bold text-muted">Lock</button>
+            ? <span className="flex items-center gap-4"><Link href="/organise" className="spk-press text-[13px] font-bold text-accent">Organise →</Link><button disabled={pending} onClick={() => run(() => lockOrganiser(), "Locked")} className="spk-press text-[13px] font-bold text-muted">Lock</button></span>
             : <button onClick={() => setOpen(!open)} className="spk-press text-[13px] font-bold text-accent">{open ? "Cancel" : "Unlock"}</button>}
         </div>
         {!org && open && (
@@ -99,6 +99,19 @@ function OrganiserRow({ org, orgUntil, run, pending }: { org: boolean; orgUntil:
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+/** On the Organise tab: how long the tools stay unlocked, and Lock (the tab goes with it). */
+export function OrganiserLock({ until }: { until: number | null }) {
+  const router = useRouter();
+  const { run, pending, toast } = useAction();
+  return (
+    <div className={`${card} flex min-h-12 items-center justify-between gap-3 px-4 py-2`}>
+      {toast}
+      <span className="text-[13.5px] text-muted">Unlocked{until ? ` until ${fmtTime(until)}` : ""}</span>
+      <button disabled={pending} onClick={() => run(() => lockOrganiser(), "Locked", (r) => { if (r.ok) router.push("/me"); })} className="spk-press text-[13px] font-bold text-muted">Lock</button>
     </div>
   );
 }

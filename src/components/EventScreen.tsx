@@ -24,7 +24,7 @@ const STAGE_TITLE: Record<StageKind, string> = { random: "Mixed groups", seeded:
  *  loaded on the server. */
 /** `drawPending`: you're in the newest stage but haven't watched its draw story yet, so its groups,
  *  nets and your next game stay hidden: the story is how you find out. */
-export function EventScreen({ view, me, org, roster, myXp = null, drawPending = false }: { view: EventView; me: string | null; org: boolean; roster: PlayerLite[]; myXp?: { before: number; after: number; games: number } | null; drawPending?: boolean }) {
+export function EventScreen({ view, me, org, myXp = null, drawPending = false }: { view: EventView; me: string | null; org: boolean; myXp?: { before: number; after: number; games: number } | null; drawPending?: boolean }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
   const [open, setOpen] = useState<string | null>(null); // game id in the score sheet
@@ -128,7 +128,6 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
         <>
           <CheckIn me={me} state={myEntry} eventId={ev.id} started={false} />
           <WhoIsIn view={view} />
-          {org && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} pool={inPool} />}
         </>
       )}
 
@@ -219,7 +218,6 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
             </Section>
           )}
 
-          {org && !done && <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={waiting} pool={inPool} />}
 
           {stages.length > 1 && (
             <Section title="Earlier stages">
@@ -239,11 +237,6 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
             </Section>
           )}
 
-          {org && done && (
-            <Section title="Organiser">
-              <button disabled={pending} onClick={() => run(() => reopenEvent(ev.id), "Event reopened")} className={btnGhost}>Reopen event</button>
-            </Section>
-          )}
 
         </>
       )}
@@ -489,6 +482,35 @@ function Podium({ groups, people }: { groups: GroupView[]; people: Record<string
 
 // ---------------------------------------------------------------------------------------------
 
+/** One event's organiser tools, on the Organise tab (src/app/organise): the next step (draw,
+ *  finals, undo, finish), editing groups, then check-in, game length and details. A finished
+ *  event can be reopened. Keeps itself fresh while the event's live. */
+export function OrganiserTools({ view, roster }: { view: EventView; roster: PlayerLite[] }) {
+  const router = useRouter();
+  const { run, pending, toast } = useAction();
+  const live = view.event.status === "live";
+  useEffect(() => {
+    if (!live) return;
+    const t = setInterval(() => { if (!document.hidden) router.refresh(); }, 5000);
+    return () => clearInterval(t);
+  }, [live, router]);
+  const here = drawPool(view.entries, view.games);
+  const cur = view.stages.at(-1);
+  const inCurrent = new Set((cur ? groupsOf(view, cur.no) : []).flatMap((g) => g.games.flatMap((x) => [...x.a, ...x.b])));
+  return (
+    <>
+      {toast}
+      {view.event.status === "done" ? (
+        <div className="px-4 pb-6">
+          <button disabled={pending} onClick={() => run(() => reopenEvent(view.event.id), "Event reopened")} className={`${btnGhost} w-full`}>Reopen event</button>
+        </div>
+      ) : (
+        <OrganiserPanel view={view} roster={roster} run={run} pending={pending} waiting={here.filter((id) => !inCurrent.has(id))} pool={new Set(here)} />
+      )}
+    </>
+  );
+}
+
 function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: EventView; roster: PlayerLite[]; run: Run; pending: boolean; waiting: string[]; pool: Set<string> }) {
   const { event: ev, entries, stages, games, people } = view;
   const [name, setName] = useState("");
@@ -508,7 +530,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
   const sorted = [...entries].sort((a, b) => (people[a.playerId]?.name ?? "").localeCompare(people[b.playerId]?.name ?? "") || a.playerId.localeCompare(b.playerId));
 
   return (
-    <Section title="Organiser">
+    <section className="px-4 pb-6">
       <div className={`${card} grid gap-4 p-4`}>
         <div>
           <div className="text-[15px] font-extrabold">{current ? "Next step" : "Start the tournament"}</div>
@@ -583,7 +605,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
           )}
         </Disclosure>
       </div>
-    </Section>
+    </section>
   );
 }
 

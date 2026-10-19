@@ -31,15 +31,14 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   table and fixtures of the group playing there. Live nets have a slow green light
   circling their edge. The page has no tabs of its own: your day is on Me while a tournament is
   on, right under your rating (`src/components/MyDay.tsx`): a small Today card (won–lost, points,
-  rating today, with your check-in folded underneath), then your results. Organiser tools sit at the
-  bottom of Me.
+  rating today, with your check-in folded underneath), then your results.
   Style: lime means live or act now (primary buttons, live dots, the glow on live nets); the selected net is a thin lime
   outline, other selected states white, gains green, losses red, titles gold; small labels all use `.spk-label`.
 
 Both feed the same ratings (`src/lib/standings.ts`).
 
 ## How a cards weekend runs
-1. **Organiser posts an event** (Events → + New event) and shares the link in WhatsApp.
+1. **Organiser posts an event** (Organise → + New event) and shares the link in WhatsApp.
 2. **Players tap the link → Join** (name + a 4-digit code, no email) → **I'm in**.
 3. **On the day:** people tap **I'm here**, or the organiser checks them in. Walk-ins can be added
    by name and claim the profile later by joining with the same name.
@@ -85,7 +84,10 @@ Both feed the same ratings (`src/lib/standings.ts`).
 - Anyone can view everything without signing in.
 - Signed-in players (name + 4-digit code) can add themselves, check in, enter scores and subs.
 - **Organiser tools** (post events, check people in, draw stages, finish) unlock for 12 hours with
-  the organiser code (`ORGANISER_CODE`) on the Me tab.
+  the organiser code (`ORGANISER_CODE`) on the Me tab, and then live on their own **Organise** tab
+  in the bottom nav (`src/app/organise`): pick the event, the next step, groups, check-in, game
+  length, details, post a new event, Lock. Only in-context bits stay on the event page (a decider
+  for a tied group, subbing someone in from the score sheet).
 - Code guesses are rate-limited per device and per name.
 
 ## Set up on Vercel (once)
