@@ -11,6 +11,7 @@ import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { ScoreBoxes } from "@/components/ScoreBoxes";
+import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
 import { finalsCut, netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
@@ -20,7 +21,7 @@ import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
 import { motion, LayoutGroup } from "motion/react";
 import { PROV_N } from "@/lib/standings";
 
-const STAGE_TITLE: Record<StageKind, string> = { random: "Random groups", seeded: "Seeded groups", final: "Finals" };
+const STAGE_TITLE: Record<StageKind, string> = { random: "Mixed groups", seeded: "Groups by level", final: "Finals", ladder: "Ladder" };
 
 /** `myXp`: your rating either side of this weekend so far, and your games in all (src/lib/standings.ts),
  *  loaded on the server. */
@@ -176,11 +177,17 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
           {drawPending && <DrawVeil kind={current?.kind} />}
 
           {!drawPending && live && queues.some((q) => q.length) && (
-            <Section title="On the nets" aside="Tap the winners, slide the score">
+            <Section title="On the nets" aside="Tap a net to score it">
               <div className="grid gap-2.5">
-                {queues.map((q, i) => (
-                  <NetCard key={i} net={i + 1} now={q[0]} next={q[1]} people={people} out={out} onOpen={setOpen} to={q[0] ? toFor(q[0]) : 0} canScore={!!me} />
-                ))}
+                {queues.map((q, i) => q[0] ? (
+                  <Court
+                    key={i} title={`Net ${i + 1}`} tag={`${gameLabel(q[0])} · game ${q[0].seq}`}
+                    a={q[0].a} b={q[0].b} scoreA={null} scoreB={null} people={people} live
+                    warn={needsSub(q[0], out).length ? `${needsSub(q[0], out).map((id) => p(id)?.name).join(" & ")} left: tap to sub someone in` : undefined}
+                    note={q[1] ? <>Next: <span className="text-fg">{teamLine(q[1].a, people, q[1].subs, out)}</span> vs <span className="text-fg">{teamLine(q[1].b, people, q[1].subs, out)}</span></> : undefined}
+                    onTap={() => setOpen(q[0].id)}
+                  />
+                ) : <div key={i} className={`${card} p-4 text-[14px] text-muted`}><b className="text-fg">Net {i + 1}</b> · free</div>)}
               </div>
             </Section>
           )}
@@ -449,29 +456,6 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
   )).reduce<React.ReactNode[]>((acc, x, i) => (i ? [...acc, " & ", x] : [x]), []);
 }
 
-/** A net: the game on it now, scored right here (tap the winners, slide the losers' score), and
- *  what's on after. The header opens the full sheet: subs, skipping, corrections. */
-function NetCard({ net, now, next, people, out, onOpen, to, canScore }: { net: number; now?: Game; next?: Game; people: Record<string, PlayerLite>; out: Set<string>; onOpen: (id: string) => void; to: number; canScore: boolean }) {
-  if (!now) return <div className={`${card} p-4 text-[14px] text-muted`}><b className="text-fg">Net {net}</b> · free</div>;
-  return (
-    <div className={`${card} overflow-hidden`}>
-      <div className="p-4">
-        <button onClick={() => onOpen(now.id)} className="spk-press flex w-full items-center justify-between text-[12px] font-bold uppercase tracking-[.1em]">
-          <span className="text-accent">Net {net} · on now</span>
-          <span className="text-dim">{gameLabel(now)} · game {now.seq} ›</span>
-        </button>
-        {needsSub(now, out).length > 0 && <div className="mt-2 text-[12.5px] font-semibold text-loss">{needsSub(now, out).map((id) => people[id]?.name).join(" & ")} left: tap above to sub someone in.</div>}
-        <div className="mt-3"><ScoreBoxes key={now.id} game={now} to={to} canScore={canScore} onOpen={() => onOpen(now.id)} people={people} /></div>
-      </div>
-      {next && (
-        <div className="border-t border-white/[.05] bg-panel px-4 py-2.5 text-[13px] text-muted">
-          Next: <span className="text-fg">{teamLine(next.a, people, next.subs, out)}</span> vs <span className="text-fg">{teamLine(next.b, people, next.subs, out)}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** `cut`: where the A final's line falls in a random group's table (finalsCut): the top `sure` are
  *  in, and with `extra` places left over, the next one might be. */
 function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, cut = null }: { g: GroupView; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string; cut?: { sure: number; extra: number } | null }) {
@@ -624,13 +608,16 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
           </p>
           <p className="mt-1 text-[13px] text-dim">{plan}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {!current && <button disabled={pending || here < 4} onClick={() => run(() => drawStage(ev.id, "random"), "Groups drawn")} className={btnPrimary}>Draw random groups</button>}
+            {!current && <button disabled={pending || here < 4} onClick={() => run(() => drawStage(ev.id, "random"), "Groups drawn")} className={btnPrimary}>Draw mixed groups</button>}
             {/* Two stages is the format: random groups, then A / B finals. A middle
                 "regroup by level" stage only earns its place in a big field (16+). */}
             {current && current.kind !== "final" && (
               <>
                 <button disabled={pending || here < 4} onClick={() => twice("final", () => run(() => drawStage(ev.id, "final"), "Finals drawn"))} className={stageDone ? btnPrimary : btnGhost}>{confirm === "final" ? "Tap again for finals" : "Start finals"}</button>
-                {here >= 16 && current.kind === "random" && <button disabled={pending} onClick={() => twice("seeded", () => run(() => drawStage(ev.id, "seeded"), "Next stage drawn"))} className={btnGhost}>{confirm === "seeded" ? "Tap again to draw" : "Extra stage: regroup by level"}</button>}
+                {/* Another round before the finals, whenever there are two or more groups: mixed
+                    again (levels spread, new groups) or by level (groups by the table). */}
+                {sizes.length >= 2 && <button disabled={pending} onClick={() => twice("random", () => run(() => drawStage(ev.id, "random"), "Another mixed round drawn"))} className={btnGhost}>{confirm === "random" ? "Tap again to draw" : "Another round: mixed"}</button>}
+                {sizes.length >= 2 && <button disabled={pending} onClick={() => twice("seeded", () => run(() => drawStage(ev.id, "seeded"), "Another round drawn by level"))} className={btnGhost}>{confirm === "seeded" ? "Tap again to draw" : "Another round: by level"}</button>}
               </>
             )}
             {current && <button disabled={pending} onClick={() => twice("undo", () => run(() => undoStage(ev.id), "Stage taken back"))} className={btnQuiet}>{confirm === "undo" ? "Tap again to undo" : "Undo last draw"}</button>}

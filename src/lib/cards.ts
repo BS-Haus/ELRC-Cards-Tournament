@@ -1,7 +1,8 @@
 // The cards format, as pure functions: no database, no React. Everything the event page shows
 // (who's on which net, group tables, finals winners) is derived from the list of games.
 
-export type StageKind = "random" | "seeded" | "final";
+/** "ladder" is one round of a ladder event (src/lib/netLadder.ts): one game per net. */
+export type StageKind = "random" | "seeded" | "final" | "ladder";
 export type GameStatus = "todo" | "done" | "void";
 
 export type Game = {
@@ -129,6 +130,28 @@ export function shuffle<T>(xs: T[], rnd: () => number = Math.random): T[] {
  * seeded and finals, so group A / the A final gets the top of the table. Groups share nets in turn,
  * and `ord` interleaves their games so two groups on one net alternate.
  */
+/**
+ * A mixed draw: every group gets a spread of levels. Everyone is ranked by rating and taken in
+ * bands as wide as the number of groups (the top band, the next, …); each group gets one player
+ * from each band, which group shuffled within the band. So the strong players are spread out to
+ * play with (and bring on) the newer ones, and no two draws are the same. Returns the players in
+ * group order, the order planStage slices them in.
+ */
+export function mixedOrder(ids: string[], rating: (id: string) => number, rnd: () => number = Math.random): string[] {
+  const sizes = splitSizes(ids.length);
+  if (!sizes.length) return shuffle(ids, rnd);
+  const sorted = [...ids].sort((a, b) => rating(b) - rating(a) || a.localeCompare(b));
+  const groups: string[][] = sizes.map(() => []);
+  let at = 0;
+  for (let k = 0; k < Math.max(...sizes); k++) {
+    const open = sizes.map((n, g) => (n > k ? g : -1)).filter((g) => g >= 0);
+    const band = shuffle(sorted.slice(at, at + open.length), rnd);
+    at += open.length;
+    open.forEach((g, i) => groups[g].push(band[i]));
+  }
+  return groups.flat();
+}
+
 export function planStage(kind: StageKind, ordered: string[], nets: number, rnd: () => number = Math.random): PlannedGroup[] {
   const sizes = splitSizes(ordered.length);
   const G = sizes.length;
@@ -388,7 +411,7 @@ export function decideTie(table: Line[], tied: [string, string], rnd: () => numb
 
 /** "Group A", "A final" or "Group A decider": what a game is, for headings. */
 export const gameLabel = (g: Pick<Game, "kind" | "groupName" | "decider">) =>
-  `${g.kind === "final" ? `${g.groupName} final` : `Group ${g.groupName}`}${g.decider ? " decider" : ""}`;
+  `${g.kind === "final" ? `${g.groupName} final` : g.kind === "ladder" ? g.groupName : `Group ${g.groupName}`}${g.decider ? " decider" : ""}`;
 
 /** Deciders are short: to 11, win by two. */
 export const DECIDER_TO = 11;

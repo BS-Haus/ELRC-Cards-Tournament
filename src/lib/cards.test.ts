@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalsCut, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, headToHead, finalName, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
+import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, headToHead, finalName, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -324,5 +324,34 @@ describe("finalsCut", () => {
   });
   it("too few for two finals: no line", () => {
     expect(finalsCut(7, 1)).toBeNull();
+  });
+});
+
+describe("mixedOrder (levels spread across the groups)", () => {
+  const rating = (id: string) => 1000 - Number(id.slice(1)) * 10; // p0 strongest
+  const seeded = (n: number) => { let s = n; return () => ((s = (s * 16807) % 2147483647) / 2147483647); };
+  const groupsOf = (order: string[]) => { const sizes = splitSizes(order.length); let at = 0; return sizes.map((k) => order.slice(at, (at += k))); };
+
+  it("gives every group one player from each level band", () => {
+    const groups = groupsOf(mixedOrder(ids(16), rating, seeded(3)));
+    expect(groups).toHaveLength(4);
+    for (let band = 0; band < 4; band++) {
+      const inBand = ids(16).slice(band * 4, band * 4 + 4);
+      for (const g of groups) expect(g.filter((id) => inBand.includes(id))).toHaveLength(1);
+    }
+  });
+
+  it("handles uneven groups and keeps everyone in exactly once", () => {
+    const order = mixedOrder(ids(9), rating, seeded(5));
+    expect([...order].sort()).toEqual([...ids(9)].sort());
+    const groups = groupsOf(order);
+    // The two strongest are never in the same group.
+    expect(groups.some((g) => g.includes("p0") && g.includes("p1"))).toBe(false);
+  });
+
+  it("draws different groups each time", () => {
+    const a = groupsOf(mixedOrder(ids(12), rating, seeded(1))).map((g) => [...g].sort().join());
+    const b = groupsOf(mixedOrder(ids(12), rating, seeded(99))).map((g) => [...g].sort().join());
+    expect(a).not.toEqual(b);
   });
 });

@@ -30,6 +30,9 @@ export const events = pgTable("events", {
   groupTo: integer("group_to").notNull().default(15),
   finalTo: integer("final_to").notNull().default(15),
   status: text("status").notNull().default("upcoming"), // upcoming | live | done
+  // How the day is played: "ladder" (nets top to bottom, win and go up; src/lib/netLadder.ts) or
+  // "cards" (groups, then finals; src/lib/cards.ts).
+  format: text("format").notNull().default("cards"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -51,7 +54,9 @@ export const stages = pgTable("stages", {
   id: uuid("id").primaryKey().defaultRandom(),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
   no: integer("no").notNull(),
-  kind: text("kind").notNull(), // random | seeded | final
+  kind: text("kind").notNull(), // random | seeded | final | ladder (one round of a ladder event)
+  // A ladder round's players sitting it out (src/lib/netLadder.ts rotates them); empty otherwise.
+  sitting: jsonb("sitting").$type<string[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

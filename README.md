@@ -7,7 +7,29 @@ every game, regroups by level, and finishes in Gold / Silver / Bronze finals.
 Built on the same stack and look as the club's ladder app ([spike-east](https://github.com/ttavni/spike-east)):
 Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
 
-## How a weekend runs
+## Two formats
+- **Ladder** (parked for now: the new-event form only offers Cards; flip `LADDER_ON` in
+  `src/components/HomeBits.tsx` to bring the choice back): nets ranked top to bottom. Everyone's seeded onto a net by rating;
+  each round is one game per net. Win and you go up a net, lose and you go down (the top net's
+  winners stay, as do the bottom net's losers). The four on each net are split into teams that
+  don't repeat a partnership from earlier in the day, picked at random among the splits close to
+  even (within `CLOSE_ENOUGH`, about 55/45), so it's a new partner every game and never stale.
+  With extra people it's king of the court: the pair who lose on the bottom net sit out, and
+  whoever sat out comes back on the bottom net. The next round draws itself the
+  moment the last net's score goes in. Games to 11, 15, 17 or 21. The **Live nets** tab is just
+  the nets: four faces each, ↑/↓ once a net's scored, everyone sliding to their new net when the
+  round turns. Tap a net to score it in a sheet, and the result (who goes up, who goes down, each
+  player's ±) shows in that sheet. The organiser can swap someone out of an unscored game there.
+  Check-in and "I have to leave" live on Me. The day ends with one story. Engine:
+  `src/lib/netLadder.ts`, screen: `src/components/LadderScreen.tsx`.
+- **Cards** (what new events use): groups, then finals, as below. Groups are mixed by rating
+  (`mixedOrder`), and the organiser can add another round, mixed or by level, before the finals.
+  Scoring: tap a net, score it in the sheet, and the result (each player's rating change) shows
+  in a small sheet. The draw stories and the finals banners stay; nothing else pops up mid-day.
+
+Both feed the same ratings (`src/lib/standings.ts`).
+
+## How a cards weekend runs
 1. **Organiser posts an event** (Events → + New event) and shares the link in WhatsApp.
 2. **Players tap the link → Join** (name + a 4-digit code, no email) → **I'm in**.
 3. **On the day:** people tap **I'm here**, or the organiser checks them in. Walk-ins can be added
@@ -84,7 +106,8 @@ npm run dev                    # http://localhost:3000, organiser code: dev-orga
 | `npm run db:generate` | new migration from `src/db/schema.ts` |
 
 ## Where things live
-- `src/lib/cards.ts`: the format as pure functions (group sizes, schedules, tables, subs). Tested in `cards.test.ts`.
+- `src/lib/netLadder.ts`: the ladder as pure functions (seeding, up and down, sitting out, teams, the day's story). Tested in `netLadder.test.ts`.
+- `src/lib/cards.ts`: the cards format as pure functions (group sizes, schedules, tables, subs). Tested in `cards.test.ts`.
 - `src/lib/views.ts`, `src/lib/data.ts`: what each page shows, from the database.
 - `src/app/actions.ts`: every change anyone can make, with its permission check.
 - `src/components/EventScreen.tsx`: the event page (sign-up, live nets, groups, finals, organiser panel).

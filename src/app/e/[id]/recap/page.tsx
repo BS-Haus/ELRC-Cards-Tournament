@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getSession } from "@/lib/auth/session";
-import { getRecap, getStory } from "@/lib/data";
+import { getRecap, getStory, getLadderStory } from "@/lib/data";
 import { RecapStory } from "@/components/RecapStory";
 import { TournamentStory } from "@/components/TournamentStory";
+import { LadderStory } from "@/components/LadderStory";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,12 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     const title = `${r.names[p]?.name}'s ${r.recap.event.title}`;
     return { title, openGraph: { title, images: [`/e/${id}/recap/image?p=${p}`] } };
   }
+  const l = await getLadderStory(id, null);
+  if (l) {
+    const top = l.story.earners[0];
+    const title = top ? `${l.names[top.id]?.name} climbs most at ${l.event.title}` : `${l.event.title}: the day`;
+    return { title, openGraph: { title, images: [`/e/${id}/recap/image`] } };
+  }
   const s = await getStory(id);
   if (!s) return {};
   const title = s.story.champion ? `${s.names[s.story.champion.id]?.name} wins ${s.story.event.title}` : `${s.story.event.title}: the story`;
@@ -35,6 +42,9 @@ export default async function RecapPage({ params, searchParams }: Props) {
   if (!UUID_RE.test(id)) notFound();
   const [p, session] = await Promise.all([playerParam(searchParams), getSession()]);
   const viewer = session?.playerId ?? null;
+  // A ladder day is one story: the day for everyone, then the viewer's own part.
+  const ladder = await getLadderStory(id, viewer);
+  if (ladder) return <LadderStory event={ladder.event} story={ladder.story} names={ladder.names} viewer={viewer} />;
   if (p) {
     const r = await getRecap(id, p);
     if (!r) notFound();

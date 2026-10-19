@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { players, eventPhotos } from "@/db/schema";
-import { getRecap, getStory } from "@/lib/data";
+import { getRecap, getStory, getLadderStory } from "@/lib/data";
 import { finalWinTitle } from "@/lib/cards";
 import { tierColor } from "@/components/ui";
 
@@ -94,7 +94,37 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
 /** The tournament's card, a podium: the A final's top three on their blocks (2nd, 1st, 3rd), the
  *  champion tallest with the crown, then every other final's winner and any records broken. */
+/** A ladder day's card: the date and numbers, then the biggest climbers. */
+async function ladderCard(l: NonNullable<Awaited<ReturnType<typeof getLadderStory>>>) {
+  const { event, story, names } = l;
+  const name = (pid: string) => names[pid]?.name ?? "Someone";
+  const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}`;
+  return new ImageResponse(
+    (
+      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", padding: 96, background: "linear-gradient(180deg, #1b2410 0%, #0c0e10 60%)", color: "#F4F5F6", fontFamily: "sans-serif" }}>
+        <div style={{ display: "flex", fontSize: 32, fontWeight: 700, letterSpacing: 6, color: "#CBFB4F", textTransform: "uppercase" }}>East London Roundnet</div>
+        <div style={{ display: "flex", fontSize: 104, fontWeight: 900, marginTop: 18, lineHeight: 1 }}>{event.title}</div>
+        <div style={{ display: "flex", fontSize: 40, color: "#C9CED2", marginTop: 14 }}>{`${when(event.startsAt)} · ${story.players} players · ${story.rounds} rounds`}</div>
+        <div style={{ display: "flex", fontSize: 36, letterSpacing: 6, color: "#CBFB4F", marginTop: "auto", textTransform: "uppercase" }}>Biggest climbers</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 28 }}>
+          {story.earners.map((e, i) => (
+            <div key={e.id} style={{ display: "flex", alignItems: "center", padding: "28px 36px", borderRadius: 32, background: i === 0 ? "rgba(203,251,79,.16)" : "rgba(255,255,255,.06)" }}>
+              <span style={{ display: "flex", width: 70, fontSize: 52, fontWeight: 900, color: i === 0 ? "#CBFB4F" : "#8A9196" }}>{String(i + 1)}</span>
+              <span style={{ display: "flex", flex: 1, fontSize: i === 0 ? 72 : 58, fontWeight: 900 }}>{name(e.id)}</span>
+              <span style={{ display: "flex", fontSize: i === 0 ? 72 : 58, fontWeight: 900, color: e.today >= 0 ? "#CBFB4F" : "#C9CED2" }}>{signed(e.today)}</span>
+            </div>
+          ))}
+        </div>
+        {story.king && <div style={{ display: "flex", fontSize: 40, color: "#FFCF5C", marginTop: 48 }}>{`👑 ${name(story.king.id)}: ${story.king.topWins} wins on the top net`}</div>}
+      </div>
+    ),
+    { width: 1080, height: 1920 },
+  );
+}
+
 async function storyCard(id: string) {
+  const l = await getLadderStory(id, null);
+  if (l) return ladderCard(l);
   const r = await getStory(id);
   if (!r) return new Response("Not found", { status: 404 });
   const { story, names } = r;
