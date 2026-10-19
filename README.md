@@ -30,8 +30,9 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   (swipe, or tap a net in the switch that sticks to the top; it opens on your net): the game on the net now (tap to score it), then the
   table and fixtures of the group playing there. Live nets have a slow green light
   circling their edge. The page has no tabs of its own: your day is on Me while a tournament is
-  on, right under your rating (`src/components/MyDay.tsx`): your games today with won–lost, points
-  and rating today, then your check-in folded into one line. A dot on Tournament means your game is on.
+  on, right under your rating (`src/components/MyDay.tsx`): a small Today card (won–lost, points,
+  rating today, with your check-in folded underneath), then your results. Organiser tools sit at the
+  bottom of Me. A dot on Tournament means your game is on.
 
 Both feed the same ratings (`src/lib/standings.ts`).
 

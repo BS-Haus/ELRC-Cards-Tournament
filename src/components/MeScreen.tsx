@@ -40,8 +40,6 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
         <Header eyebrow="East London Roundnet" title="Join in" />
       )}
 
-      <OrganiserRow org={org} orgUntil={orgUntil} run={run} pending={pending} />
-
       {!me ? (
         <JoinFlow onDone={go} />
       ) : (
@@ -62,6 +60,9 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
         })()}
         </>
       )}
+
+      {/* Organiser tools: only a few people need them, so they sit at the bottom. */}
+      <OrganiserRow org={org} orgUntil={orgUntil} run={run} pending={pending} />
 
       {me && (
         <div className="px-4 pt-2 pb-8">

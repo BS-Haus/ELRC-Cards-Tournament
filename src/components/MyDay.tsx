@@ -3,23 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { setMyEntry } from "@/app/actions";
 import { useAction } from "@/components/useAction";
 import { pingMoments } from "@/components/LevelMoments";
 import { Shuffle } from "@/components/DrawSlides";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
-import { Disclosure } from "@/components/kit";
 import { card } from "@/components/ui";
 import { drawPool, DECIDER_TO, type Game, type StageKind } from "@/lib/cards";
 import { groupsOf, myDay, myCheckIn, type MyGame } from "@/lib/views";
 import type { EventView } from "@/lib/data";
 import { PROV_N } from "@/lib/standings";
 
-// Your day at today's tournament, on the Me tab, just under your rating: how the day's gone (your
-// games, tap one for its result), then your check-in folded into one line. The tournament page is
-// the shared screen (every net, every table), so it has no tabs of its own.
+// Your day at today's tournament, on the Me tab, under your rating: a small Today card (the day in
+// three numbers, your check-in folded underneath), then your results (tap a game for its result). The tournament page is the shared screen (every net, every table), so it has no
+// tabs of its own.
 
 /** Tell the bottom nav whether your game is on now (a dot on Tournament). Kept as well as sent,
  *  since the page can say so before the nav is listening. */
@@ -70,25 +69,30 @@ export function MyDay({ view, me, org, xp, veiled }: {
 
   return (
     <>
+      {/* Today: the day in three numbers, and your check-in folded underneath. */}
+      <div className={`${card} overflow-hidden`}>
+        {day.played.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-3">
+            <span className="shrink-0 text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</span>
+            <span className="flex min-w-0 flex-1 items-baseline justify-end gap-4 tnum">
+              {([[`${day.line.w}–${day.line.l}`, "W–L"], [`${pd > 0 ? "+" : ""}${pd}`, "pts"], xp && xp.games < PROV_N ? [`${xp.games}/${PROV_N}`, "placing"] : [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "rating"]] as const).map(([v, l]) => (
+                <span key={l} className="whitespace-nowrap"><b className="text-[16px] font-black">{v}</b> <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-dim">{l}</span></span>
+              ))}
+            </span>
+          </div>
+        )}
+        <CheckInRow view={view} me={me} org={org} divided={day.played.length > 0} />
+      </div>
+
       {day.played.length > 0 && (
         <div className={`${card} overflow-hidden`}>
-          <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
-            <span className="text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</span>
+          <div className="flex items-baseline justify-between gap-3 px-4 pt-3 pb-1">
+            <span className="text-[12px] font-bold uppercase tracking-[.12em] text-muted">Your results</span>
             {!veiled && myGroup && place > 0 && <span className="text-[12px] text-dim">{ordinal(place)} in {myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}</span>}
-          </div>
-          <div className="grid grid-cols-3 text-center">
-            {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], xp && xp.games < PROV_N ? [`${xp.games}/${PROV_N}`, "placing"] : [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "rating today"]] as const).map(([v, l]) => (
-              <div key={l} className="py-2.5">
-                <div className="tnum text-[20px] font-black">{v}</div>
-                <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">{l}</div>
-              </div>
-            ))}
           </div>
           {day.played.map((x) => <MyGameRow key={x.game.id} x={x} name={name} onOpen={setOpen} />)}
         </div>
       )}
-
-      <CheckInRow view={view} me={me} org={org} />
 
       {openGame && (
         <ScoreSheet
@@ -101,35 +105,47 @@ export function MyDay({ view, me, org, xp, veiled }: {
   );
 }
 
-/** Your check-in, folded into one line ("Saturday cards · Checked in"). Open it to leave (or come
- *  back), add photos, or go to the tournament. */
-function CheckInRow({ view, me, org }: { view: EventView; me: string; org: boolean }) {
+/** Your check-in, one line inside the Today card ("● Saturday cards · Checked in ›"). Open it to
+ *  leave (or come back), add photos, or go to the tournament. */
+function CheckInRow({ view, me, org, divided }: { view: EventView; me: string; org: boolean; divided: boolean }) {
   const { run, pending, toast } = useAction();
+  const [open, setOpen] = useState(false);
   const ev = view.event;
   const state = myCheckIn(view.entries, view.games, me);
   const here = state === "here";
   const set = (s: "here" | "out", msg: string) => run(() => setMyEntry(ev.id, s), msg);
   return (
-    <>
+    <div className={divided ? "border-t border-white/[.05]" : ""}>
       {toast}
-      <Disclosure
-        title={<span className="flex items-center gap-2">{ev.status === "live" && <span className="spk-ping h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />}<span className="truncate">{ev.title}</span></span>}
-        teaser={<span className={here ? "text-accent" : state === "out" ? "text-loss" : ""}>{here ? "Checked in" : state === "out" ? "Left" : "Not checked in"}</span>}
-      >
-        <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[.06] bg-panel p-1" role="radiogroup" aria-label="Your check-in">
-          <button role="radio" aria-checked={here} disabled={pending || here} onClick={() => set("here", "Checked in. You'll join the next stage")} className={`spk-press flex h-10 items-center justify-center gap-1.5 rounded-lg text-[14px] font-black ${here ? "bg-accent text-ink" : "text-muted"}`}>
-            {here && <span aria-hidden="true">✓</span>}{here ? "Checked in" : "I'm here"}
-          </button>
-          <button role="radio" aria-checked={state === "out"} disabled={pending || state === "out"} onClick={() => set("out", "Marked as left. Your remaining games will get a sub")} className={`spk-press h-10 rounded-lg text-[14px] font-black ${state === "out" ? "bg-loss/20 text-loss" : "text-muted"}`}>
-            {state === "out" ? "Left" : "I have to leave"}
-          </button>
-        </div>
-        <div className="mt-3.5">
-          <EventPhotos bare eventId={ev.id} photos={view.photos} me={me} org={org} />
-        </div>
-        <Link href={`/e/${ev.id}`} className="spk-press mt-3 block text-[13px] font-bold text-accent">Go to the tournament →</Link>
-      </Disclosure>
-    </>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="spk-press flex w-full items-center gap-2.5 px-4 py-3 text-left">
+        {ev.status === "live" && <span className="spk-ping h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />}
+        <span className="min-w-0 flex-1 truncate text-[13.5px] font-bold">{ev.title}</span>
+        <span className={`shrink-0 text-[12.5px] font-bold ${here ? "text-accent" : state === "out" ? "text-loss" : "text-dim"}`}>{here ? "Checked in" : state === "out" ? "Left" : "Not checked in"}</span>
+        <motion.span animate={{ rotate: open ? 90 : 0 }} className="flex shrink-0 text-dimmer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="px-4 pb-4">
+              <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[.06] bg-panel p-1" role="radiogroup" aria-label="Your check-in">
+                <button role="radio" aria-checked={here} disabled={pending || here} onClick={() => set("here", "Checked in. You'll join the next stage")} className={`spk-press flex h-10 items-center justify-center gap-1.5 rounded-lg text-[14px] font-black ${here ? "bg-accent text-ink" : "text-muted"}`}>
+                  {here && <span aria-hidden="true">✓</span>}{here ? "Checked in" : "I'm here"}
+                </button>
+                <button role="radio" aria-checked={state === "out"} disabled={pending || state === "out"} onClick={() => set("out", "Marked as left. Your remaining games will get a sub")} className={`spk-press h-10 rounded-lg text-[14px] font-black ${state === "out" ? "bg-loss/20 text-loss" : "text-muted"}`}>
+                  {state === "out" ? "Left" : "I have to leave"}
+                </button>
+              </div>
+              <div className="mt-3.5">
+                <EventPhotos bare eventId={ev.id} photos={view.photos} me={me} org={org} />
+              </div>
+              <Link href={`/e/${ev.id}`} className="spk-press mt-3 block text-[13px] font-bold text-accent">Go to the tournament →</Link>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
