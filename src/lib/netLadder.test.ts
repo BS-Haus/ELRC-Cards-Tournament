@@ -63,30 +63,42 @@ describe("moving up and down", () => {
   });
 });
 
-describe("sitting out", () => {
-  it("takes turns: nobody sits twice before everyone has sat once, and never two rounds running", () => {
+describe("sitting out (king of the court)", () => {
+  it("sits the pair who lost on the bottom net, and brings the sitters back on the bottom net", () => {
     const people = ids(10); // 2 nets of 4, 2 sit each round
-    let rounds: PlayedRound[] = [play(firstRound(people, rating, 2))];
-    for (let i = 0; i < 4; i++) {
-      const next = nextRound(rounds, people, rating, 2)!;
-      for (const id of next.sitting) expect(rounds.at(-1)!.sitting).not.toContain(id);
-      rounds = [...rounds, play(next)];
-    }
-    const sat = new Map<string, number>();
-    for (const r of rounds) for (const id of r.sitting) sat.set(id, (sat.get(id) ?? 0) + 1);
-    expect(sat.size).toBe(10); // 5 rounds × 2 = everyone once
-    expect(Math.max(...sat.values())).toBe(1);
+    const r1 = play(firstRound(people, rating, 2)); // side A wins every net
+    const r2 = nextRound([r1], people, rating, 2)!;
+    const bottomLosers = r1.games.find((g) => g.net === 2)!.b;
+    expect([...r2.sitting].sort()).toEqual([...bottomLosers].sort());
+    const bottom2 = r2.games.find((g) => g.net === 2)!;
+    for (const id of r1.sitting) expect([...bottom2.a, ...bottom2.b]).toContain(id);
   });
 
-  it("brings someone back in on the net they left", () => {
+  it("never sits the same people two rounds running, even when they lose on the bottom again", () => {
+    const people = ids(10);
+    let rounds: PlayedRound[] = [play(firstRound(people, rating, 2))];
+    for (let i = 0; i < 5; i++) {
+      const next = nextRound(rounds, people, rating, 2)!;
+      for (const id of next.sitting) expect(rounds.at(-1)!.sitting).not.toContain(id);
+      rounds = [...rounds, play(next, (n) => n !== 2)]; // the bottom net's B side always wins
+    }
+  });
+
+  it("sits one of the bottom losers when only one has to sit, the one who's sat least", () => {
     const people = ids(9); // 2 nets, 1 sits
     const r1 = play(firstRound(people, rating, 2));
     const r2 = nextRound([r1], people, rating, 2)!;
-    const p2 = play(r2);
-    const r3 = nextRound([r1, p2], people, rating, 2)!;
-    const back = p2.sitting[0];
-    const left = r1.games.find((g) => [...g.a, ...g.b].includes(back))?.net;
-    if (left) expect(r3.games.find((g) => [...g.a, ...g.b].includes(back))?.net).toBe(left);
+    expect(r2.sitting).toHaveLength(1);
+    expect(r1.games.find((g) => g.net === 2)!.b).toContain(r2.sitting[0]);
+  });
+
+  it("falls back to taking turns when the bottom net wasn't played", () => {
+    const people = ids(10);
+    const r1 = play(firstRound(people, rating, 2));
+    const unplayed: PlayedRound = { ...r1, games: r1.games.map((g) => (g.net === 2 ? { ...g, scoreA: null, scoreB: null } : g)) };
+    const r2 = nextRound([unplayed], people, rating, 2)!;
+    expect(r2.sitting).toHaveLength(2);
+    for (const id of r2.sitting) expect(r1.sitting).not.toContain(id);
   });
 });
 

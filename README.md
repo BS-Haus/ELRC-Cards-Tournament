@@ -12,7 +12,8 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   each round is one game per net. Win and you go up a net, lose and you go down (the top net's
   winners stay, as do the bottom net's losers). The four on each net are split into the fairest
   teams that don't repeat a partnership from earlier in the day, so it's a new partner every game.
-  Extra people sit out in turn and come back on the net they left. The next round draws itself the
+  With extra people it's king of the court: the pair who lose on the bottom net sit out, and
+  whoever sat out comes back on the bottom net. The next round draws itself the
   moment the last net's score goes in. Games to 11, 15, 17 or 21. The **Live nets** tab is just
   the nets: four faces each, ↑/↓ once a net's scored, everyone sliding to their new net when the
   round turns. Tap a net to score it in a sheet, and the result (who goes up, who goes down, each

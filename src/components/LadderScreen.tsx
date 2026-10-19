@@ -76,11 +76,11 @@ export function LadderScreen({ view, me, org, roster }: { view: EventView; me: s
           </div>
           <LayoutGroup>
             <div className="grid gap-2.5">
-              {now.map((g) => <NetCourt key={g.net} g={g} nets={now.length} people={people} live={live} onTap={() => setOpen(g.id)} />)}
+              {now.map((g) => <NetCourt key={g.net} g={g} nets={now.length} people={people} live={live} dropOff={current.sitting.length > 0} onTap={() => setOpen(g.id)} />)}
             </div>
             {current.sitting.length > 0 && (
               <div className="mt-3 flex items-center gap-3 rounded-2xl border border-dashed border-white/10 px-4 py-3">
-                <span className="shrink-0 text-[11px] font-black uppercase tracking-[.14em] text-dim">Sitting out</span>
+                <span className="shrink-0 text-[11px] font-black uppercase tracking-[.14em] text-dim">Sitting out<span className="mt-0.5 block text-[10px] font-bold normal-case tracking-normal text-dimmer">back in on Net {now.length}</span></span>
                 <div className="flex flex-wrap gap-2">
                   {current.sitting.map((id) => <Face key={id} id={id} p={people[id]} dim />)}
                 </div>
@@ -94,7 +94,7 @@ export function LadderScreen({ view, me, org, roster }: { view: EventView; me: s
       {org && <Organiser view={view} roster={roster} here={here} playingNow={playingNow} run={run} pending={pending} />}
 
       <AnimatePresence>
-        {openGame && <NetSheet key={openGame.id} g={openGame} nets={Math.max(1, games.filter((x) => x.stageNo === openGame.stageNo && x.status !== "void").length)} people={people} to={ev.groupTo} me={me} org={org} candidates={here.filter((id) => !playingNow.has(id))} onClose={() => { setOpen(null); router.refresh(); }} />}
+        {openGame && <NetSheet key={openGame.id} g={openGame} dropOff={(stages.find((x) => x.no === openGame.stageNo)?.sitting.length ?? 0) > 0} nets={Math.max(1, games.filter((x) => x.stageNo === openGame.stageNo && x.status !== "void").length)} people={people} to={ev.groupTo} me={me} org={org} candidates={here.filter((id) => !playingNow.has(id))} onClose={() => { setOpen(null); router.refresh(); }} />}
       </AnimatePresence>
     </main>
   );
@@ -106,7 +106,7 @@ function Face({ id, p, size = 40, dim = false, badge }: { id: string; p?: Player
     <motion.div layoutId={`face-${id}`} transition={SOFT} className="relative flex flex-col items-center">
       <Avatar p={p} size={size} dim={dim} />
       {badge && (
-        <span className={`absolute -right-1 -top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full text-[11px] font-black ${badge === "up" ? "bg-win text-ink" : "bg-loss text-ink"}`} aria-label={badge === "up" ? "going up" : "going down"}>
+        <span className={`absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full text-[12px] font-black ring-2 ring-bg ${badge === "up" ? "bg-win text-ink" : "bg-loss text-ink"}`} aria-label={badge === "up" ? "going up" : "going down"}>
           {badge === "up" ? "↑" : "↓"}
         </span>
       )}
@@ -114,41 +114,45 @@ function Face({ id, p, size = 40, dim = false, badge }: { id: string; p?: Player
   );
 }
 
-/** A net as a little court: the net number on the left, each pair either side of the net, and
- *  once it's scored, the winners lit with ↑ and the losers dimmed with ↓. */
-function NetCourt({ g, nets, people, live, onTap }: { g: Game; nets: number; people: Record<string, PlayerLite>; live: boolean; onTap: () => void }) {
+/** A net as a little court, symmetrical: the net's name centred on top, one pair either side of
+ *  the net, and once it's scored, the winners lit with ↑ and the losers dimmed with ↓. */
+/** `dropOff`: there are people sitting out, so the bottom net's losers sit out next (king of the court). */
+function NetCourt({ g, nets, people, live, dropOff, onTap }: { g: Game; nets: number; people: Record<string, PlayerLite>; live: boolean; dropOff: boolean; onTap: () => void }) {
   const done = g.status === "done";
   const aWon = done && g.scoreA! > g.scoreB!;
-  const side = (ids: string[], won: boolean, right: boolean) => (
-    <div className={`flex min-w-0 flex-1 flex-col gap-1.5 ${right ? "items-end" : "items-start"}`}>
-      <div className={`flex gap-1.5 ${right ? "flex-row-reverse" : ""}`}>
-        {ids.map((id) => <Face key={id} id={id} p={people[id]} size={38} dim={done && !won} badge={done ? (won ? (g.net === 1 ? undefined : "up") : g.net === nets ? undefined : "down") : undefined} />)}
+  const top = g.net === 1, bottom = g.net === nets && nets > 1;
+  const side = (ids: string[], won: boolean) => (
+    <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
+      <div className="flex -space-x-1.5">
+        {ids.map((id) => <Face key={id} id={id} p={people[id]} size={50} dim={done && !won} badge={done ? (won ? (top ? undefined : "up") : bottom && !dropOff ? undefined : "down") : undefined} />)}
       </div>
-      <span className={`w-full truncate text-[12.5px] font-bold ${right ? "text-right" : ""} ${done ? (won ? "text-fg" : "text-dim") : "text-fg/85"}`}>{ids.map((id) => people[id]?.name ?? "?").join(" & ")}</span>
+      <span className={`w-full truncate text-center text-[13.5px] font-bold ${done ? (won ? "text-fg" : "text-dim") : "text-fg/90"}`}>{ids.map((id) => people[id]?.name ?? "?").join(" & ")}</span>
     </div>
   );
   return (
     <motion.button
       layout transition={SOFT} whileTap={{ scale: 0.98 }} onClick={onTap}
-      className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left ${done ? "border-white/[.05] bg-surface/60" : g.net === 1 ? "border-accent/30 bg-accent/[.06]" : "border-white/[.07] bg-surface"}`}
+      className={`flex w-full flex-col items-center rounded-3xl border px-3 pb-4 pt-3 ${done ? "border-white/[.05] bg-surface/60" : top ? "border-accent/30 bg-accent/[.06]" : "border-white/[.07] bg-surface"}`}
       aria-label={`Net ${g.net}${done ? `, ${g.scoreA}–${g.scoreB}` : ", tap to score"}`}
     >
-      <div className="flex w-9 shrink-0 flex-col items-center">
-        <span className={`font-mono text-[24px] font-black leading-none ${g.net === 1 ? "text-accent" : "text-fg"}`}>{g.net}</span>
-        <span className="mt-1 text-[8.5px] font-black uppercase tracking-[.12em] text-dim">{g.net === 1 ? "Top" : g.net === nets ? "Bottom" : "Net"}</span>
+      <div className="mb-3 flex items-center gap-2">
+        <span className={`text-[15px] font-black ${top ? "text-accent" : "text-fg"}`}>Net {g.net}</span>
+        {(top || bottom) && <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-black uppercase tracking-[.12em] ${top ? "bg-accent/15 text-accent" : "bg-white/[.06] text-dim"}`}>{top ? "Top" : "Bottom"}</span>}
       </div>
-      {side(g.a, aWon, false)}
-      <div className="flex w-14 shrink-0 flex-col items-center">
-        {done ? (
-          <span className="tnum font-mono text-[15px] font-black"><span className={aWon ? "text-accent" : "text-dim"}>{g.scoreA}</span><span className="text-dimmer">–</span><span className={!aWon ? "text-accent" : "text-dim"}>{g.scoreB}</span></span>
-        ) : (
-          <span className={`flex h-12 w-12 items-center justify-center rounded-full border-2 ${live ? "spk-live border-accent/70 text-accent" : "border-white/15 text-dim"}`} aria-hidden="true">
-            <span className="h-6 w-6 rounded-full border border-current" />
-          </span>
-        )}
-        {!done && live && <span className="mt-1 text-[9px] font-black uppercase tracking-[.1em] text-accent">Score</span>}
+      <div className="flex w-full items-center gap-2">
+        {side(g.a, aWon)}
+        <div className="flex w-16 shrink-0 flex-col items-center">
+          {done ? (
+            <span className="tnum font-mono text-[20px] font-black"><span className={aWon ? "text-accent" : "text-dim"}>{g.scoreA}</span><span className="text-dimmer">–</span><span className={!aWon ? "text-accent" : "text-dim"}>{g.scoreB}</span></span>
+          ) : (
+            <span className={`flex h-14 w-14 items-center justify-center rounded-full border-2 ${live ? "spk-live border-accent/70 text-accent" : "border-white/15 text-dim"}`} aria-hidden="true">
+              <span className="h-7 w-7 rounded-full border border-current" />
+            </span>
+          )}
+          {!done && live && <span className="mt-1.5 text-[9.5px] font-black uppercase tracking-[.12em] text-accent">Score</span>}
+        </div>
+        {side(g.b, done && !aWon)}
       </div>
-      {side(g.b, done && !aWon, true)}
     </motion.button>
   );
 }
@@ -173,7 +177,7 @@ function Waiting({ view, me }: { view: EventView; me: string | null }) {
 
 /** Tap a net: score it (tap the winners, slide the score), then see the result right here: who's
  *  going up and down, and everyone's ±. A scored net opens straight to its result. */
-function NetSheet({ g, nets, people, to, me, org, candidates, onClose }: { g: Game; nets: number; people: Record<string, PlayerLite>; to: number; me: string | null; org: boolean; candidates: string[]; onClose: () => void }) {
+function NetSheet({ g, nets, dropOff, people, to, me, org, candidates, onClose }: { g: Game; nets: number; dropOff: boolean; people: Record<string, PlayerLite>; to: number; me: string | null; org: boolean; candidates: string[]; onClose: () => void }) {
   const { run, pending, toast } = useAction();
   const [res, setRes] = useState<Moments | null>(null);
   const [loading, setLoading] = useState(g.status === "done");
@@ -204,7 +208,7 @@ function NetSheet({ g, nets, people, to, me, org, candidates, onClose }: { g: Ga
             </div>
             <div className="mt-4 grid gap-2">
               {[...match.lines].sort((x, y) => Number(y.won) - Number(x.won)).map((l) => {
-                const move = l.won ? (g.net === 1 ? "Stays on top" : `Up to Net ${g.net - 1}`) : g.net >= nets ? "Stays at the bottom" : `Down to Net ${g.net + 1}`;
+                const move = l.won ? (g.net === 1 ? "Stays on top" : `Up to Net ${g.net - 1}`) : g.net >= nets ? (dropOff ? "Sits out next round" : "Stays at the bottom") : `Down to Net ${g.net + 1}`;
                 return (
                   <motion.div key={l.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={SOFT} className="flex items-center gap-3 rounded-xl bg-panel px-3 py-2.5">
                     <Avatar p={people[l.id]} size={32} dim={!l.won} />
@@ -292,7 +296,7 @@ function Organiser({ view, roster, here, playingNow, run, pending }: { view: Eve
     <Section title="Organiser">
       <div className="grid gap-2">
         <div className={`${card} p-4`}>
-          <p className="text-[13px] text-muted">{here.length} here · {used ? `${used} net${used === 1 ? "" : "s"}` : "need 4"}{used && here.length > used * 4 ? ` · ${here.length - used * 4} sit out in turn` : ""}</p>
+          <p className="text-[13px] text-muted">{here.length} here · {used ? `${used} net${used === 1 ? "" : "s"}` : "need 4"}{used && here.length > used * 4 ? ` · ${here.length - used * 4} sitting out (bottom net's losers swap with them)` : ""}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {!current && <button disabled={pending || here.length < 4} onClick={() => run(() => startLadder(ev.id), "Ladder started")} className={btnPrimary}>Start the ladder</button>}
             {current && unplayed > 0 && <button disabled={pending} onClick={() => twice("next", () => run(() => nextLadderRound(ev.id), "Next round drawn"))} className={btnGhost}>{confirm === "next" ? "Tap again: skip unscored" : "Next round now"}</button>}

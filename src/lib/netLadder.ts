@@ -3,7 +3,8 @@
 // losers stay at the bottom. On each net the four players are split into the two fairest teams
 // that don't repeat a partnership from earlier in the day, so you play with someone new every game.
 // The first round is seeded by rating, so the games are close from the start. If there are more
-// players than places, people take turns to sit out, and come back in on the net they left.
+// players than places it's king of the court: lose on the bottom net and you sit out, and whoever
+// was sitting out comes back on the bottom net.
 //
 // Pure: who's here, their ratings and the rounds so far in, the next round out.
 
@@ -104,11 +105,25 @@ export function nextRound(rounds: PlayedRound[], present: string[], rating: (id:
     target.set(id, clamp(lastNet.get(id) ?? Math.floor(byRating.indexOf(id) / 4) + 1));
   }
 
-  // Who sits out this round, if there are more people than places.
+  // Who sits out this round, if there are more people than places: king of the court. The pair
+  // who lost on the bottom net drop off and sit out, and whoever sat out comes back on the bottom
+  // net. If more (or fewer) need to sit than lost down there, the rest are whoever's sat least.
   const sits = new Map<string, number>();
   for (const r of rounds) for (const id of r.sitting) sits.set(id, (sits.get(id) ?? 0) + 1);
   const ids = present.filter((id) => here.has(id));
-  const sitting = chooseSitters(ids, ids.length - n * 4, sits, new Set(last.sitting), rounds.length + 1);
+  const need = Math.max(0, ids.length - n * 4);
+  const satLast = new Set(last.sitting);
+  const bottom = Math.max(0, ...last.games.map((g) => g.net));
+  const lastBottom = last.games.find((g) => g.net === bottom && g.scoreA != null && g.scoreB != null);
+  const droppedOff = lastBottom ? (lastBottom.scoreA! > lastBottom.scoreB! ? lastBottom.b : lastBottom.a).filter((id) => here.has(id)) : [];
+  const sitting = new Set(
+    [...droppedOff].sort((x, y) => (sits.get(x) ?? 0) - (sits.get(y) ?? 0) || rating(x) - rating(y) || x.localeCompare(y)).slice(0, need),
+  );
+  if (sitting.size < need) {
+    for (const id of chooseSitters(ids.filter((id) => !sitting.has(id)), need - sitting.size, sits, satLast, rounds.length + 1)) sitting.add(id);
+  }
+  // Back from sitting out: onto the bottom net.
+  for (const id of satLast) if (here.has(id) && !sitting.has(id)) target.set(id, n);
 
   // Fill the nets top to bottom: by where each person is headed, then by rating, so a net with
   // too many people sends its lowest-rated down and one with too few takes the next best up.
