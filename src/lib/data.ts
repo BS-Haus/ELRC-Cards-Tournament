@@ -435,9 +435,12 @@ export async function gameStory(playerId: string, gameId: string): Promise<Momen
 export async function gameResult(gameId: string, viewer: string | null): Promise<(Moments & { played: boolean }) | null> {
   const { ps, evs, gs } = await everything();
   const g = gs.find((x) => x.id === gameId);
-  const me = viewer ? ps.find((x) => x.id === viewer) : undefined;
-  if (!g || g.status !== "done" || !me) return null;
+  const viewerRow = viewer ? ps.find((x) => x.id === viewer) : undefined;
+  if (!g || g.status !== "done") return null;
   const ev = evs.find((e) => e.id === g.eventId);
+  // Anyone can look at a ladder net's result, signed in or not; elsewhere it's the scorer's card.
+  const me = viewerRow ?? (ev?.format === "ladder" ? ps.find((x) => x.id === g.a[0]) : undefined);
+  if (!me) return null;
   // On a ladder it's one small card, like the ranked app's: the game for everyone, then where
   // everyone goes next. Nothing personal follows it.
   const isLadder = ev?.format === "ladder";
@@ -452,7 +455,7 @@ export async function gameResult(gameId: string, viewer: string | null): Promise
       ? { round: sts.filter((x) => x.kind === "ladder" && x.no <= nextStage.no).length, next: evGames.filter((x) => x.stageNo === nextStage.no).sort((x, y) => x.net - y.net).map((x) => ({ net: x.net, a: x.a, b: x.b })), sitting: nextStage.sitting ?? [], waiting: [] }
       : { round: sts.filter((x) => x.kind === "ladder" && x.no <= g.stageNo).length, next: null, sitting: [], waiting: evGames.filter((x) => x.stageNo === g.stageNo && x.status === "todo").map((x) => x.net).sort((x, y) => x - y) };
   }
-  return { slides, upTo: g.updatedAt, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(me), played: !isLadder && [...g.a, ...g.b].includes(me.id), ladder };
+  return { slides, upTo: g.updatedAt, names: Object.fromEntries(ps.map((x) => [x.id, lite(x)])), me: lite(me), played: !isLadder && !!viewerRow && [...g.a, ...g.b].includes(me.id), ladder };
 }
 
 /** Everyone's rating now (placed or not: the ladder seeds by it either way), by player id. */
