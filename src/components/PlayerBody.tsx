@@ -23,7 +23,8 @@ type Pr = Pick<Profile, "player" | "tierWins" | "bestPartner" | "recent" | "name
  * folded rows, each with a teaser, so the page says plenty at a glance and the detail is a tap
  * away. Each game shows what it did to the rating; tapping it replays its story.
  */
-export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr: Pr; mine?: boolean }) {
+/** `today` sits right under the rating card: on Me during a tournament, your day (src/components/MyDay). */
+export function PlayerBody({ season: s, pr, mine = false, today }: { season: Season; pr: Pr; mine?: boolean; today?: React.ReactNode }) {
   const [story, setStory] = useState<Moments | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const replay = async (g: ProfileGame) => {
@@ -48,6 +49,7 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
           <div className="text-[15px] font-bold text-num">No games yet</div>
           <div className="mt-1 text-[13px] text-dim">{mine ? "Play your first weekend and your climb starts here." : `${player.name}'s climb starts with their first weekend.`}</div>
         </div>
+        {today && <div className="mt-2.5 flex flex-col gap-2">{today}</div>}
       </section>
     );
   }
@@ -91,6 +93,8 @@ export function PlayerBody({ season: s, pr, mine = false }: { season: Season; pr
           <Sparkline points={pr.trail} w={64} />
         </div>
       </div>
+
+      {today && <div className="mb-2 flex flex-col gap-2">{today}</div>}
 
       {/* Everything else is opt-in. Teasers keep the page informative while it's closed. */}
       <div className="flex flex-col gap-2">

@@ -46,24 +46,20 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
         <JoinFlow onDone={go} />
       ) : (
         <>
-        {today && (
+        {/* Before it starts: the sign-up card. Once it's on: your day, right under your rating. */}
+        {today && !today.started && (
           <>
-            {!today.started && <h2 className="px-5 pb-2.5 text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</h2>}
-            {/* While it's on, your day lives here: next game, check-in and photos, your games. */}
-            {today.started ? (
-              <MyDay view={today.view} me={me.id} org={org} xp={today.xp} veiled={today.veiled}>
-                <CheckIn me={me.id} state={today.state} eventId={today.id} started title={today.title}>
-                  <EventPhotos bare eventId={today.id} photos={today.photos} me={me.id} org={org} />
-                </CheckIn>
-              </MyDay>
-            ) : (
-              <CheckIn me={me.id} state={today.state} eventId={today.id} started={false} title={today.title}>
-                <EventPhotos bare eventId={today.id} photos={today.photos} me={me.id} org={org} />
-              </CheckIn>
-            )}
+            <h2 className="px-5 pb-2.5 text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</h2>
+            <CheckIn me={me.id} state={today.state} eventId={today.id} started={false} title={today.title}>
+              <EventPhotos bare eventId={today.id} photos={today.photos} me={me.id} org={org} />
+            </CheckIn>
           </>
         )}
-        {season && profile && <PlayerBody season={season} pr={profile} mine />}
+        {(() => {
+          const day = today?.started ? <MyDay view={today.view} me={me.id} org={org} xp={today.xp} veiled={today.veiled} /> : undefined;
+          if (season && profile) return <PlayerBody season={season} pr={profile} mine today={day} />;
+          return day ? <div className="flex flex-col gap-2 px-4 pb-6">{day}</div> : null;
+        })()}
         </>
       )}
 

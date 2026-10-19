@@ -25,9 +25,11 @@ export function Face({ id, p, size = 46, dim = false }: { id: string; p?: Player
 
 /** A net as a court: its name centred on top, one pair either side, and a ring to tap and score
  *  (or the score, once it's in). `note` is a line under it: what's next, or a warning. */
-export function Court({ title, tag, a, b, scoreA, scoreB, people, live, highlight = false, note, warn, onTap }: {
+export function Court({ title, tag, a, b, scoreA, scoreB, people, live, highlight = false, note, warn, onTap, orbit = false }: {
   title: string; tag?: string; a: string[]; b: string[]; scoreA: number | null; scoreB: number | null;
   people: Record<string, PlayerLite>; live: boolean; highlight?: boolean; note?: React.ReactNode; warn?: string; onTap: () => void;
+  /** A slow green light circling the edge: this net's game is on. */
+  orbit?: boolean;
 }) {
   const done = scoreA != null && scoreB != null;
   const aWon = done && scoreA! > scoreB!;
@@ -40,7 +42,7 @@ export function Court({ title, tag, a, b, scoreA, scoreB, people, live, highligh
   return (
     <motion.button
       layout transition={SOFT} whileTap={{ scale: 0.98 }} onClick={onTap}
-      className={`flex w-full flex-col items-center overflow-hidden rounded-3xl border pt-3 ${note || warn ? "pb-0" : "pb-4"} ${highlight ? "border-accent/30 bg-accent/[.06]" : "border-white/[.07] bg-surface"}`}
+      className={`${orbit ? "spk-orbit " : ""}flex w-full flex-col items-center overflow-hidden rounded-3xl border pt-3 ${note || warn ? "pb-0" : "pb-4"} ${highlight ? "border-accent/30 bg-accent/[.06]" : "border-white/[.07] bg-surface"}`}
       aria-label={`${title}${done ? `, ${scoreA}–${scoreB}` : ", tap to score"}`}
     >
       <div className="mb-3 flex items-center gap-2 px-3">

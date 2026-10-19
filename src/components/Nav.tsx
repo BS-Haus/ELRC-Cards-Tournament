@@ -14,7 +14,7 @@ const items = [
 
 export function Nav() {
   const path = usePathname();
-  // A dot on Me while your game is on (src/components/MyDay.tsx: signalMyTurn).
+  // A dot on Tournament while your game is on (src/components/MyDay.tsx: signalMyTurn).
   const [turn, setTurn] = useState(false);
   useEffect(() => {
     const on = (e: Event) => setTurn(!!(e as CustomEvent<boolean>).detail);
@@ -31,7 +31,7 @@ export function Nav() {
             <Link key={it.href} href={it.href} className={`spk-press flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-bold ${on ? "text-accent" : "text-dim"}`} aria-current={on ? "page" : undefined}>
               <span className="relative">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={it.icon} /></svg>
-                {it.href === "/me" && turn && !on && <span className="spk-live absolute -right-1 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-bg bg-accent" aria-label="your game is on" />}
+                {it.href === "/" && turn && !on && <span className="spk-live absolute -right-1 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-bg bg-accent" aria-label="your game is on" />}
               </span>
               {it.label}
             </Link>

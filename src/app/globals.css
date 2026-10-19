@@ -57,7 +57,16 @@ button:disabled { cursor: default; }
 @keyframes spkPing { 0% { transform: scale(1); opacity: .75; } 80%, 100% { transform: scale(2.8); opacity: 0; } }
 .spk-ping { position: relative; }
 .spk-ping::after { content: ""; position: absolute; inset: 0; border-radius: 9999px; background: inherit; animation: spkPing 1.5s cubic-bezier(0, 0, .2, 1) infinite; }
-@media (prefers-reduced-motion: reduce) { .spk-up, .spk-sheet, .spk-toast, .spk-live, .spk-ping::after, .spk-shake, .spk-spin, .spk-shine::after, .spk-twinkle { animation: none; } .spk-twinkle { opacity: .8; } }
+/* A live net: a short green light slowly circling the card's edge, so the nets read apart from
+   the tables under them. A conic gradient masked to a 1.5px ring, its angle turning. */
+@property --spk-orbit { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes spkOrbit { to { --spk-orbit: 360deg; } }
+.spk-orbit { position: relative; }
+.spk-orbit::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; border-radius: inherit; padding: 1.5px;
+  background: conic-gradient(from var(--spk-orbit), transparent 0deg 290deg, rgba(203,251,79,.25) 315deg, #CBFB4F 350deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: spkOrbit 7s linear infinite; filter: drop-shadow(0 0 4px rgba(203,251,79,.7)); }
+@media (prefers-reduced-motion: reduce) { .spk-up, .spk-sheet, .spk-toast, .spk-live, .spk-ping::after, .spk-shake, .spk-spin, .spk-shine::after, .spk-twinkle, .spk-orbit::before { animation: none; } .spk-twinkle { opacity: .8; } }
 
 /* Recap reel */
 .spk-noselect, .spk-noselect * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }

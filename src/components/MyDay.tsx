@@ -4,22 +4,25 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "motion/react";
+import { setMyEntry } from "@/app/actions";
+import { useAction } from "@/components/useAction";
 import { pingMoments } from "@/components/LevelMoments";
 import { Shuffle } from "@/components/DrawSlides";
 import { ScoreSheet } from "@/components/ScoreSheet";
-import { Court } from "@/components/Nets";
-import { Section, card } from "@/components/ui";
+import { EventPhotos } from "@/components/EventPhotos";
+import { Disclosure } from "@/components/kit";
+import { card } from "@/components/ui";
 import { drawPool, DECIDER_TO, type Game, type StageKind } from "@/lib/cards";
 import { groupsOf, myDay, myCheckIn, type MyGame } from "@/lib/views";
 import type { EventView } from "@/lib/data";
 import { PROV_N } from "@/lib/standings";
 
-// Your day at today's tournament, on the Me tab: your next game (tap to score it), the ones after,
-// then how the day's gone. The tournament page is the shared screen (every net, every table); this
-// is the personal one, so the event page has no tabs of its own.
+// Your day at today's tournament, on the Me tab, just under your rating: how the day's gone (your
+// games, tap one for its result), then your check-in folded into one line. The tournament page is
+// the shared screen (every net, every table), so it has no tabs of its own.
 
-/** Tell the bottom nav whether your game is on now (the dot on Me). Kept as well as sent, since
- *  the page can say so before the nav is listening. */
+/** Tell the bottom nav whether your game is on now (a dot on Tournament). Kept as well as sent,
+ *  since the page can say so before the nav is listening. */
 let turnNow = false;
 export const myTurnNow = () => turnNow;
 export const signalMyTurn = (on: boolean) => { turnNow = on; try { window.dispatchEvent(new CustomEvent("cards:myturn", { detail: on })); } catch {} };
@@ -27,17 +30,16 @@ export const signalMyTurn = (on: boolean) => { turnNow = on; try { window.dispat
 export const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 
 /** `xp`: your rating either side of this weekend so far (src/lib/standings.ts). `veiled`: the newest
- *  stage is drawn but you haven't watched its draw story, so your next game stays hidden.
- *  `children` (your check-in and photos) sits between what's next and what's been. */
-export function MyDay({ view, me, org, xp, veiled, children }: {
-  view: EventView; me: string; org: boolean; xp: { before: number; after: number; games: number } | null; veiled: boolean; children?: React.ReactNode;
+ *  stage is drawn but you haven't watched its draw story, so where you are in it stays hidden. */
+export function MyDay({ view, me, org, xp, veiled }: {
+  view: EventView; me: string; org: boolean; xp: { before: number; after: number; games: number } | null; veiled: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
   const { event: ev, entries, games, people } = view;
   const live = ev.status === "live";
 
-  // Live: keep in step with the nets, and reveal a new draw once its story's been watched.
+  // Live: keep in step with the nets, and catch up once a new draw's story has been watched.
   useEffect(() => {
     if (!live) return;
     const t = setInterval(() => { if (!document.hidden && !open) router.refresh(); }, 5000);
@@ -56,14 +58,10 @@ export function MyDay({ view, me, org, xp, veiled, children }: {
 
   const here = drawPool(entries, games);
   const out = new Set(entries.filter((e) => e.state === "out").map((e) => e.playerId));
-  const state = myCheckIn(entries, games, me);
   const stage = view.stages.at(-1);
   const groups = stage ? groupsOf(view, stage.no) : [];
-  const waiting = live && here.includes(me) && !groups.some((g) => g.games.some((x) => [...x.a, ...x.b].includes(me)));
   const name = (id: string) => people[id]?.name ?? "Someone";
-  const both = (ids: string[]) => ids.map(name).join(" & ");
   const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
-  const [first, ...later] = day.next;
   const myGroup = groups.find((g) => g.table.some((r) => r.id === me));
   const place = myGroup ? myGroup.table.findIndex((r) => r.id === me) + 1 : 0;
   const moved = xp ? xp.after - xp.before : 0;
@@ -72,56 +70,25 @@ export function MyDay({ view, me, org, xp, veiled, children }: {
 
   return (
     <>
-      {veiled && <DrawVeil kind={stage?.kind} />}
-
-      {live && !veiled && stage && (
-        <Section title="Up next" aside={<Link href={`/e/${ev.id}`} className="font-bold text-accent">All nets →</Link>}>
-          {first ? (
-            <div className="grid gap-2">
-              {/* The same court as the tournament page's nets, your pair on the left. */}
-              <Court
-                title={`Net ${first.net}`} tag={first.ahead === 0 ? "You're on now" : first.ahead === 1 ? "You're next" : `${first.ahead} games before yours`}
-                a={[me, first.partner]} b={first.opponents} scoreA={null} scoreB={null} people={people}
-                live={first.ahead === 0} highlight={first.ahead === 0}
-                note={first.sub ? "You're subbing in this one: it doesn't count for you." : undefined}
-                onTap={() => setOpen(first.game.id)}
-              />
-              {later.length > 0 && (
-                <div className={`${card} divide-y divide-white/[.04]`}>
-                  {later.map((x) => (
-                    <div key={x.game.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13.5px]">
-                      <span className="min-w-0 truncate">With <b>{name(x.partner)}</b> <span className="text-muted">vs {both(x.opponents)}</span></span>
-                      <span className="shrink-0 text-[12px] text-dim">Net {x.net}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className={`${card} p-4 text-[14px] text-muted`}>
-              {waiting ? "You're in for the next stage. It starts when the organiser draws it." : state === "out" ? "You're marked as left. Back? Check in below." : day.played.length ? "No more games for you in this stage." : "Nothing on for you yet. Check in below and you'll be in the next stage."}
-            </div>
-          )}
-        </Section>
-      )}
-
-      {children}
-
       {day.played.length > 0 && (
-        <Section title="Your games today" aside={!veiled && myGroup && place ? `${ordinal(place)} in ${myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}` : undefined}>
-          <div className={`${card} overflow-hidden`}>
-            <div className="grid grid-cols-3 text-center">
-              {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], xp && xp.games < PROV_N ? [`${xp.games}/${PROV_N}`, "placing"] : [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "rating today"]] as const).map(([v, l]) => (
-                <div key={l} className="py-3">
-                  <div className="tnum text-[20px] font-black">{v}</div>
-                  <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">{l}</div>
-                </div>
-              ))}
-            </div>
-            {day.played.map((x) => <MyGameRow key={x.game.id} x={x} name={name} onOpen={setOpen} />)}
+        <div className={`${card} overflow-hidden`}>
+          <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
+            <span className="text-[12px] font-bold uppercase tracking-[.12em] text-muted">Today</span>
+            {!veiled && myGroup && place > 0 && <span className="text-[12px] text-dim">{ordinal(place)} in {myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}</span>}
           </div>
-        </Section>
+          <div className="grid grid-cols-3 text-center">
+            {([[`${day.line.w}–${day.line.l}`, "won–lost"], [`${pd > 0 ? "+" : ""}${pd}`, "points +/−"], xp && xp.games < PROV_N ? [`${xp.games}/${PROV_N}`, "placing"] : [xp ? `${moved >= 0 ? "+" : "−"}${Math.abs(moved)}` : "–", "rating today"]] as const).map(([v, l]) => (
+              <div key={l} className="py-2.5">
+                <div className="tnum text-[20px] font-black">{v}</div>
+                <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-dim">{l}</div>
+              </div>
+            ))}
+          </div>
+          {day.played.map((x) => <MyGameRow key={x.game.id} x={x} name={name} onOpen={setOpen} />)}
+        </div>
       )}
+
+      <CheckInRow view={view} me={me} org={org} />
 
       {openGame && (
         <ScoreSheet
@@ -130,6 +97,38 @@ export function MyDay({ view, me, org, xp, veiled, children }: {
           onClose={() => setOpen(null)}
         />
       )}
+    </>
+  );
+}
+
+/** Your check-in, folded into one line ("Saturday cards · Checked in"). Open it to leave (or come
+ *  back), add photos, or go to the tournament. */
+function CheckInRow({ view, me, org }: { view: EventView; me: string; org: boolean }) {
+  const { run, pending, toast } = useAction();
+  const ev = view.event;
+  const state = myCheckIn(view.entries, view.games, me);
+  const here = state === "here";
+  const set = (s: "here" | "out", msg: string) => run(() => setMyEntry(ev.id, s), msg);
+  return (
+    <>
+      {toast}
+      <Disclosure
+        title={<span className="flex items-center gap-2">{ev.status === "live" && <span className="spk-ping h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />}<span className="truncate">{ev.title}</span></span>}
+        teaser={<span className={here ? "text-accent" : state === "out" ? "text-loss" : ""}>{here ? "Checked in" : state === "out" ? "Left" : "Not checked in"}</span>}
+      >
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[.06] bg-panel p-1" role="radiogroup" aria-label="Your check-in">
+          <button role="radio" aria-checked={here} disabled={pending || here} onClick={() => set("here", "Checked in. You'll join the next stage")} className={`spk-press flex h-10 items-center justify-center gap-1.5 rounded-lg text-[14px] font-black ${here ? "bg-accent text-ink" : "text-muted"}`}>
+            {here && <span aria-hidden="true">✓</span>}{here ? "Checked in" : "I'm here"}
+          </button>
+          <button role="radio" aria-checked={state === "out"} disabled={pending || state === "out"} onClick={() => set("out", "Marked as left. Your remaining games will get a sub")} className={`spk-press h-10 rounded-lg text-[14px] font-black ${state === "out" ? "bg-loss/20 text-loss" : "text-muted"}`}>
+            {state === "out" ? "Left" : "I have to leave"}
+          </button>
+        </div>
+        <div className="mt-3.5">
+          <EventPhotos bare eventId={ev.id} photos={view.photos} me={me} org={org} />
+        </div>
+        <Link href={`/e/${ev.id}`} className="spk-press mt-3 block text-[13px] font-bold text-accent">Go to the tournament →</Link>
+      </Disclosure>
     </>
   );
 }

@@ -196,7 +196,7 @@ export function EventScreen({ view, me, org, roster, myXp = null, drawPending = 
                       {live && q[0] && (
                         <Court
                           title={`Net ${n}`} tag={`${gameLabel(q[0])} · game ${q[0].seq}`}
-                          a={q[0].a} b={q[0].b} scoreA={null} scoreB={null} people={people} live
+                          a={q[0].a} b={q[0].b} scoreA={null} scoreB={null} people={people} live orbit
                           warn={needsSub(q[0], out).length ? `${needsSub(q[0], out).map((id) => p(id)?.name).join(" & ")} left: tap to sub someone in` : undefined}
                           onTap={() => setOpen(q[0].id)}
                         />
