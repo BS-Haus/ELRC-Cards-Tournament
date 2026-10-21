@@ -59,7 +59,8 @@ Both feed the same ratings (`src/lib/standings.ts`).
    regroups on the results so far and keeps earlier group-mates apart where it can (`spreadRepeats`). **The finals are seeded on the day's points**: each player's rating ± across today's rounds
    (`dayPoints`, from the same ratings as the ladder, so they allow for who you played with and
    against; level on points: wins, then points difference). A round's group table shows W–L and
-   that round's points, sorted by them; a final's table stays wins first, since a final is won on wins.
+   that round's points, sorted by them ("Points decide the finals"); a final's table shows W–L and +/−
+   (score difference) only ("Decided on wins": most wins, then +/−, points scored, head to head, decider).
    A final never replays a group exactly. The event page shows a Standings table from round 1 (everyone across the day's rounds, updating as
    scores come in), and every row there and in the group tables has a gold, silver or bronze bar for
    the final it would be in if the finals were drawn now (`projectFinals`, the draw's own rule).

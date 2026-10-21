@@ -15,7 +15,7 @@ import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, inpu
 import { netQueues, needsSub, splitSizes, seedOrder, spreadRepeats, dayPoints, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
-import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
+import { Disclosure, SOFT } from "@/components/kit";
 import { motion, LayoutGroup } from "motion/react";
 
 const STAGE_TITLE: Record<StageKind, string> = { random: "Mixed groups", seeded: "Groups by level", final: "Finals", ladder: "Ladder" };
@@ -180,7 +180,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
           {/* Net by net, one slide each (swipe, or tap a net's pill): the game on it now (tap to
               score), then the table and fixtures of each group playing there. Opens on your net. */}
           {current && !drawPending && (
-            <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`} >
+            <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`} aside={current.kind === "final" ? "Decided on wins" : "Points decide the finals"}>
               <NetCarousel
                 start={mine?.next[0]?.net ?? curGroups.find((g) => !!me && g.table.some((r) => r.id === me))?.net ?? 0}
                 slides={netNumbers(queues, curGroups).map((n) => {
@@ -437,7 +437,7 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bou
   // A final is won on wins, so its table stays wins first.
   const roundPts = !final && delta ? dayPoints(g.games, delta) : null;
   const table = roundPts ? [...g.table].sort((x, y) => (roundPts.get(y.id) ?? 0) - (roundPts.get(x.id) ?? 0) || y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa)) : g.table;
-  const cols = roundPts ? "grid-cols-[28px_1fr_44px_52px]" : "grid-cols-[28px_1fr_36px_44px_44px]";
+  const cols = roundPts ? "grid-cols-[28px_1fr_44px_52px]" : "grid-cols-[28px_1fr_44px_44px]";
   return (
     <div className={`${card} spk-up overflow-hidden`}>
       <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
@@ -447,6 +447,10 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bou
         </div>
         <span className="text-[12px] font-bold text-dim">Net {g.net}{g.complete ? " · done" : ""}</span>
       </div>
+      {/* The rule for this table, in a line: a round ranks on points, a final on wins. */}
+      <p className="-mt-1 px-4 pb-2 text-[12px] text-dim">
+        {final ? "Most wins takes it · level on wins: +/− (score difference)" : roundPts ? "Ranked on points (Elo ±)" : "Ranked on wins, then points difference"}
+      </p>
       {!roundPts && (g.winner || g.tied.length > 0) && (
         <div className="mx-3 mb-2 rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: `${tint}22`, color: tint }}>
           {g.winner
@@ -467,7 +471,7 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bou
         <div className={`grid ${cols} items-center px-4 py-1 spk-label text-dim`}>
           {roundPts
             ? <><span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">Pts</span></>
-            : <><span>#</span><span>Player</span><span className="text-right">Pts</span><span className="text-right">W–L</span><span className="text-right">+/−</span></>}
+            : <><span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">+/−</span></>}
         </div>
         <LayoutGroup id={`group-${g.stageNo}-${g.groupNo}`}>
           {table.map((r, i) => {
@@ -488,8 +492,7 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bou
                   </>
                 ) : (
                   <>
-                    <AnimatedNumber value={r.w} className="text-right font-black" />
-                    <span className="text-right text-num">{r.w}–{r.l}</span>
+                    <span className="text-right font-black">{r.w}–{r.l}</span>
                     <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
                   </>
                 )}
