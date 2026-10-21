@@ -1,7 +1,7 @@
 // A player's day, as a story: the numbers, the finish, the moments, and how it compares with
 // last time. Pure: games in, recap out. Everything the recap reel and its saveable image show is
 // worked out here, so the two can't disagree.
-import { tally, groupRank, groupMembers, groupWinner, isDone, rank, TIERS, type Game, type Line } from "@/lib/cards";
+import { tally, groupRank, groupMembers, groupWinner, isDone, rank, TIERS, finalLabel, type Game, type Line } from "@/lib/cards";
 
 export type DayGame = Game & { eventId: string };
 export type DayEvent = { id: string; title: string; startsAt: number; status: string; games: DayGame[] };
@@ -54,7 +54,7 @@ const mine = (g: Game, id: string) => (onA(g, id) ? g.scoreA! : g.scoreB!);
 const theirs = (g: Game, id: string) => (onA(g, id) ? g.scoreB! : g.scoreA!);
 const won = (g: Game, id: string) => mine(g, id) > theirs(g, id);
 const order = (x: Game, y: Game) => x.stageNo - y.stageNo || x.ord - y.ord || x.seq - y.seq;
-const label = (g: Game) => (g.kind === "final" ? `${g.groupName} final` : `Group ${g.groupName}`);
+const label = (g: Game) => (g.kind === "final" ? `${finalLabel(g.groupName)} final` : `Group ${g.groupName}`);
 
 function moment(g: Game): Moment {
   const aWon = g.scoreA! > g.scoreB!;

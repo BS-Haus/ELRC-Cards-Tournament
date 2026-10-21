@@ -77,7 +77,7 @@ export function NewEvent({ organise = false }: { organise?: boolean } = {}) {
             </button>
           ))}
         </div>}
-        {LADDER_ON && <p className="-mt-1 text-[12.5px] text-dim">{f.format === "ladder" ? "Nets top to bottom: win and go up, lose and go down. A new partner every game." : "Groups, then A/B finals. Best with a big turnout."}</p>}
+        {LADDER_ON && <p className="-mt-1 text-[12.5px] text-dim">{f.format === "ladder" ? "Nets top to bottom: win and go up, lose and go down. A new partner every game." : "Groups, then Gold and Silver finals. Best with a big turnout."}</p>}
         {f.format === "ladder" ? (
           <div className="grid grid-cols-2 gap-2">
             {field("nets", "Nets", "number")}

@@ -1,5 +1,6 @@
 import { Avatar, tierColor } from "@/components/ui";
 import type { PlayerLite } from "@/lib/data";
+import { finalLabel } from "@/lib/cards";
 
 type P = PlayerLite | undefined;
 
@@ -42,7 +43,7 @@ export function FinalWinners({ finals }: { finals: { name: string; winner: P; ti
           <div key={f.name} className="flex min-w-0 items-center gap-2.5 rounded-2xl p-3" style={{ background: `${c}14`, border: `1px solid ${c}40` }}>
             {f.winner ? <Avatar p={f.winner} size={32} /> : <span className="text-[20px]">🤝</span>}
             <div className="min-w-0">
-              <div className="spk-label" style={{ color: c }}>{f.name} final winner</div>
+              <div className="spk-label" style={{ color: c }}>{finalLabel(f.name)} final winner</div>
               <div className="truncate text-[15px] font-black">{f.winner?.name ?? f.tied ?? "Still playing"}</div>
             </div>
           </div>

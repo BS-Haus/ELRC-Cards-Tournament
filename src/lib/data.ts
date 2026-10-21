@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gt, inArray, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
-import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle } from "@/lib/cards";
+import { finalLabel, tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle } from "@/lib/cards";
 
 /** `photo` is the profile picture's URL (versioned, so it can be cached for good), or null. */
 export type PlayerLite = { id: string; name: string; color: string; claimed: boolean; photo: string | null };
@@ -270,7 +270,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
         const pos = table.findIndex((r) => r.id === id) + 1;
         const { winner } = groupWinner(gg);
         if (winner === id) tierWins[gg[0].groupName] = (tierWins[gg[0].groupName] ?? 0) + 1;
-        finish = winner === id ? finalWinTitle(gg[0].groupName) : `${gg[0].groupName} final · ${ordinal(pos)}`;
+        finish = winner === id ? finalWinTitle(gg[0].groupName) : `${finalLabel(gg[0].groupName)} final · ${ordinal(pos)}`;
       }
     }
     const wk = eventChange(r, id, eid);
@@ -292,7 +292,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
         won: onA ? g.scoreA! > g.scoreB! : g.scoreB! > g.scoreA!,
         mine: onA ? g.scoreA! : g.scoreB!, theirs: onA ? g.scoreB! : g.scoreA!,
         partner: side[0] === id ? side[1] : side[0], opponents: [...other], sub: g.subs.includes(id),
-        label: g.kind === "final" ? `${g.groupName} final` : `Group ${g.groupName}`,
+        label: g.kind === "final" ? `${finalLabel(g.groupName)} final` : `Group ${g.groupName}`,
         xp: entry.has(g.id) && entry.get(g.id)!.gamesBefore >= PROV_N ? entry.get(g.id)!.delta : null,
         placing: entry.has(g.id) && entry.get(g.id)!.gamesBefore < PROV_N ? entry.get(g.id)!.gamesBefore + 1 : null,
       };

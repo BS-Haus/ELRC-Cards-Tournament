@@ -44,8 +44,8 @@ describe("buildDrawStory", () => {
     expect(s.results!.xpUp).toBeGreaterThan(0);
     expect(s.results!.xpDown).toBeLessThan(0);
     expect(s.results!.closest!.score[0] - s.results!.closest!.score[1]).toBe(2);
-    expect(s.seeding).toMatchObject({ from: "1st in Group A", to: "A final" });
-    expect(s.groups[0].label).toBe("A final");
+    expect(s.seeding).toMatchObject({ from: "1st in Group A", to: "Gold final" });
+    expect(s.groups[0].label).toBe("Gold final");
   });
 
   it("is null for a stage you can't find", () => {

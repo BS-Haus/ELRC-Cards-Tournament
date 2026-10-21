@@ -2,7 +2,7 @@
 // everyone in it gets a short story next time they're in the app: how the last stage finished
 // (tables, rating won and lost), how the seeding works and where they've landed, then the new groups
 // being dealt out, their own group, net and first game. Pure: games in, story out.
-import { tally, groupRank, stageMembers, isDone, finalName, gameLabel, netQueues, type Game, type StageKind } from "@/lib/cards";
+import { finalLabel, tally, groupRank, stageMembers, isDone, finalName, gameLabel, netQueues, type Game, type StageKind } from "@/lib/cards";
 import { PROV_N, type Ratings } from "@/lib/standings";
 
 /** `xp` is the rating the stage won or lost them; `placing` when they're still placing after it
@@ -28,7 +28,7 @@ export type DrawStory = {
   mine: MyDraw | null;
 };
 
-const labelFor = (kind: StageKind, name: string) => (kind === "final" ? `${finalName(name)} final` : `Group ${name}`);
+const labelFor = (kind: StageKind, name: string) => (kind === "final" ? `${finalLabel(name)} final` : `Group ${name}`);
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 
 /** Rating each player gained or lost over one set of games (their lines in the ledger), and
@@ -122,8 +122,8 @@ export function buildDrawStory(
       const from = myOld ? `${ordinal(myOld.rows.findIndex((r) => r.id === me) + 1)} in ${myOld.label}` : null;
       const rule = stage.kind === "final"
         ? prevStage.kind === "random"
-          ? "Group winners go top, then runners-up, then the rest, by win % and points per game. Best of them fill the A final."
-          : "The top group's finishers lead the way into the A final, the next group's into the B final."
+          ? "Group winners go top, then runners-up, then the rest, by win % and points per game. Best of them fill the Gold final."
+          : "The top group's finishers lead the way into the Gold final, the next group's into the Silver final."
         : "Regrouped by level: the best of the last round together, then the next, so every game is a close one.";
       seeding = { rule, from, to: mine?.label ?? "the next stage" };
     }

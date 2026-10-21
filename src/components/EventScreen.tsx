@@ -12,7 +12,7 @@ import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { finalsCut, netQueues, needsSub, splitSizes, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
+import { finalsCut, netQueues, needsSub, splitSizes, seedOrder, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
@@ -118,8 +118,8 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
         <button onClick={() => setCrown(null)} className="spk-crown fixed inset-x-4 top-[calc(16px+env(safe-area-inset-top))] z-40 mx-auto flex max-w-[448px] items-center gap-3 rounded-3xl p-4 text-left shadow-2xl" style={{ background: tierColor(crown.tier), color: "#0c0e10" }} aria-live="polite">
           <span className="text-[34px]" aria-hidden="true">🏆</span>
           <span className="min-w-0">
-            <span className="block spk-label opacity-70">{crown.tier} final</span>
-            <span className="block truncate text-[20px] font-black">{crown.id === me ? `You win the ${crown.tier} final!` : `${p(crown.id)?.name ?? "Someone"} wins the ${crown.tier} final!`}</span>
+            <span className="block spk-label opacity-70">{finalLabel(crown.tier)} final</span>
+            <span className="block truncate text-[20px] font-black">{crown.id === me ? `You win the ${finalLabel(crown.tier)} final!` : `${p(crown.id)?.name ?? "Someone"} wins the ${finalLabel(crown.tier)} final!`}</span>
           </span>
         </button>
       )}
@@ -186,7 +186,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
                   const onNet = curGroups.filter((g) => g.net === n);
                   return {
                     n, live: live && !!q[0],
-                    label: onNet.map((g) => (g.kind === "final" ? `${g.name} final` : `Group ${g.name}`)).join(" · ") || (q[0] ? gameLabel(q[0]) : "Free"),
+                    label: onNet.map((g) => (g.kind === "final" ? finalLabel(g.name) : `Group ${g.name}`)).join(" · ") || (q[0] ? gameLabel(q[0]) : "Free"),
                     mine: !!me && onNet.some((g) => g.table.some((r) => r.id === me)),
                     body: (
                     <div className="grid gap-2.5">
@@ -205,6 +205,12 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
                 })}
               />
             </Section>
+          )}
+
+          {/* From the second round on, both rounds count together for the finals: show where
+              everyone stands across the day, cut where the finals would be drawn now. */}
+          {current && current.kind !== "final" && !drawPending && new Set(games.filter((g) => g.kind !== "final").map((g) => g.stageNo)).size > 1 && (
+            <Standings view={view} pool={here} me={me} />
           )}
 
           {live && waiting.length > 0 && (
@@ -297,6 +303,47 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
 const netNumbers = (queues: Game[][], groups: GroupView[]) =>
   [...new Set([...queues.flatMap((q, i) => (q.length ? [i + 1] : [])), ...groups.map((g) => g.net)])].sort((a, b) => a - b);
 
+/** The day so far across every round (both count for the finals), in the order the finals would
+ *  be drawn now (seedOrder), with a line where each final starts. */
+function Standings({ view, pool, me }: { view: EventView; pool: string[]; me: string | null }) {
+  const { games, people } = view;
+  const groupGames = games.filter((g) => g.kind !== "final" && g.status !== "void");
+  const order = seedOrder(games, pool, "final");
+  const lines = tally(groupGames, order);
+  const sizes = splitSizes(order.length);
+  const starts = new Map<number, string>();
+  sizes.reduce((at, k, i) => (starts.set(at, `${finalLabel(TIERS[i] ?? String(i + 1))} final`), at + k), 0);
+  return (
+    <Section title="Standings · both rounds" aside="Who makes which final">
+      <div className={`${card} overflow-hidden tnum text-[14px]`}>
+        <div className="grid grid-cols-[28px_1fr_44px_44px] items-center px-4 pt-2.5 pb-1 spk-label">
+          <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">+/−</span>
+        </div>
+        {order.map((id, i) => {
+          const r = lines.get(id)!;
+          const pd = r.pf - r.pa;
+          return (
+            <div key={id}>
+              {starts.has(i) && sizes.length > 1 && (
+                <div className="flex items-center gap-2 px-4 pt-2 pb-1">
+                  <span className="spk-label text-accent">{starts.get(i)}</span>
+                  <span className="h-px flex-1 border-t border-dashed border-white/10" />
+                </div>
+              )}
+              <div className={`grid grid-cols-[28px_1fr_44px_44px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}>
+                <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
+                <span className="flex min-w-0 items-center gap-2"><Avatar p={people[id]} size={22} /><PlayerLink p={people[id]} className="truncate font-semibold" /></span>
+                <span className="text-right text-num">{r.w}–{r.l}</span>
+                <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
 type NetSlide = { n: number; label: string; live: boolean; mine: boolean; body: React.ReactNode };
 const SLIDE_GAP = 8;
 
@@ -373,14 +420,14 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, cut
       <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full" style={{ background: tint }} aria-hidden="true" />
-          <span className="text-[16px] font-black">{final ? `${g.name} final` : `Group ${g.name}`}</span>
+          <span className="text-[16px] font-black">{final ? `${finalLabel(g.name)} final` : `Group ${g.name}`}</span>
         </div>
         <span className="text-[12px] font-bold text-dim">Net {g.net}{g.complete ? " · done" : ""}</span>
       </div>
       {(g.winner || g.tied.length > 0) && (
         <div className="mx-3 mb-2 rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: `${tint}22`, color: tint }}>
           {g.winner
-            ? `★ ${name(g.winner)} ${final ? `wins the ${g.name} final` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)}` : ""}`
+            ? `★ ${name(g.winner)} ${final ? `wins the ${finalLabel(g.name)} final` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)}` : ""}`
             : g.decider === "playing"
               ? `Decider: one game to ${DECIDER_TO}, ${tiedNames} on opposite sides. Whoever's side wins tops the group.`
               : g.decider === "level"
@@ -415,9 +462,9 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, cut
             // The A final's line, under the last place that's sure of it.
             if (!cut || i !== cut.sure - 1 || i === g.table.length - 1) return [row];
             return [row, (
-              <motion.div key="cut" layout="position" transition={SOFT} className="flex items-center gap-2 px-4 py-1" aria-label="A final cut-off">
+              <motion.div key="cut" layout="position" transition={SOFT} className="flex items-center gap-2 px-4 py-1" aria-label="Gold final cut-off">
                 <span className="h-px flex-1 border-t border-dashed border-accent/70" />
-                <span className="spk-label text-accent">↑ A final{cut.extra ? ` · plus best ${ordinal(cut.sure + 1)}` : ""}</span>
+                <span className="spk-label text-accent">↑ Gold final{cut.extra ? ` · plus best ${ordinal(cut.sure + 1)}` : ""}</span>
                 <span className="h-px w-3 border-t border-dashed border-accent/70" />
               </motion.div>
             )];
@@ -465,11 +512,11 @@ function Podium({ groups, people }: { groups: GroupView[]; people: Record<string
     <Section title="Results">
       {a && (a.winner ? (
         <div className={`${card} overflow-hidden px-3 pt-4`}>
-          <div className="mb-2 text-center spk-label text-accent">{a.name} final</div>
+          <div className="mb-2 text-center spk-label text-accent">{finalLabel(a.name)} final</div>
           <PodiumStand first={people[a.winner]} second={people[others[0]]} third={people[others[1]]} />
         </div>
       ) : (
-        <div className={`${card} p-4 text-[15px] font-bold`}>{a.name} final: {tie(a) ?? "not finished"}</div>
+        <div className={`${card} p-4 text-[15px] font-bold`}>{finalLabel(a.name)} final: {tie(a) ?? "not finished"}</div>
       ))}
       {rest.length > 0 && (
         <div className="mt-2.5">
@@ -624,7 +671,7 @@ function EditGroups({ view, run, pending, pool }: { view: EventView; run: Run; p
   const groups = [...new Set(inStage.map((g) => g.groupNo))].sort((a, b) => a - b).map((no) => {
     const gs = inStage.filter((g) => g.groupNo === no);
     const first = gs[0];
-    return { no, members: currentMembers(inStage, no), label: first.kind === "final" ? `${finalName(first.groupName)} final` : `Group ${first.groupName}`, net: first.net };
+    return { no, members: currentMembers(inStage, no), label: first.kind === "final" ? `${finalLabel(first.groupName)} final` : `Group ${first.groupName}`, net: first.net };
   });
   const groupOf = (id: string | null) => (id ? groups.find((g) => g.members.includes(id))?.no ?? null : null);
   const inAny = new Set(groups.flatMap((g) => g.members));

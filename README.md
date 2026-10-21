@@ -50,8 +50,12 @@ Both feed the same ratings (`src/lib/standings.ts`).
    **Play decider** and the tied pair play two games to 11 on opposite sides, swapping partners;
    most points across both wins. Deciders count for nothing else.
    Late arrivals who haven't played start in the bottom final.
-7. **Big fields (16+) only:** an extra "regroup by level" stage can come before the finals. The
-   finals are then seeded by where people finished in that stage's groups, not by win %.
+7. **Another round before the finals** (mixed, or by level): a by-level round regroups on the
+   results so far and keeps earlier group-mates apart where it can (`spreadRepeats`), so partners
+   stay fresh. With two or more rounds played, **they all count together** for the finals: seeded on
+   the whole day's record (win %, then points difference per game), and a final never replays a
+   group exactly. The event page shows a "Standings · both rounds" table with where each final starts.
+   Finals are stored as A–D and shown as Gold, Silver, Bronze, Copper (`finalLabel`).
 8. **Nobody re-checks in between stages.** Everyone who played stays in unless marked Out.
 
 ### Changes on the day never break the draw

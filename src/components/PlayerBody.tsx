@@ -10,6 +10,7 @@ import { replayGame } from "@/app/actions";
 import { tierFor } from "@/lib/levels";
 import { PROV_N } from "@/lib/standings";
 import type { Moments, Profile, ProfileGame, Season } from "@/lib/data";
+import { finalLabel } from "@/lib/cards";
 
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 const signed = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(n)}`;
@@ -133,7 +134,7 @@ export function PlayerBody({ season: s, pr, mine = false, today }: { season: Sea
             <div className="grid grid-cols-2 gap-2">
               {titles.map(([t, n]) => (
                 <div key={t} className="rounded-[14px] p-3" style={{ background: `${tierColor(t)}14`, border: `1px solid ${tierColor(t)}40` }}>
-                  <div className="text-[10px] font-bold tracking-[.05em]" style={{ color: tierColor(t) }}>{t === "A" ? "CHAMPION" : `${t} FINAL WON`}</div>
+                  <div className="text-[10px] font-bold tracking-[.05em]" style={{ color: tierColor(t) }}>{t === "A" ? "CHAMPION" : `${finalLabel(t).toUpperCase()} FINAL WON`}</div>
                   <div className="mt-1.5 flex items-center gap-1.5"><span className="text-[20px] leading-none" style={{ color: tierColor(t) }} aria-hidden="true">★</span><span className="font-mono text-[18px] font-black">×{n}</span></div>
                 </div>
               ))}

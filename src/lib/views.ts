@@ -1,5 +1,5 @@
 // Derived views of one event, shared by the server and the event screen. Pure: no database.
-import { tally, rank, groupWinner, groupRank, groupMembers, isDone, netQueues, drawPool, type Game, type StageKind, type Line } from "@/lib/cards";
+import { tally, rank, groupWinner, finalLabel, groupRank, groupMembers, isDone, netQueues, drawPool, type Game, type StageKind, type Line } from "@/lib/cards";
 import type { EventView } from "@/lib/data";
 
 export type GroupView = { stageNo: number; kind: StageKind; groupNo: number; name: string; net: number; games: Game[]; table: Line[]; winner: string | null; tied: string[]; decider: "none" | "playing" | "decided" | "level"; complete: boolean };
@@ -90,7 +90,7 @@ export function todayTable(v: EventView): { rows: Line[]; out: Set<string>; wher
   for (const id of ids) {
     const g = groups.find((x) => x.table.some((r) => r.id === id));
     where[id] = {
-      group: g ? (g.kind === "final" ? `${g.name} final` : `Group ${g.name}`) : null,
+      group: g ? (g.kind === "final" ? `${finalLabel(g.name)} final` : `Group ${g.name}`) : null,
       place: g ? g.table.findIndex((r) => r.id === id) + 1 : 0,
       onNow: heads.some((q) => !!q[0] && [...q[0].a, ...q[0].b].includes(id)),
       next: heads.some((q) => !!q[1] && [...q[1].a, ...q[1].b].includes(id)),
