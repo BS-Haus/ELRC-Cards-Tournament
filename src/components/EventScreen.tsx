@@ -561,6 +561,7 @@ export function OrganiserTools({ view, roster }: { view: EventView; roster: Play
 function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: EventView; roster: PlayerLite[]; run: Run; pending: boolean; waiting: string[]; pool: Set<string> }) {
   const { event: ev, entries, stages, games, people } = view;
   const [name, setName] = useState("");
+  const [find, setFind] = useState("");
   const [edit, setEdit] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
   const here = pool.size;
@@ -574,6 +575,8 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
     : "Check in at least 4 players to draw groups.";
   // A–Z and nothing else: re-sorting by state moved rows under the organiser's finger (and on every
   // 5-second refresh), so a tap meant for one player could land on another's buttons.
+  const onList = new Set(entries.map((e) => e.playerId));
+  const notIn = roster.filter((r) => !onList.has(r.id)).sort((a, b) => a.name.localeCompare(b.name));
   const sorted = [...entries].sort((a, b) => (people[a.playerId]?.name ?? "").localeCompare(people[b.playerId]?.name ?? "") || a.playerId.localeCompare(b.playerId));
 
   return (
@@ -614,9 +617,24 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
         </Disclosure>
         <Disclosure title="Check-in" teaser={`${here} here`} defaultOpen={!current}>
           <p className="text-[13px] text-muted">Mark people <b className="text-fg">here</b> as they arrive. After the first stage everyone who played stays in, so only mark someone <b className="text-fg">out</b> if they leave: their games get flagged for a sub.</p>
-          <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) run(() => addWalkIn(ev.id, name), `${name.trim()} checked in`, (r) => r.ok && setName("")); }}>
-            <input className={input} list="roster" value={name} onChange={(e) => setName(e.target.value)} placeholder="Add someone by name" aria-label="Add someone by name" />
-            <datalist id="roster">{roster.map((r) => <option key={r.id} value={r.name} />)}</datalist>
+          {/* Everyone who's ever played and isn't on the list yet: one tap checks them in. A new
+              name below makes a profile they can claim later by signing in with it. */}
+          {notIn.length > 0 && (
+            <div className="mt-3">
+              <div className="spk-label">Tap to check in</div>
+              {notIn.length > 16 && <input className={`${input} mt-2`} value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a player" aria-label="Find a player" />}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {notIn.filter((r) => !find.trim() || r.name.toLowerCase().includes(find.trim().toLowerCase())).map((r) => (
+                  <button key={r.id} type="button" disabled={pending} onClick={() => run(() => setEntry(ev.id, r.id, "here"), `${r.name} checked in`)}
+                    className="spk-press inline-flex items-center gap-2 rounded-full border border-white/[.08] bg-raised py-1 pl-1 pr-3 text-[13.5px] font-semibold">
+                    <Avatar p={r} size={24} />{r.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <form className="mt-4 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) run(() => addWalkIn(ev.id, name), `${name.trim()} checked in`, (r) => r.ok && setName("")); }}>
+            <input className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Not here? Add a new player" aria-label="Add a new player" />
             <button disabled={pending || !name.trim()} className={`${btnPrimary} shrink-0`}>Add</button>
           </form>
           <div className="mt-3 divide-y divide-white/[.04]">

@@ -39,9 +39,11 @@ Both feed the same ratings (`src/lib/standings.ts`).
 
 ## How a cards weekend runs
 1. **Organiser posts an event** (Organise → + New event) and shares the link in WhatsApp.
-2. **Players tap the link → Join** (name + a 4-digit code, no email) → **I'm in**.
-3. **On the day:** people tap **I'm here**, or the organiser checks them in. Walk-ins can be added
-   by name and claim the profile later by joining with the same name.
+2. **Players tap the link → sign in**: everyone who's played is a pill, tap your name, then your
+   4-digit code (no email). Not there? **Create an account** (name + code). Then **I'm in**.
+3. **On the day:** people tap **I'm here**, or the organiser checks them in from Organise →
+   Check-in, where everyone not yet in is a pill to tap. New people are added by name and claim
+   the profile later by tapping their name when they sign in (they pick a code).
 4. **Draw random groups.** Groups of 4 (3 games) or 5 (5 games, one sits out each game). Each
    group keeps its own net. Everyone partners everyone in their group once. 1 point per win.
 5. **Enter scores** from any phone, in any order: tap the winners, tap the losers' score.
