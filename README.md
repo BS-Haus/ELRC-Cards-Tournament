@@ -138,3 +138,5 @@ npm run dev                    # http://localhost:3000, organiser code: dev-orga
 - `src/lib/views.ts`, `src/lib/data.ts`: what each page shows, from the database.
 - `src/app/actions.ts`: every change anyone can make, with its permission check.
 - `src/components/EventScreen.tsx`: the event page (sign-up, live nets, groups, finals, organiser panel).
+- `src/app/icon.svg`, `apple-icon.png`, `manifest.ts`, `public/icon-*.png`: the home-screen icon (two fanned cards,
+  the net from above on the front one) and the install manifest. Re-render the PNGs from icon.svg if it changes.
