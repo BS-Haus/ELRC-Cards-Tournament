@@ -58,7 +58,9 @@ Both feed the same ratings (`src/lib/standings.ts`).
    familiar pair per group is unavoidable, with 16 on 4 nets nobody repeats. A by-level round
    regroups on the results so far and keeps earlier group-mates apart where it can (`spreadRepeats`). With two or more rounds played, **they all count together** for the finals: seeded on
    the whole day's record (win %, then points difference per game), and a final never replays a
-   group exactly. The event page shows a "Standings · both rounds" table with where each final starts.
+   group exactly. The event page shows a Standings table from round 1 (everyone across the day's rounds, updating as
+   scores come in), and every row there and in the group tables has a gold, silver or bronze bar for
+   the final it would be in if the finals were drawn now (`projectFinals`, the draw's own rule).
    Finals are stored as A–D and shown as Gold, Silver, Bronze, Copper (`finalLabel`).
 8. **Nobody re-checks in between stages.** Everyone who played stays in unless marked Out.
 
