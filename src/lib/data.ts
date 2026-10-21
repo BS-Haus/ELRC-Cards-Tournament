@@ -19,6 +19,9 @@ export type EventView = {
   people: Record<string, PlayerLite>;
   /** Photos from the day, oldest first: the first one leads the tournament story. */
   photos: EventPhoto[];
+  /** Each scored game's rating change per player (game id → player id → ±), from the same ratings
+   *  as the ladder. What the day's points are made of (src/lib/cards.ts dayPoints). */
+  delta: Record<string, Record<string, number>>;
 };
 
 export type EventPhoto = { id: string; url: string; by: string | null };
@@ -66,7 +69,18 @@ export async function getEventView(id: string): Promise<EventView | null> {
     games: gs.map((g) => toGame(g, stMap)),
     people: Object.fromEntries(ps.map((p) => [p.id, lite(p)])),
     photos,
+    delta: await eventDeltas(id, gs.filter((g) => g.status === "done").map((g) => g.id)),
   };
+}
+
+/** Every scored game's rating ± per player at one event, from the whole-history fit. */
+async function eventDeltas(eventId: string, gameIds: string[]): Promise<Record<string, Record<string, number>>> {
+  if (!gameIds.length) return {};
+  const { evs, gs } = await everything();
+  const r = ratingsOf(evs, gs);
+  const out: Record<string, Record<string, number>> = Object.fromEntries(gameIds.map((id) => [id, {}]));
+  for (const p of r.players.values()) for (const e of p.entries) if (e.eventId === eventId && out[e.gameId]) out[e.gameId][p.id] = e.delta;
+  return out;
 }
 
 export type EventCard = EventRow & { going: number; here: number; mine: EntryState | null; champion: string | null };

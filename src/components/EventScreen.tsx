@@ -12,7 +12,7 @@ import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { netQueues, needsSub, splitSizes, seedOrder, spreadRepeats, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
+import { netQueues, needsSub, splitSizes, seedOrder, spreadRepeats, dayPoints, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 import { Disclosure, AnimatedNumber, SOFT } from "@/components/kit";
@@ -200,7 +200,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
                           onTap={() => setOpen(q[0].id)}
                         />
                       )}
-                      {onNet.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} bound={bound} />)}
+                      {onNet.map((g) => <GroupCard key={g.groupNo} g={g} people={people} delta={view.delta} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} bound={bound} />)}
                     </div>
                     ),
                   };
@@ -235,7 +235,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
                       <span className="text-muted transition group-open:rotate-90">›</span>
                     </summary>
                     <div className="grid gap-3 px-3 pb-3">
-                      {groupsOf(view, s.no).map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
+                      {groupsOf(view, s.no).map((g) => <GroupCard key={g.groupNo} g={g} people={people} delta={view.delta} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
                     </div>
                   </details>
                 ))}
@@ -307,7 +307,7 @@ const netNumbers = (queues: Game[][], groups: GroupView[]) =>
 /** Which final each player is heading for if the finals were drawn now: exactly the draw's own
  *  rule (seedOrder, then spreadRepeats), cut into finals by splitSizes. Empty with one final. */
 function projectFinals(view: EventView, pool: string[]): Map<string, string> {
-  const order = spreadRepeats(seedOrder(view.games, pool, "final"), view.games, "final");
+  const order = spreadRepeats(seedOrder(view.games, pool, "final", dayPoints(view.games, view.delta)), view.games, "final");
   const sizes = splitSizes(order.length);
   const to = new Map<string, string>();
   if (sizes.length < 2) return to;
@@ -323,34 +323,36 @@ function Standings({ view, pool, me }: { view: EventView; pool: string[]; me: st
   const { games, people } = view;
   const groupGames = games.filter((g) => g.kind !== "final" && g.status !== "void");
   const rounds = new Set(groupGames.map((g) => g.stageNo)).size;
-  const order = spreadRepeats(seedOrder(games, pool, "final"), games, "final");
+  const points = dayPoints(games, view.delta);
+  const order = spreadRepeats(seedOrder(games, pool, "final", points), games, "final");
   const to = projectFinals(view, pool);
   const lines = tally(groupGames, order);
   const tiers = [...new Set(order.map((id) => to.get(id)).filter(Boolean))] as string[];
   return (
-    <Section title={rounds > 2 ? "Standings · all rounds" : rounds === 2 ? "Standings · both rounds" : "Standings"} aside="If the finals were drawn now">
+    <Section title={rounds > 2 ? "Standings · all rounds" : rounds === 2 ? "Standings · both rounds" : "Standings"} aside="Points = rating ± today">
       <div className={`${card} overflow-hidden tnum text-[14px]`}>
         {tiers.length > 0 && (
           <div className="flex items-center gap-3 px-4 pt-3 pb-1">
             {tiers.map((t) => <span key={t} className="flex items-center gap-1.5 text-[12px] font-bold text-muted"><span className="h-2.5 w-1 rounded-full" style={{ background: tierColor(t) }} />{finalLabel(t)}</span>)}
+            <span className="ml-auto text-[11.5px] text-dim">if drawn now</span>
           </div>
         )}
-        <div className="grid grid-cols-[28px_1fr_44px_44px] items-center px-4 pt-2 pb-1 spk-label">
-          <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">+/−</span>
+        <div className="grid grid-cols-[28px_1fr_44px_52px] items-center px-4 pt-2 pb-1 spk-label">
+          <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">Pts</span>
         </div>
         <LayoutGroup id="standings">
           {order.map((id, i) => {
             const r = lines.get(id)!;
-            const pd = r.pf - r.pa;
+            const p = Math.round(points.get(id) ?? 0);
             const t = to.get(id);
             return (
               <motion.div key={id} layout="position" transition={SOFT}
-                className={`grid grid-cols-[28px_1fr_44px_44px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}
+                className={`grid grid-cols-[28px_1fr_44px_52px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}
                 style={t ? { boxShadow: `inset 3px 0 0 ${tierColor(t)}` } : undefined}>
                 <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
                 <span className="flex min-w-0 items-center gap-2"><Avatar p={people[id]} size={22} /><PlayerLink p={people[id]} className="truncate font-semibold" /></span>
                 <span className="text-right text-num">{r.w}–{r.l}</span>
-                <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
+                <span className={`text-right font-mono font-black ${p > 0 ? "text-win" : p < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (p > 0 ? "+" : p < 0 ? "−" : "") + Math.abs(p) : "–"}</span>
               </motion.div>
             );
           })}
@@ -424,13 +426,18 @@ function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
   );
 }
 
-function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bound = null }: { g: GroupView; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string; bound?: Map<string, string> | null }) {
+function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bound = null, delta }: { g: GroupView; delta?: Record<string, Record<string, number>>; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string; bound?: Map<string, string> | null }) {
   const final = g.kind === "final";
   const tint = final ? tierColor(g.name) : "#CBFB4F";
   const name = (id: string) => people[id]?.name ?? "Someone";
   const deciders = g.games.filter((x) => x.decider && x.status !== "void");
   const pts = deciderPoints(deciders, g.tied);
   const tiedNames = g.tied.map(name).join(" and ");
+  // A round's table is the points race: each player's rating ± from this group's games, best first.
+  // A final is won on wins, so its table stays wins first.
+  const roundPts = !final && delta ? dayPoints(g.games, delta) : null;
+  const table = roundPts ? [...g.table].sort((x, y) => (roundPts.get(y.id) ?? 0) - (roundPts.get(x.id) ?? 0) || y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa)) : g.table;
+  const cols = roundPts ? "grid-cols-[28px_1fr_44px_52px]" : "grid-cols-[28px_1fr_36px_44px_44px]";
   return (
     <div className={`${card} spk-up overflow-hidden`}>
       <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
@@ -440,7 +447,7 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bou
         </div>
         <span className="text-[12px] font-bold text-dim">Net {g.net}{g.complete ? " · done" : ""}</span>
       </div>
-      {(g.winner || g.tied.length > 0) && (
+      {!roundPts && (g.winner || g.tied.length > 0) && (
         <div className="mx-3 mb-2 rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: `${tint}22`, color: tint }}>
           {g.winner
             ? `★ ${name(g.winner)} ${final ? `wins the ${finalLabel(g.name)} final` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)}` : ""}`
@@ -457,23 +464,35 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bou
         </div>
       )}
       <div className="tnum text-[14px]">
-        <div className="grid grid-cols-[28px_1fr_36px_44px_44px] items-center px-4 py-1 spk-label text-dim">
-          <span>#</span><span>Player</span><span className="text-right">Pts</span><span className="text-right">W–L</span><span className="text-right">+/−</span>
+        <div className={`grid ${cols} items-center px-4 py-1 spk-label text-dim`}>
+          {roundPts
+            ? <><span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">Pts</span></>
+            : <><span>#</span><span>Player</span><span className="text-right">Pts</span><span className="text-right">W–L</span><span className="text-right">+/−</span></>}
         </div>
         <LayoutGroup id={`group-${g.stageNo}-${g.groupNo}`}>
-          {g.table.map((r, i) => {
+          {table.map((r, i) => {
             const pd = r.pf - r.pa;
             const to = bound?.get(r.id);
+            const p = roundPts ? Math.round(roundPts.get(r.id) ?? 0) : 0;
             return (
               <motion.div key={r.id} layout="position" transition={SOFT}
-                className={`grid grid-cols-[28px_1fr_36px_44px_44px] items-center border-t border-white/[.04] px-4 py-2 ${r.id === me ? "bg-accent/[.06]" : ""}`}
+                className={`grid ${cols} items-center border-t border-white/[.04] px-4 py-2 ${r.id === me ? "bg-accent/[.06]" : ""}`}
                 style={to ? { boxShadow: `inset 3px 0 0 ${tierColor(to)}` } : undefined}
                 title={to ? `${finalLabel(to)} final if drawn now` : undefined}>
                 <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
                 <span className="flex min-w-0 items-center gap-2"><Avatar p={people[r.id]} size={22} dim={out.has(r.id)} /><PlayerLink p={people[r.id]} className={`truncate font-semibold ${out.has(r.id) ? "text-dim" : ""}`} />{out.has(r.id) && <span className="text-[11px] text-dim">left</span>}</span>
-                <AnimatedNumber value={r.w} className="text-right font-black" />
-                <span className="text-right text-num">{r.w}–{r.l}</span>
-                <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
+                {roundPts ? (
+                  <>
+                    <span className="text-right text-num">{r.w}–{r.l}</span>
+                    <span className={`text-right font-mono font-black ${p > 0 ? "text-win" : p < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (p > 0 ? "+" : p < 0 ? "−" : "") + Math.abs(p) : "–"}</span>
+                  </>
+                ) : (
+                  <>
+                    <AnimatedNumber value={r.w} className="text-right font-black" />
+                    <span className="text-right text-num">{r.w}–{r.l}</span>
+                    <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
+                  </>
+                )}
               </motion.div>
             );
           })}

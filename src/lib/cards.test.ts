@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, spreadRepeats, decideTie, headToHead, finalName, finalLabel, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
+import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, spreadRepeats, dayPoints, decideTie, headToHead, finalName, finalLabel, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -448,5 +448,34 @@ describe("a second mixed round: the same spread of levels, new faces", () => {
     const { r1, r2 } = roundsOf(12, 5);
     const day = [...r1, ...play(r2)];
     expect(seedOrder(day, ids(12), "final")).toEqual(rank(tally(day).values()).map((r) => r.id));
+  });
+});
+
+describe("the day's points (rating ± today) decide the finals", () => {
+  const r1 = asGames(planStage("random", ids(8), 2), 1).map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 10 }));
+  const fin = asGames(planStage("final", ids(8), 2), 2).map((g) => ({ ...g, kind: "final" as const, status: "done" as const, scoreA: 15, scoreB: 3 }));
+  // Everyone in a game gets +/-; p7 gets the most from every game they're in, p0 the least.
+  const delta = Object.fromEntries([...r1, ...fin].map((g) => [g.id, Object.fromEntries([...g.a, ...g.b].map((id) => [id, Number(id.slice(1)) - 3]))]));
+
+  it("adds up each player's ± over today's rounds, leaving the finals out, or one round only", () => {
+    const pts = dayPoints([...r1, ...fin], delta);
+    const p7games = r1.filter((g) => [...g.a, ...g.b].includes("p7")).length;
+    expect(pts.get("p7")).toBe(4 * p7games);
+    expect(dayPoints([...r1, ...fin], delta, 2).size).toBe(0);
+  });
+
+  it("seeds the finals best points first, whatever the wins say", () => {
+    const pts = dayPoints(r1, delta);
+    const order = seedOrder(r1, ids(8), "final", pts);
+    expect(order).toEqual([...ids(8)].sort((x, y) => pts.get(y)! - pts.get(x)! || 0).slice(0, 8));
+    expect(order[0]).toBe("p7");
+    expect(order.at(-1)).toBe("p0");
+  });
+
+  it("level on points: more wins first, then points difference", () => {
+    const flat = new Map(ids(8).map((id) => [id, 0]));
+    const order = seedOrder(r1, ids(8), "final", flat);
+    const t = tally(r1);
+    for (let i = 1; i < order.length; i++) expect(t.get(order[i - 1])!.w).toBeGreaterThanOrEqual(t.get(order[i])!.w);
   });
 });

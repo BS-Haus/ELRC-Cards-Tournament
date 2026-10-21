@@ -384,18 +384,27 @@ export function placementOrder(stageGames: Game[]): string[] {
  * Someone with no games yet (a late arrival) goes mid-table for a seeded stage, where they'll be sorted out, but to the bottom
  * for the finals: the A final is for people who've shown they belong there.
  */
-export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final"): string[] {
+export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final", points?: Map<string, number>): string[] {
   const inPool = new Set(pool);
   const groupStages = games.filter((g) => g.kind !== "final");
   const lastNo = Math.max(0, ...groupStages.map((g) => g.stageNo));
   const last = groupStages.filter((g) => g.stageNo === lastNo);
   let played: string[];
   const rounds = new Set(groupStages.map((g) => g.stageNo)).size;
-  if (kind === "final" && rounds > 1) {
+  const lines = tally(groupStages.filter((g) => g.status !== "void"));
+  if (kind === "final" && points) {
+    // The day's points decide the finals: everyone's rating ± across today's rounds (dayPoints).
+    // The ratings already allow for who you played with and against, so a strong pair beating a
+    // weak one earns little and a win alongside a weaker partner earns more. Level on points:
+    // wins, then points difference.
+    played = [...lines.values()].filter((r) => r.gp > 0)
+      .sort((x, y) => (points.get(y.id) ?? 0) - (points.get(x.id) ?? 0) || y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa))
+      .map((r) => r.id);
+  } else if (kind === "final" && rounds > 1) {
     // Two or more rounds before the finals: they all count together. Best record across every
     // group game of the day (win %, then points difference per game), so a good first round still
     // matters after a tougher second one, and nobody's day hangs on one draw.
-    played = rank(tally(groupStages.filter((g) => g.status !== "void")).values()).filter((r) => r.gp > 0).map((r) => r.id);
+    played = rank(lines.values()).filter((r) => r.gp > 0).map((r) => r.id);
   } else if (last.length && last[0].kind === "seeded") {
     const nos = [...new Set(last.map((g) => g.groupNo))].sort((a, b) => a - b);
     played = nos.flatMap((no) => {
@@ -419,6 +428,18 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
   if (kind === "final") return [...played, ...fresh];
   const mid = Math.floor(played.length / 2);
   return [...played.slice(0, mid), ...fresh, ...played.slice(mid)];
+}
+
+/** The day's points: each player's rating ± summed over the scored games of today's rounds
+ *  (finals and skipped games aside), optionally one round only. `delta` is game id → player id → ±,
+ *  as the ratings worked it out (EventView.delta). */
+export function dayPoints(games: Game[], delta: Record<string, Record<string, number>>, stageNo?: number): Map<string, number> {
+  const pts = new Map<string, number>();
+  for (const g of games) {
+    if (g.kind === "final" || !isDone(g) || (stageNo != null && g.stageNo !== stageNo)) continue;
+    for (const [id, d] of Object.entries(delta[g.id] ?? {})) pts.set(id, (pts.get(id) ?? 0) + d);
+  }
+  return pts;
 }
 
 /**
