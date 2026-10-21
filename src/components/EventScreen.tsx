@@ -333,7 +333,7 @@ function Standings({ view, pool, me }: { view: EventView; pool: string[]; me: st
       <div className={`${card} overflow-hidden tnum text-[14px]`}>
         {tiers.length > 0 && (
           <div className="flex items-center gap-3 px-4 pt-3 pb-1">
-            {tiers.map((t) => <span key={t} className="flex items-center gap-1.5 text-[12px] font-bold text-muted"><span className="h-2.5 w-1 rounded-full" style={{ background: tierColor(t) }} />{finalLabel(t)}</span>)}
+            {tiers.map((t) => <span key={t} className="flex items-center gap-1.5 text-[12px] font-bold text-muted"><span className="h-2.5 w-0.5 rounded-full" style={{ background: tierColor(t) }} />{finalLabel(t)}</span>)}
             <span className="ml-auto text-[11.5px] text-dim">if drawn now</span>
           </div>
         )}
@@ -348,7 +348,7 @@ function Standings({ view, pool, me }: { view: EventView; pool: string[]; me: st
             return (
               <motion.div key={id} layout="position" transition={SOFT}
                 className={`grid grid-cols-[28px_1fr_44px_52px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}
-                style={t ? { boxShadow: `inset 3px 0 0 ${tierColor(t)}` } : undefined}>
+                style={t ? { boxShadow: `inset 2px 0 0 ${tierColor(t)}` } : undefined}>
                 <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
                 <span className="flex min-w-0 items-center gap-2"><Avatar p={people[id]} size={22} /><PlayerLink p={people[id]} className="truncate font-semibold" /></span>
                 <span className="text-right text-num">{r.w}–{r.l}</span>
@@ -481,7 +481,7 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bou
             return (
               <motion.div key={r.id} layout="position" transition={SOFT}
                 className={`grid ${cols} items-center border-t border-white/[.04] px-4 py-2 ${r.id === me ? "bg-accent/[.06]" : ""}`}
-                style={to ? { boxShadow: `inset 3px 0 0 ${tierColor(to)}` } : undefined}
+                style={to ? { boxShadow: `inset 2px 0 0 ${tierColor(to)}` } : undefined}
                 title={to ? `${finalLabel(to)} final if drawn now` : undefined}>
                 <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
                 <span className="flex min-w-0 items-center gap-2"><Avatar p={people[r.id]} size={22} dim={out.has(r.id)} /><PlayerLink p={people[r.id]} className={`truncate font-semibold ${out.has(r.id) ? "text-dim" : ""}`} />{out.has(r.id) && <span className="text-[11px] text-dim">left</span>}</span>
