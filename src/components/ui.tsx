@@ -60,7 +60,7 @@ export const input = "min-h-12 w-full rounded-xl border border-white/[.08] bg-pa
 
 // Finals are lettered and coloured off the app's own palette, not metals, so they can't be
 // mistaken for the ranks (src/lib/levels.ts).
-export const tierColor = (name: string) => ({ A: "#CBFB4F", B: "#C4CDD6", C: "#9AA3AD", D: "#7C8590" } as Record<string, string>)[name] ?? "#CBFB4F";
+export const tierColor = (name: string) => ({ A: "#FFCF5C", B: "#C4CDD6", C: "#D9965F", D: "#B97355" } as Record<string, string>)[name] ?? "#CBFB4F";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

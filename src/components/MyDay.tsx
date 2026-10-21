@@ -11,7 +11,7 @@ import { Shuffle } from "@/components/DrawSlides";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { card } from "@/components/ui";
-import { drawPool, DECIDER_TO, type Game, type StageKind } from "@/lib/cards";
+import { drawPool, DECIDER_TO, finalLabel, type Game, type StageKind } from "@/lib/cards";
 import { groupsOf, myDay, myCheckIn, type MyGame } from "@/lib/views";
 import type { EventView } from "@/lib/data";
 import { PROV_N } from "@/lib/standings";
@@ -80,7 +80,7 @@ export function MyDay({ view, me, org, xp, veiled }: {
         <div className={`${card} overflow-hidden`}>
           <div className="flex items-baseline justify-between gap-3 px-4 pt-3 pb-1">
             <span className="spk-label text-muted">Your results</span>
-            {!veiled && myGroup && place > 0 && <span className="text-[12px] text-dim">{ordinal(place)} in {myGroup.kind === "final" ? `the ${myGroup.name} final` : `Group ${myGroup.name}`}</span>}
+            {!veiled && myGroup && place > 0 && <span className="text-[12px] text-dim">{ordinal(place)} in {myGroup.kind === "final" ? `the ${finalLabel(myGroup.name)} final` : `Group ${myGroup.name}`}</span>}
           </div>
           {day.played.map((x) => <MyGameRow key={x.game.id} x={x} name={name} onOpen={setOpen} />)}
         </div>

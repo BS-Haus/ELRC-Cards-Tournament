@@ -3,7 +3,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { players, eventPhotos } from "@/db/schema";
 import { getRecap, getStory, getLadderStory } from "@/lib/data";
-import { finalWinTitle } from "@/lib/cards";
+import { finalLabel, finalWinTitle } from "@/lib/cards";
 import { tierColor } from "@/components/ui";
 
 // A story-sized (1080×1920) card of someone's day, to save or post. Same numbers as the reel:
@@ -65,7 +65,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             )}
             {f && (
               <div style={{ display: "flex", flexDirection: "column", marginTop: 90, padding: 48, borderRadius: 40, background: `${c}22`, border: `3px solid ${c}66` }}>
-                <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: 4, color: c, textTransform: "uppercase" }}>{`${f.tier} final`}</div>
+                <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: 4, color: c, textTransform: "uppercase" }}>{`${finalLabel(f.tier)} final`}</div>
                 <div style={{ fontSize: 80, fontWeight: 900, marginTop: 8, color: f.won ? c : "#F4F5F6" }}>{f.won ? `🏆 ${finalWinTitle(f.tier)}` : `${ordinal(f.position)} of ${f.of}`}</div>
               </div>
             )}
@@ -81,7 +81,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         <div style={{ display: "flex", flexDirection: "column", marginTop: "auto", gap: 18 }}>
           {recap.winners.map((w) => (
             <div key={w.name} style={{ display: "flex", fontSize: 40 }}>
-              <span style={{ color: tierColor(w.name), fontWeight: 800, width: 240 }}>{`${w.name} final`}</span>
+              <span style={{ color: tierColor(w.name), fontWeight: 800, width: 240 }}>{`${finalLabel(w.name)} final`}</span>
               <span style={{ fontWeight: 700 }}>{w.winner ? name(w.winner) : w.tied.length ? `Tie: ${w.tied.map(name).join(" / ")}` : "Still playing"}</span>
             </div>
           ))}
@@ -176,14 +176,14 @@ async function storyCard(id: string) {
             ))}
           </div>
         ) : (
-          <div style={{ display: "flex", fontSize: 64, fontWeight: 800, marginTop: "auto", marginBottom: 200, color: "#C9CED2" }}>{top?.tied.length ? `A final tied: ${top.tied.map(name).join(" / ")}` : "Finals still to play"}</div>
+          <div style={{ display: "flex", fontSize: 64, fontWeight: 800, marginTop: "auto", marginBottom: 200, color: "#C9CED2" }}>{top?.tied.length ? `Gold final tied: ${top.tied.map(name).join(" / ")}` : "Finals still to play"}</div>
         )}
 
         {(story.podium.length > 1 || story.records.length > 0) && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16, margin: "0 -72px", padding: "40px 72px 72px", background: "#0c0e10" }}>
             {story.podium.slice(1).map((pd) => (
               <div key={pd.name} style={{ display: "flex", alignItems: "center", fontSize: 40 }}>
-                <span style={{ display: "flex", color: tierColor(pd.name), fontWeight: 800, width: 260 }}>{`${pd.name} final`}</span>
+                <span style={{ display: "flex", color: tierColor(pd.name), fontWeight: 800, width: 260 }}>{`${finalLabel(pd.name)} final`}</span>
                 <span style={{ display: "flex", fontWeight: 700 }}>{pd.winner ? `🏆 ${name(pd.winner)}` : pd.tied.length ? `Tied: ${pd.tied.map(name).join(" / ")}` : "–"}</span>
               </div>
             ))}

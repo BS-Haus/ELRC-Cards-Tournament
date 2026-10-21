@@ -1,8 +1,9 @@
 // "Draw stories": when the organiser draws a stage (random groups, a seeded round, or the finals),
-// everyone in it gets a short story next time they're in the app: how the last stage finished
-// (tables, rating won and lost), how the seeding works and where they've landed, then the new groups
-// being dealt out, their own group, net and first game. Pure: games in, story out.
-import { tally, groupRank, stageMembers, isDone, finalName, gameLabel, netQueues, type Game, type StageKind } from "@/lib/cards";
+// everyone in it gets a short story next time they're in the app. A round: the shuffle, the groups
+// dealt out, your group, net and first game. The finals: your points from the day, then each final
+// revealed from Bronze up to Gold, then yours. (`results` and `seeding`, the last stage's tables
+// and the rule, are still worked out but no longer shown: everyone watched them happen.) Pure.
+import { finalLabel, tally, groupRank, stageMembers, isDone, finalName, gameLabel, netQueues, type Game, type StageKind } from "@/lib/cards";
 import { PROV_N, type Ratings } from "@/lib/standings";
 
 /** `xp` is the rating the stage won or lost them; `placing` when they're still placing after it
@@ -26,9 +27,12 @@ export type DrawStory = {
   seeding: { rule: string; from: string | null; to: string } | null;
   groups: DrawGroup[];
   mine: MyDraw | null;
+  /** Finals only: your points from today's rounds (rating ±, what seeds the finals) and where they
+   *  put you among everyone in the finals. */
+  day: { points: number; rank: number; of: number } | null;
 };
 
-const labelFor = (kind: StageKind, name: string) => (kind === "final" ? `${finalName(name)} final` : `Group ${name}`);
+const labelFor = (kind: StageKind, name: string) => (kind === "final" ? `${finalLabel(name)} final` : `Group ${name}`);
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 
 /** Rating each player gained or lost over one set of games (their lines in the ledger), and
@@ -121,17 +125,28 @@ export function buildDrawStory(
       const myOld = rg.find((g) => g.rows.some((r) => r.id === me));
       const from = myOld ? `${ordinal(myOld.rows.findIndex((r) => r.id === me) + 1)} in ${myOld.label}` : null;
       const rule = stage.kind === "final"
-        ? prevStage.kind === "random"
-          ? "Group winners go top, then runners-up, then the rest, by win % and points per game. Best of them fill the A final."
-          : "The top group's finishers lead the way into the A final, the next group's into the B final."
+        ? "Seeded on the day's points: everyone's rating ± from today's rounds. Top four go to the Gold final."
         : "Regrouped by level: the best of the last round together, then the next, so every game is a close one.";
       seeding = { rule, from, to: mine?.label ?? "the next stage" };
+    }
+  }
+
+  // Finals: your points across today's rounds, and your place on them among the finalists.
+  let day: DrawStory["day"] = null;
+  if (stage.kind === "final") {
+    const rounds = event.games.filter((g) => g.kind !== "final" && g.stageNo < stageNo && isDone(g) && !g.decider);
+    const moved = ratingFrom(r, new Set(rounds.map((g) => g.id)));
+    const everyone = groups.flatMap((g) => g.members);
+    const pts = (id: string) => moved.get(id)?.delta ?? 0;
+    if (rounds.length && everyone.includes(me)) {
+      const sorted = [...everyone].sort((a, b) => pts(b) - pts(a));
+      day = { points: Math.round(pts(me)), rank: sorted.indexOf(me) + 1, of: everyone.length };
     }
   }
 
   return {
     eventId: event.id, eventTitle: event.title, kind: stage.kind, stageNo, createdAt: stage.createdAt,
     players: groups.reduce((n, g) => n + g.members.length, 0), nets: new Set(groups.map((g) => g.net)).size,
-    results, seeding, groups, mine,
+    results, seeding, groups, mine, day,
   };
 }

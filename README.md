@@ -26,6 +26,9 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   (`mixedOrder`), and the organiser can add another round, mixed or by level, before the finals.
   Scoring: tap a net, score it in the sheet, and the result (each player's rating change) shows
   in a small sheet. The draw stories and the finals banners stay; nothing else pops up mid-day.
+  A round's draw story is the shuffle and the deal (one group per row, big cards), then your
+  group and net; the finals' is different: your points from the day and your place, then each
+  final revealed Bronze, Silver, Gold (confetti), then yours. No recap tables: everyone saw them.
   The **Tournament** tab goes net by net, a carousel with the next net peeking in and dots underneath
   (swipe, or tap a net in the switch that sticks to the top; it opens on your net): the game on the net now (tap to score it), then the
   table and fixtures of the group playing there. Live nets have a slow green light
@@ -39,9 +42,11 @@ Both feed the same ratings (`src/lib/standings.ts`).
 
 ## How a cards weekend runs
 1. **Organiser posts an event** (Organise → + New event) and shares the link in WhatsApp.
-2. **Players tap the link → Join** (name + a 4-digit code, no email) → **I'm in**.
-3. **On the day:** people tap **I'm here**, or the organiser checks them in. Walk-ins can be added
-   by name and claim the profile later by joining with the same name.
+2. **Players tap the link → sign in**: everyone who's played is a pill, tap your name, then your
+   4-digit code (no email). Not there? **Create an account** (name + code). Then **I'm in**.
+3. **On the day:** people tap **I'm here**, or the organiser checks them in from Organise →
+   Check-in, where everyone not yet in is a pill to tap. New people are added by name and claim
+   the profile later by tapping their name when they sign in (they pick a code).
 4. **Draw random groups.** Groups of 4 (3 games) or 5 (5 games, one sits out each game). Each
    group keeps its own net. Everyone partners everyone in their group once. 1 point per win.
 5. **Enter scores** from any phone, in any order: tap the winners, tap the losers' score.
@@ -50,8 +55,19 @@ Both feed the same ratings (`src/lib/standings.ts`).
    **Play decider** and the tied pair play two games to 11 on opposite sides, swapping partners;
    most points across both wins. Deciders count for nothing else.
    Late arrivals who haven't played start in the bottom final.
-7. **Big fields (16+) only:** an extra "regroup by level" stage can come before the finals. The
-   finals are then seeded by where people finished in that stage's groups, not by win %.
+7. **Another round before the finals** (mixed, or by level). A second mixed round deals the
+   levels out the same way (two stronger, two weaker per net) and keeps people away from anyone
+   they've already been grouped with (`mixedOrder` with the day's games): with 12 on 3 nets one
+   familiar pair per group is unavoidable, with 16 on 4 nets nobody repeats. A by-level round
+   regroups on the results so far and keeps earlier group-mates apart where it can (`spreadRepeats`). **The finals are seeded on the day's points**: each player's rating ± across today's rounds
+   (`dayPoints`, from the same ratings as the ladder, so they allow for who you played with and
+   against; level on points: wins, then points difference). A round's group table shows W–L and
+   that round's points, sorted by them ("Points decide the finals"); a final's table shows W–L and +/−
+   (score difference) only ("Decided on wins": most wins, then +/−, points scored, head to head, decider).
+   A final never replays a group exactly. The event page shows a Standings table from round 1 (everyone across the day's rounds, updating as
+   scores come in), and every row there and in the group tables has a gold, silver or bronze bar for
+   the final it would be in if the finals were drawn now (`projectFinals`, the draw's own rule).
+   Finals are stored as A–D and shown as Gold, Silver, Bronze, Copper (`finalLabel`).
 8. **Nobody re-checks in between stages.** Everyone who played stays in unless marked Out.
 
 ### Changes on the day never break the draw

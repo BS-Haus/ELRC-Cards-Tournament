@@ -3,7 +3,7 @@ import { MeScreen } from "@/components/MeScreen";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { players } from "@/db/schema";
-import { photoUrl, todayEventId, getEventView, getProfile, getSeason, weekendXp, drawPending } from "@/lib/data";
+import { photoUrl, todayEventId, getEventView, getProfile, getSeason, weekendXp, drawPending, allPlayers } from "@/lib/data";
 import { myCheckIn } from "@/lib/views";
 
 export const dynamic = "force-dynamic";
@@ -21,5 +21,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   // Every weekend you've played, summarised: rank, numbers, the climb (src/components/PlayerBody).
   const pr = p ? await getProfile(p.id) : null;
   const season = pr ? await getSeason(pr) : null;
-  return <MeScreen me={p ? { id: p.id, name: p.name, color: p.color, photo: photoUrl(p) } : null} org={isOrganiser(s)} orgUntil={s?.orgUntil ?? null} next={safeNext} today={today} season={season} profile={pr ? { player: pr.player, tierWins: pr.tierWins, bestPartner: pr.bestPartner, recent: pr.recent, names: pr.names, form: pr.form, trail: pr.trail, biggestWin: pr.biggestWin, bestRun: pr.bestRun } : null} />;
+  // Signed out: everyone's name as a pill to tap.
+  const roster = p ? [] : await allPlayers();
+  return <MeScreen me={p ? { id: p.id, name: p.name, color: p.color, photo: photoUrl(p) } : null} org={isOrganiser(s)} orgUntil={s?.orgUntil ?? null} next={safeNext} today={today} season={season} profile={pr ? { player: pr.player, tierWins: pr.tierWins, bestPartner: pr.bestPartner, recent: pr.recent, names: pr.names, form: pr.form, trail: pr.trail, biggestWin: pr.biggestWin, bestRun: pr.bestRun } : null} players={roster} />;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, decideTie, headToHead, finalName, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
+import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, spreadRepeats, dayPoints, decideTie, headToHead, finalName, finalLabel, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -225,7 +225,8 @@ describe("final names", () => {
   it("reads finals stored under the old metal names as letters, so they never clash with the ranks", () => {
     expect(["Gold", "Silver", "Bronze", "Copper", "A", "B"].map(finalName)).toEqual(["A", "B", "C", "D", "A", "B"]);
     expect(finalWinTitle("A")).toBe("Champion");
-    expect(finalWinTitle("B")).toBe("B final winner");
+    expect(finalWinTitle("B")).toBe("Silver final winner");
+    expect(["A", "B", "C", "D", "Gold"].map(finalLabel)).toEqual(["Gold", "Silver", "Bronze", "Copper", "Gold"]);
   });
 });
 
@@ -353,5 +354,128 @@ describe("mixedOrder (levels spread across the groups)", () => {
     const a = groupsOf(mixedOrder(ids(12), rating, seeded(1))).map((g) => [...g].sort().join());
     const b = groupsOf(mixedOrder(ids(12), rating, seeded(99))).map((g) => [...g].sort().join());
     expect(a).not.toEqual(b);
+  });
+});
+
+describe("a day of three rounds: mixed, by level, then finals (12 players, 3 nets)", () => {
+  // The lower-numbered player is the stronger; the side with the stronger total wins, by more the
+  // bigger the gap. Ratings for the mixed draw follow the same order.
+  const skill = (id: string) => 12 - Number(id.slice(1));
+  const play = (gs: Game[]) => gs.map((g) => {
+    const d = g.a.reduce((n, x) => n + skill(x), 0) - g.b.reduce((n, x) => n + skill(x), 0);
+    const lose = Math.max(0, 13 - Math.abs(d));
+    return { ...g, status: "done" as const, scoreA: d >= 0 ? 15 : lose, scoreB: d >= 0 ? lose : 15 };
+  });
+  const stageOf = (groups: ReturnType<typeof planStage>, no: number, kind: "random" | "seeded" | "final") => asGames(groups, no).map((g) => ({ ...g, kind }));
+  const all = ids(12);
+  const r1 = play(stageOf(planStage("random", mixedOrder(all, skill, () => 0.3), 3), 1, "random"));
+  const members = (gs: Game[]) => [...new Set(gs.map((g) => g.groupNo))].map((no) => groupMembers(gs.filter((g) => g.groupNo === no)));
+  const sharedR1 = (a: string, b: string) => members(r1).some((m) => m.includes(a) && m.includes(b));
+  const repeats = (m: string[]) => m.reduce((n, x, i) => n + m.slice(i + 1).filter((y) => sharedR1(x, y)).length, 0);
+
+  const r2order = spreadRepeats(seedOrder(r1, all, "seeded"), r1, "seeded");
+  const r2 = play(stageOf(planStage("seeded", r2order, 3), 2, "seeded"));
+  const day = [...r1, ...r2];
+
+  it("round 1 gives every net two from the top half and two from the bottom", () => {
+    for (const m of members(r1)) expect(m.filter((id) => skill(id) > 6)).toHaveLength(2);
+  });
+
+  it("round 2 goes by level (the round 1 winners together) and repeats as few round 1 group-mates as it can", () => {
+    const winners = members(r1).map((m) => groupRank(tally(r1, m).values(), r1)[0].id);
+    const [a] = members(r2);
+    expect(winners.every((w) => a.includes(w))).toBe(true);
+    // Four players from three round 1 groups: one pair per group has to have met before, no more.
+    for (const m of members(r2)) expect(repeats(m)).toBe(1);
+  });
+
+  it("the finals seed on both rounds together, and never replay a round 2 group", () => {
+    const seeded = seedOrder(day, all, "final");
+    expect(seeded).toEqual(rank(tally(day).values()).map((r) => r.id));
+    const finals = spreadRepeats(seeded, day, "final");
+    const fs = [finals.slice(0, 4), finals.slice(4, 8), finals.slice(8)];
+    for (const f of fs) expect(members(r2).some((m) => f.every((id) => m.includes(id)))).toBe(false);
+    expect([...finals].sort()).toEqual([...all].sort());
+  });
+
+  it("moves people only as far as it must: an A final that would replay round 2's group A swaps just its boundary", () => {
+    const groupA = members(r2)[0].sort((x, y) => skill(y) - skill(x));
+    const order = [...groupA, ...all.filter((id) => !groupA.includes(id))];
+    const out = spreadRepeats(order, day, "final");
+    expect(out.slice(0, 4).filter((id) => groupA.includes(id))).toHaveLength(3);
+    expect(out.slice(0, 3)).toEqual(groupA.slice(0, 3));
+  });
+
+  it("leaves a draw alone when nothing repeats, and a single group alone", () => {
+    expect(spreadRepeats(all, [], "seeded")).toEqual(all);
+    expect(spreadRepeats(ids(5), r1, "seeded")).toEqual(ids(5));
+  });
+});
+
+describe("a second mixed round: the same spread of levels, new faces", () => {
+  const skill = (id: string) => 100 - Number(id.slice(1));
+  const play = (gs: Game[]) => gs.map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 9 }));
+  const members = (gs: Game[]) => [...new Set(gs.map((g) => g.groupNo))].map((no) => groupMembers(gs.filter((g) => g.groupNo === no)));
+  const roundsOf = (n: number, seed: number) => {
+    let s = seed;
+    const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    const all = ids(n);
+    const r1 = play(asGames(planStage("random", mixedOrder(all, skill, rnd), 4), 1));
+    const r2 = asGames(planStage("random", mixedOrder(all, skill, rnd, r1), 4), 2);
+    const shared = (a: string, b: string) => members(r1).some((m) => m.includes(a) && m.includes(b));
+    const repeats = (m: string[]) => m.reduce((k, x, i) => k + m.slice(i + 1).filter((y) => shared(x, y)).length, 0);
+    return { r1, r2, repeats };
+  };
+
+  it("12 players on 3 nets: still two from the top half and two from the bottom, and only the one familiar pair a group of 4 can't avoid", () => {
+    for (const seed of [1, 7, 42, 99, 1234]) {
+      const { r2, repeats } = roundsOf(12, seed);
+      for (const m of members(r2)) {
+        expect(m.filter((id) => Number(id.slice(1)) < 6)).toHaveLength(2);
+        expect(repeats(m)).toBe(1);
+      }
+    }
+  });
+
+  it("16 players on 4 nets: nobody shares a group with anyone from round 1", () => {
+    for (const seed of [1, 7, 42, 99, 1234]) {
+      const { r2, repeats } = roundsOf(16, seed);
+      for (const m of members(r2)) expect(repeats(m)).toBe(0);
+    }
+  });
+
+  it("the finals after two mixed rounds are the best records across both", () => {
+    const { r1, r2 } = roundsOf(12, 5);
+    const day = [...r1, ...play(r2)];
+    expect(seedOrder(day, ids(12), "final")).toEqual(rank(tally(day).values()).map((r) => r.id));
+  });
+});
+
+describe("the day's points (rating ± today) decide the finals", () => {
+  const r1 = asGames(planStage("random", ids(8), 2), 1).map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 10 }));
+  const fin = asGames(planStage("final", ids(8), 2), 2).map((g) => ({ ...g, kind: "final" as const, status: "done" as const, scoreA: 15, scoreB: 3 }));
+  // Everyone in a game gets +/-; p7 gets the most from every game they're in, p0 the least.
+  const delta = Object.fromEntries([...r1, ...fin].map((g) => [g.id, Object.fromEntries([...g.a, ...g.b].map((id) => [id, Number(id.slice(1)) - 3]))]));
+
+  it("adds up each player's ± over today's rounds, leaving the finals out, or one round only", () => {
+    const pts = dayPoints([...r1, ...fin], delta);
+    const p7games = r1.filter((g) => [...g.a, ...g.b].includes("p7")).length;
+    expect(pts.get("p7")).toBe(4 * p7games);
+    expect(dayPoints([...r1, ...fin], delta, 2).size).toBe(0);
+  });
+
+  it("seeds the finals best points first, whatever the wins say", () => {
+    const pts = dayPoints(r1, delta);
+    const order = seedOrder(r1, ids(8), "final", pts);
+    expect(order).toEqual([...ids(8)].sort((x, y) => pts.get(y)! - pts.get(x)! || 0).slice(0, 8));
+    expect(order[0]).toBe("p7");
+    expect(order.at(-1)).toBe("p0");
+  });
+
+  it("level on points: more wins first, then points difference", () => {
+    const flat = new Map(ids(8).map((id) => [id, 0]));
+    const order = seedOrder(r1, ids(8), "final", flat);
+    const t = tally(r1);
+    for (let i = 1; i < order.length; i++) expect(t.get(order[i - 1])!.w).toBeGreaterThanOrEqual(t.get(order[i])!.w);
   });
 });

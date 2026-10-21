@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gt, inArray, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import { players, events, entries, stages, games, eventPhotos } from "@/db/schema";
-import { tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle } from "@/lib/cards";
+import { finalLabel, tally, groupWinner, groupRank, groupMembers, isDone, type Game, type StageKind, type Line, finalName, finalWinTitle } from "@/lib/cards";
 
 /** `photo` is the profile picture's URL (versioned, so it can be cached for good), or null. */
 export type PlayerLite = { id: string; name: string; color: string; claimed: boolean; photo: string | null };
@@ -19,6 +19,9 @@ export type EventView = {
   people: Record<string, PlayerLite>;
   /** Photos from the day, oldest first: the first one leads the tournament story. */
   photos: EventPhoto[];
+  /** Each scored game's rating change per player (game id → player id → ±), from the same ratings
+   *  as the ladder. What the day's points are made of (src/lib/cards.ts dayPoints). */
+  delta: Record<string, Record<string, number>>;
 };
 
 export type EventPhoto = { id: string; url: string; by: string | null };
@@ -66,7 +69,18 @@ export async function getEventView(id: string): Promise<EventView | null> {
     games: gs.map((g) => toGame(g, stMap)),
     people: Object.fromEntries(ps.map((p) => [p.id, lite(p)])),
     photos,
+    delta: await eventDeltas(id, gs.filter((g) => g.status === "done").map((g) => g.id)),
   };
+}
+
+/** Every scored game's rating ± per player at one event, from the whole-history fit. */
+async function eventDeltas(eventId: string, gameIds: string[]): Promise<Record<string, Record<string, number>>> {
+  if (!gameIds.length) return {};
+  const { evs, gs } = await everything();
+  const r = ratingsOf(evs, gs);
+  const out: Record<string, Record<string, number>> = Object.fromEntries(gameIds.map((id) => [id, {}]));
+  for (const p of r.players.values()) for (const e of p.entries) if (e.eventId === eventId && out[e.gameId]) out[e.gameId][p.id] = e.delta;
+  return out;
 }
 
 export type EventCard = EventRow & { going: number; here: number; mine: EntryState | null; champion: string | null };
@@ -270,7 +284,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
         const pos = table.findIndex((r) => r.id === id) + 1;
         const { winner } = groupWinner(gg);
         if (winner === id) tierWins[gg[0].groupName] = (tierWins[gg[0].groupName] ?? 0) + 1;
-        finish = winner === id ? finalWinTitle(gg[0].groupName) : `${gg[0].groupName} final · ${ordinal(pos)}`;
+        finish = winner === id ? finalWinTitle(gg[0].groupName) : `${finalLabel(gg[0].groupName)} final · ${ordinal(pos)}`;
       }
     }
     const wk = eventChange(r, id, eid);
@@ -292,7 +306,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
         won: onA ? g.scoreA! > g.scoreB! : g.scoreB! > g.scoreA!,
         mine: onA ? g.scoreA! : g.scoreB!, theirs: onA ? g.scoreB! : g.scoreA!,
         partner: side[0] === id ? side[1] : side[0], opponents: [...other], sub: g.subs.includes(id),
-        label: g.kind === "final" ? `${g.groupName} final` : `Group ${g.groupName}`,
+        label: g.kind === "final" ? `${finalLabel(g.groupName)} final` : `Group ${g.groupName}`,
         xp: entry.has(g.id) && entry.get(g.id)!.gamesBefore >= PROV_N ? entry.get(g.id)!.delta : null,
         placing: entry.has(g.id) && entry.get(g.id)!.gamesBefore < PROV_N ? entry.get(g.id)!.gamesBefore + 1 : null,
       };

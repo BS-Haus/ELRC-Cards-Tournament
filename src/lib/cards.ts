@@ -32,8 +32,12 @@ export type PlannedGroup = { groupNo: number; name: string; net: number; ids: st
 export const TIERS = ["A", "B", "C", "D"];
 const LEGACY_TIERS: Record<string, string> = { Gold: "A", Silver: "B", Bronze: "C", Copper: "D" };
 export const finalName = (name: string) => LEGACY_TIERS[name] ?? name;
-/** What winning a final is called: the A final's winner is the day's champion. */
-export const finalWinTitle = (name: string) => (name === TIERS[0] ? "Champion" : `${name} final winner`);
+// Stored as letters (A best); shown as metals. Gold's winner is the day's champion.
+const FINAL_LABEL: Record<string, string> = { A: "Gold", B: "Silver", C: "Bronze", D: "Copper" };
+/** What a final is called on screen: Gold, Silver, Bronze, Copper (stored as A–D). */
+export const finalLabel = (name: string) => FINAL_LABEL[finalName(name)] ?? finalName(name);
+/** What winning a final is called: the Gold final's winner is the day's champion. */
+export const finalWinTitle = (name: string) => (finalName(name) === TIERS[0] ? "Champion" : `${finalLabel(name)} final winner`);
 
 /** Split n players into groups of 4–5 (6–7 only when the numbers force it, e.g. 6 or 7 people). */
 export function splitSizes(n: number): number[] {
@@ -137,19 +141,58 @@ export function shuffle<T>(xs: T[], rnd: () => number = Math.random): T[] {
  * play with (and bring on) the newer ones, and no two draws are the same. Returns the players in
  * group order, the order planStage slices them in.
  */
-export function mixedOrder(ids: string[], rating: (id: string) => number, rnd: () => number = Math.random): string[] {
+export function mixedOrder(ids: string[], rating: (id: string) => number, rnd: () => number = Math.random, games: Game[] = []): string[] {
   const sizes = splitSizes(ids.length);
   if (!sizes.length) return shuffle(ids, rnd);
   const sorted = [...ids].sort((a, b) => rating(b) - rating(a) || a.localeCompare(b));
+  // A later mixed round (`games`: the day so far) also keeps people away from anyone they've
+  // already shared a group with: each band goes to the groups in whichever order meets the fewest
+  // old faces (ties stay random), then same-band swaps tidy up what's left. Levels never move.
+  const met = groupmates(games);
+  const seen = (id: string, group: string[]) => group.filter((x) => met.get(id)?.has(x)).length;
   const groups: string[][] = sizes.map(() => []);
   let at = 0;
   for (let k = 0; k < Math.max(...sizes); k++) {
     const open = sizes.map((n, g) => (n > k ? g : -1)).filter((g) => g >= 0);
     const band = shuffle(sorted.slice(at, at + open.length), rnd);
     at += open.length;
-    open.forEach((g, i) => groups[g].push(band[i]));
+    let best = band, bestCost = Infinity;
+    for (const perm of open.length <= 6 ? permutations(band) : [band]) {
+      const c = perm.reduce((n, id, i) => n + seen(id, groups[open[i]]), 0);
+      if (c < bestCost) { best = perm; bestCost = c; }
+    }
+    open.forEach((g, i) => groups[g].push(best[i]));
+  }
+  const total = () => groups.reduce((n, g) => n + g.reduce((m, x, i) => m + g.slice(i + 1).filter((y) => met.get(x)?.has(y)).length, 0), 0);
+  for (let improved = met.size > 0, guard = 0; improved && guard < 50; guard++) {
+    improved = false;
+    for (let k = 0; k < Math.max(...sizes) && !improved; k++) {
+      for (let g = 0; g < groups.length && !improved; g++) for (let h = g + 1; h < groups.length && !improved; h++) {
+        if (groups[g].length <= k || groups[h].length <= k) continue;
+        const before = total();
+        [groups[g][k], groups[h][k]] = [groups[h][k], groups[g][k]];
+        if (total() < before) improved = true;
+        else [groups[g][k], groups[h][k]] = [groups[h][k], groups[g][k]];
+      }
+    }
   }
   return groups.flat();
+}
+
+/** Who has already shared a group with whom (finals aside): in a group of 4 that means partnered. */
+function groupmates(games: Game[]): Map<string, Set<string>> {
+  const met = new Map<string, Set<string>>();
+  const keys = new Set(games.filter((g) => g.kind !== "final").map((g) => `${g.stageNo}:${g.groupNo}`));
+  for (const key of keys) {
+    const ms = groupMembers(games.filter((g) => `${g.stageNo}:${g.groupNo}` === key));
+    for (const x of ms) for (const y of ms) if (x !== y) (met.get(x) ?? met.set(x, new Set()).get(x)!).add(y);
+  }
+  return met;
+}
+
+function permutations<T>(xs: T[]): T[][] {
+  if (xs.length <= 1) return [xs];
+  return xs.flatMap((x, i) => permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((p) => [x, ...p]));
 }
 
 export function planStage(kind: StageKind, ordered: string[], nets: number, rnd: () => number = Math.random): PlannedGroup[] {
@@ -341,13 +384,28 @@ export function placementOrder(stageGames: Game[]): string[] {
  * Someone with no games yet (a late arrival) goes mid-table for a seeded stage, where they'll be sorted out, but to the bottom
  * for the finals: the A final is for people who've shown they belong there.
  */
-export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final"): string[] {
+export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final", points?: Map<string, number>): string[] {
   const inPool = new Set(pool);
   const groupStages = games.filter((g) => g.kind !== "final");
   const lastNo = Math.max(0, ...groupStages.map((g) => g.stageNo));
   const last = groupStages.filter((g) => g.stageNo === lastNo);
   let played: string[];
-  if (last.length && last[0].kind === "seeded") {
+  const rounds = new Set(groupStages.map((g) => g.stageNo)).size;
+  const lines = tally(groupStages.filter((g) => g.status !== "void"));
+  if (kind === "final" && points) {
+    // The day's points decide the finals: everyone's rating ± across today's rounds (dayPoints).
+    // The ratings already allow for who you played with and against, so a strong pair beating a
+    // weak one earns little and a win alongside a weaker partner earns more. Level on points:
+    // wins, then points difference.
+    played = [...lines.values()].filter((r) => r.gp > 0)
+      .sort((x, y) => (points.get(y.id) ?? 0) - (points.get(x.id) ?? 0) || y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa))
+      .map((r) => r.id);
+  } else if (kind === "final" && rounds > 1) {
+    // Two or more rounds before the finals: they all count together. Best record across every
+    // group game of the day (win %, then points difference per game), so a good first round still
+    // matters after a tougher second one, and nobody's day hangs on one draw.
+    played = rank(lines.values()).filter((r) => r.gp > 0).map((r) => r.id);
+  } else if (last.length && last[0].kind === "seeded") {
     const nos = [...new Set(last.map((g) => g.groupNo))].sort((a, b) => a - b);
     played = nos.flatMap((no) => {
       const gs = last.filter((g) => g.groupNo === no);
@@ -370,6 +428,63 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
   if (kind === "final") return [...played, ...fresh];
   const mid = Math.floor(played.length / 2);
   return [...played.slice(0, mid), ...fresh, ...played.slice(mid)];
+}
+
+/** The day's points: each player's rating ± summed over the scored games of today's rounds
+ *  (finals and skipped games aside), optionally one round only. `delta` is game id → player id → ±,
+ *  as the ratings worked it out (EventView.delta). */
+export function dayPoints(games: Game[], delta: Record<string, Record<string, number>>, stageNo?: number): Map<string, number> {
+  const pts = new Map<string, number>();
+  for (const g of games) {
+    if (g.kind === "final" || !isDone(g) || (stageNo != null && g.stageNo !== stageNo)) continue;
+    for (const [id, d] of Object.entries(delta[g.id] ?? {})) pts.set(id, (pts.get(id) ?? 0) + d);
+  }
+  return pts;
+}
+
+/**
+ * Rearranges a seeded or finals draw order so people aren't grouped with the same faces again,
+ * moving as little as possible. In a group of 4 everyone partners everyone, so sharing a group
+ * again means a repeat partner: a by-level round keeps earlier group-mates apart where it can
+ * (between neighbouring groups only, the closest-ranked swap first, so levels hold), and the
+ * finals only ever avoid replaying an earlier group exactly (the same three games again). Pure.
+ */
+export function spreadRepeats(order: string[], games: Game[], kind: "seeded" | "final"): string[] {
+  const sizes = splitSizes(order.length);
+  if (sizes.length < 2) return order;
+  const before = new Map<string, Set<string>>();
+  const together = (x: string, y: string) => !!before.get(x)?.has(y);
+  const earlier: string[][] = [];
+  const stageGroups = new Set(games.filter((g) => g.kind !== "final").map((g) => `${g.stageNo}:${g.groupNo}`));
+  for (const key of stageGroups) {
+    const ms = groupMembers(games.filter((g) => `${g.stageNo}:${g.groupNo}` === key));
+    earlier.push(ms);
+    for (const x of ms) for (const y of ms) if (x !== y) (before.get(x) ?? before.set(x, new Set()).get(x)!).add(y);
+  }
+  const same = (g: string[]) => earlier.some((e) => e.length === g.length && g.every((id) => e.includes(id)));
+  const cost = (g: string[]) => (kind === "final" ? (same(g) ? 1 : 0) : g.reduce((n, x, i) => n + g.slice(i + 1).filter((y) => together(x, y)).length, 0));
+  const rankOf = new Map(order.map((id, i) => [id, i]));
+  let at = 0;
+  const groups = sizes.map((k) => order.slice(at, (at += k)));
+  for (let guard = 0; guard < 100; guard++) {
+    let best: { g: number; i: number; j: number; gain: number; gap: number } | null = null;
+    for (let g = 0; g + 1 < groups.length; g++) {
+      const [A, B] = [groups[g], groups[g + 1]];
+      const now = cost(A) + cost(B);
+      if (!now) continue;
+      for (let i = 0; i < A.length; i++) for (let j = 0; j < B.length; j++) {
+        const a2 = A.map((x, k) => (k === i ? B[j] : x)), b2 = B.map((x, k) => (k === j ? A[i] : x));
+        const gain = now - cost(a2) - cost(b2);
+        const gap = rankOf.get(B[j])! - rankOf.get(A[i])!;
+        if (gain > 0 && (!best || gain > best.gain || (gain === best.gain && gap < best.gap))) best = { g, i, j, gain, gap };
+      }
+    }
+    if (!best) break;
+    const [A, B] = [groups[best.g], groups[best.g + 1]];
+    [A[best.i], B[best.j]] = [B[best.j], A[best.i]];
+  }
+  // Each group best first again, so group A / the A final still reads top down.
+  return groups.flatMap((g) => [...g].sort((x, y) => rankOf.get(x)! - rankOf.get(y)!));
 }
 
 /** A finished group's winner, or the tied pair when first place is level on wins and difference. */
@@ -409,9 +524,9 @@ export function decideTie(table: Line[], tied: [string, string], rnd: () => numb
   return rnd() < 0.5 ? [{ a: [x, c], b: [y, d] }] : [{ a: [x, d], b: [y, c] }];
 }
 
-/** "Group A", "A final" or "Group A decider": what a game is, for headings. */
+/** "Group A", "Gold final" or "Group A decider": what a game is, for headings. */
 export const gameLabel = (g: Pick<Game, "kind" | "groupName" | "decider">) =>
-  `${g.kind === "final" ? `${g.groupName} final` : g.kind === "ladder" ? g.groupName : `Group ${g.groupName}`}${g.decider ? " decider" : ""}`;
+  `${g.kind === "final" ? `${finalLabel(g.groupName)} final` : g.kind === "ladder" ? g.groupName : `Group ${g.groupName}`}${g.decider ? " decider" : ""}`;
 
 /** Deciders are short: to 11, win by two. */
 export const DECIDER_TO = 11;

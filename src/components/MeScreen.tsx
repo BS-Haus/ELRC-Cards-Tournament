@@ -13,14 +13,16 @@ import { PlayerBody } from "@/components/PlayerBody";
 import type { Profile, Season } from "@/lib/data";
 import { tierFor } from "@/lib/levels";
 import { PROV_N } from "@/lib/standings";
-import type { EntryState, EventPhoto, EventView } from "@/lib/data";
+import type { EntryState, EventPhoto, EventView, PlayerLite } from "@/lib/data";
 import { MyDay } from "@/components/MyDay";
 import { EventPhotos } from "@/components/EventPhotos";
 
-export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
+export function MeScreen({ me, org, orgUntil, next, today, season, profile, players = [] }: {
   me: { id: string; name: string; color: string; photo: string | null } | null; org: boolean; orgUntil: number | null; next: string | null;
   today: { id: string; title: string; state: EntryState | null; started: boolean; photos: EventPhoto[]; view: EventView; xp: { before: number; after: number; games: number } | null; veiled: boolean } | null; season: Season | null;
   profile: Pick<Profile, "player" | "tierWins" | "bestPartner" | "recent" | "names" | "form" | "trail" | "biggestWin" | "bestRun"> | null;
+  /** Everyone, for the sign-in pills (only loaded when signed out). */
+  players?: PlayerLite[];
 }) {
   const router = useRouter();
   const { run, pending, toast } = useAction();
@@ -41,7 +43,7 @@ export function MeScreen({ me, org, orgUntil, next, today, season, profile }: {
       )}
 
       {!me ? (
-        <JoinFlow onDone={go} />
+        <JoinFlow onDone={go} players={players} />
       ) : (
         <>
         {/* Before it starts: the sign-up card. Once it's on: your day, right under your rating. */}

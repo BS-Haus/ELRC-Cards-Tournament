@@ -3,19 +3,23 @@
 import { useEffect, useState } from "react";
 import { whoIs, signIn, signUp } from "@/app/actions";
 import { useAction } from "@/components/useAction";
-import { Section, card, btnPrimary, input, initial } from "@/components/ui";
+import { Section, card, btnPrimary, input, initial, Avatar } from "@/components/ui";
+import type { PlayerLite } from "@/lib/data";
 
 type Who = { kind: "back" | "claim" | "new"; name: string };
 
-/** Joining and signing in are one flow: your name, Continue, then your code on a small number pad.
- *  The app works out which it is: someone coming back enters their code, a walk-in an organiser
- *  added on the day picks one to claim their history, and someone new picks one. */
-export function JoinFlow({ onDone }: { onDone: () => void }) {
+/** Joining and signing in are one flow. Everyone who's played is a pill: tap yours, then your code
+ *  on a small number pad (or, if an organiser added you on the day, pick one to claim your games).
+ *  Not there? "Create an account": your name, then a code. Typing a name that already exists still
+ *  lands on signing in, so nobody makes a second profile by accident. */
+export function JoinFlow({ onDone, players = [] }: { onDone: () => void; players?: PlayerLite[] }) {
   const { run, pending, toast } = useAction();
   const [name, setName] = useState("");
   const [who, setWho] = useState<Who | null>(null);
   const [pin, setPin] = useState("");
   const [shake, setShake] = useState(false);
+  const [creating, setCreating] = useState(players.length === 0);
+  const [find, setFind] = useState("");
 
   const look = async () => {
     const r = await whoIs(name);
@@ -33,14 +37,41 @@ export function JoinFlow({ onDone }: { onDone: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pin]);
 
+  if (!who && !creating) {
+    const q = find.trim().toLowerCase();
+    const shown = [...players].sort((a, b) => a.name.localeCompare(b.name)).filter((p) => !q || p.name.toLowerCase().includes(q));
+    return (
+      <Section title="Sign in">
+        {toast}
+        <div className={`${card} p-4`}>
+          <p className="text-[14px] text-muted">Tap your name.</p>
+          {players.length > 16 && <input className={`${input} mt-3`} value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find your name" aria-label="Find your name" />}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {shown.map((p) => (
+              <button key={p.id} type="button" onClick={() => setWho({ kind: p.claimed ? "back" : "claim", name: p.name })}
+                className="spk-press inline-flex items-center gap-2 rounded-full border border-white/[.08] bg-raised py-1 pl-1 pr-3.5 text-[14px] font-semibold">
+                <Avatar p={p} size={28} />{p.name}
+              </button>
+            ))}
+            {!shown.length && <p className="text-[13.5px] text-dim">Nobody by that name yet.</p>}
+          </div>
+          <button type="button" onClick={() => { setCreating(true); setName(find); }} className="spk-press mt-4 w-full border-t border-white/[.06] pt-3.5 text-left text-[14px] font-bold">
+            Name not here? <span className="text-accent">Create an account →</span>
+          </button>
+        </div>
+      </Section>
+    );
+  }
+
   if (!who) {
     return (
-      <Section title="Join in or sign in">
+      <Section title="Create an account">
         {toast}
         <form className={`${card} grid gap-3 p-4`} onSubmit={(e) => { e.preventDefault(); if (name.trim().length >= 2) look(); }}>
-          <p className="text-[14px] leading-relaxed text-muted">Your name is your profile. New here or coming back, start the same way.</p>
+          <p className="text-[14px] leading-relaxed text-muted">Your name is your profile. Add an initial if there&apos;s already someone with your name.</p>
           <input className={input} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Your name, e.g. Sam K" maxLength={24} aria-label="Your name" autoFocus />
           <button disabled={pending || name.trim().length < 2} className={`${btnPrimary} h-12`}>Continue</button>
+          {players.length > 0 && <button type="button" onClick={() => setCreating(false)} className="spk-press text-[13px] font-bold text-muted">← Back to the list of names</button>}
         </form>
       </Section>
     );
@@ -69,7 +100,7 @@ export function JoinFlow({ onDone }: { onDone: () => void }) {
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2ZM18 9l-6 6M12 9l6 6" /></svg>
           </button>
         </div>
-        <button type="button" onClick={() => { setWho(null); setPin(""); }} className="spk-press mt-4 text-[13px] font-bold text-muted">← Not {who.name}? Change name</button>
+        <button type="button" onClick={() => { setWho(null); setPin(""); }} className="spk-press mt-4 text-[13px] font-bold text-muted">← Not {who.name}? Back</button>
       </div>
     </Section>
   );

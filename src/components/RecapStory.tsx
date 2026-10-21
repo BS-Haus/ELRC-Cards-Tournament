@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { StoryReel, CountUp, type Slide } from "@/components/StoryReel";
-import { finalWinTitle } from "@/lib/cards";
+import { finalLabel, finalWinTitle } from "@/lib/cards";
 import { Avatar, tierColor, fmtDate, LevelPill, RankBadge } from "@/components/ui";
 import { tierFor } from "@/lib/levels";
 import { PROV_N } from "@/lib/standings";
@@ -21,7 +21,7 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
   const your = mine ? "Your" : me ? `${n(me.id)}'s` : "";
   const pair = (ids: string[]) => ids.map(n).join(" & ");
   const momentLine = (m: Moment) => <><b>{pair(m.winners)}</b> beat {pair(m.losers)} <span className="tnum font-mono font-black text-accent">{m.score[0]}–{m.score[1]}</span><span className="block text-[13px] text-white/50">{m.label}</span></>;
-  const finishText = (f: Finish) => (f.won ? finalWinTitle(f.tier) : `${ordinal(f.position)} of ${f.of} in the ${f.tier} final`);
+  const finishText = (f: Finish) => (f.won ? finalWinTitle(f.tier) : `${ordinal(f.position)} of ${f.of} in the ${finalLabel(f.tier)} final`);
 
   const slides: Slide[] = [];
   slides.push({
@@ -80,7 +80,7 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
         key: "finish", bg: f?.won ? "from-[#3a2c06] to-[#0c0e10]" : "from-[#1a1d20] to-[#0c0e10]", confetti: !!f?.won,
         body: (
           <div className="flex flex-col items-start gap-4">
-            <div className="text-[13px] font-bold uppercase tracking-[.2em]" style={{ color: c }}>{f ? `${f.tier} final` : "After the groups"}</div>
+            <div className="text-[13px] font-bold uppercase tracking-[.2em]" style={{ color: c }}>{f ? `${finalLabel(f.tier)} final` : "After the groups"}</div>
             {f?.won && <div className="text-[64px] leading-none" aria-hidden="true">🏆</div>}
             <div className="text-[44px] font-black leading-[1.02] tracking-[-.02em]" style={{ color: f?.won ? c : undefined }}>
               {f ? finishText(f) : `${ordinal(me.dayRank!.position)} of ${me.dayRank!.of}`}
@@ -237,7 +237,7 @@ export function RecapStory({ recap, names, viewer, backHref }: { recap: Recap; n
               <div key={w.name} className="flex items-center gap-3 rounded-2xl p-4" style={{ background: `${c}${isMine ? "30" : "18"}`, border: `1px solid ${c}${isMine ? "90" : "40"}` }}>
                 {w.winner ? <Avatar p={names[w.winner]} size={44} /> : <span className="text-[28px]">🤝</span>}
                 <div className="min-w-0">
-                  <div className="text-[12px] font-bold uppercase tracking-[.14em]" style={{ color: c }}>{w.name} final{isMine ? ` · ${mine ? "your" : "their"} final` : ""}</div>
+                  <div className="text-[12px] font-bold uppercase tracking-[.14em]" style={{ color: c }}>{finalLabel(w.name)} final{isMine ? ` · ${mine ? "your" : "their"} final` : ""}</div>
                   <div className="truncate text-[22px] font-black">{w.winner ? n(w.winner) : w.tied.length ? `Tie: ${w.tied.map(n).join(" / ")}` : "Still playing"}</div>
                 </div>
               </div>

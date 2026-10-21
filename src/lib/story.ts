@@ -94,12 +94,12 @@ export function buildStory(ev: DayEvent, history: DayEvent[]): Story {
   const groupLines = [...tally(b.played.filter((g) => g.kind !== "final")).values()].filter((l) => l.gp >= 3);
   const unbeaten = b.lines.filter((l) => l.gp >= 4 && l.l === 0);
   if (unbeaten.length) stories.push({ kind: "unbeaten", title: unbeaten.length === 1 ? "Perfect day" : "Nobody could beat them", ids: unbeaten.map((l) => l.id), stat: `${unbeaten[0].w}–0`, detail: "Won every game they played." });
-  if (champion && champion.titles === 1 && before.some((e) => goldChampion(e.games))) stories.push({ kind: "firstTitle", title: "A first title", ids: [champion.id], stat: "1st", detail: "Never won the A final before today." });
+  if (champion && champion.titles === 1 && before.some((e) => goldChampion(e.games))) stories.push({ kind: "firstTitle", title: "A first title", ids: [champion.id], stat: "1st", detail: "Never won the Gold final before today." });
   // The climber: furthest from their group-stage place to their finish (bottom half into the A final).
   const groupOrder = rank(groupLines).map((r) => r.id);
   const climbs = groupOrder.map((id, i) => ({ id, from: i + 1, f: finishOf(ev.games, id) })).filter((c) => c.f && c.f.tierIndex === 0 && c.from > Math.ceil(groupOrder.length / 2));
   const climber = climbs.sort((x, y) => y.from - x.from)[0];
-  if (climber) stories.push({ kind: "climber", title: "The climb", ids: [climber.id], stat: `${ordinal(climber.from)} → A`, detail: `Scraped into the A final from ${ordinal(climber.from)} after the groups${climber.f!.won ? " and won it" : ""}.` });
+  if (climber) stories.push({ kind: "climber", title: "The climb", ids: [climber.id], stat: `${ordinal(climber.from)} → Gold`, detail: `Scraped into the Gold final from ${ordinal(climber.from)} after the groups${climber.f!.won ? " and won it" : ""}.` });
   if (b.streak && b.streak.n >= 4 && !unbeaten.some((l) => l.id === b.streak!.id)) stories.push({ kind: "streak", title: "On fire", ids: [b.streak.id], stat: `${b.streak.n} in a row`, detail: "The longest winning run of the day." });
   // Best partnership: most wins together, then points difference (2+ games).
   const pairs = new Map<string, { ids: string[]; w: number; gp: number; diff: number }>();

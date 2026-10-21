@@ -5,10 +5,12 @@ import { motion, useReducedMotion } from "motion/react";
 import { CountUp, Confetti } from "@/components/StoryReel";
 import { Avatar, tierColor } from "@/components/ui";
 import type { DrawFeed, PlayerLite } from "@/lib/data";
-import type { DrawGroup, ResultGroup } from "@/lib/drawStory";
+import type { DrawGroup } from "@/lib/drawStory";
 
-// The slides of a draw story (src/lib/drawStory.ts): the last stage's tables, the numbers, the
-// seeding and where you landed, the groups being dealt out like cards, then your group and net.
+// The slides of a draw story (src/lib/drawStory.ts). A round is a draw, so it's the shuffle and the
+// deal: the groups dealt out like cards, then your group and net. The finals aren't random, so they
+// feel different: your points from the day, then each final revealed, Bronze up to Gold, then yours.
+// No recap of the tables: everyone watched those happen.
 
 /** One slide: what's on it, its background, whether it throws confetti, and how long it stays. */
 export type StorySlide = { key: string; bg: string; body: React.ReactNode; party?: boolean; ms?: number };
@@ -92,8 +94,10 @@ export function DrawReel({ feed, onClose }: { feed: DrawFeed; onClose: () => voi
   );
 }
 
-const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : "±"}${Math.abs(n)}`;
-const finalTint = (label: string) => (label.endsWith(" final") ? tierColor(label.split(" ")[0]) : "#CBFB4F");
+const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
+// Labels read "Gold final"; the colours are keyed by the stored letter (A = Gold).
+const FINAL_CODE: Record<string, string> = { Gold: "A", Silver: "B", Bronze: "C", Copper: "D" };
+const finalTint = (label: string) => (label.endsWith(" final") ? tierColor(FINAL_CODE[label.split(" ")[0]] ?? label.split(" ")[0]) : "#CBFB4F");
 
 export function drawSlides(d: DrawFeed): StorySlide[] {
   const { story: s, names, me } = d;
@@ -121,58 +125,39 @@ export function drawSlides(d: DrawFeed): StorySlide[] {
     ),
   });
 
-  if (s.results) {
-    for (const [i, g] of s.results.groups.entries()) slides.push({ key: `res-${i}`, bg: "from-[#10202a] to-[#0c0e10]", ms: 6500, body: <ResultTable g={g} p={p} me={me.id} done={s.results.kind === "final" ? "Final" : "Final table"} /> });
-    const r = s.results;
-    slides.push({
-      key: "numbers", bg: "from-[#1a1530] to-[#0c0e10]",
-      body: (
-        <div className="grid gap-6">
-          <div className="text-[13px] font-bold uppercase tracking-[.2em] text-accent">That round in numbers</div>
-          <div>
-            <div className="tnum text-[64px] font-black leading-none tracking-[-.03em]"><CountUp to={r.points} /></div>
-            <div className="mt-1 text-[16px] font-semibold text-white/60">points scored</div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-white/5 p-4"><div className="tnum text-[30px] font-black text-accent">+<CountUp to={r.xpUp} /></div><div className="text-[13px] text-white/55">rating won in victories</div></div>
-            <div className="rounded-2xl bg-white/5 p-4"><div className="tnum text-[30px] font-black text-white/70">{r.xpDown ? "−" : ""}<CountUp to={Math.abs(r.xpDown)} /></div><div className="text-[13px] text-white/55">rating lost in defeats</div></div>
-          </div>
-          {r.climber && (
-            <div className="flex items-center gap-3 text-[16px]"><Avatar p={p(r.climber.id)} size={36} /><span><b>{name(r.climber.id)}</b> climbed the most: <b className="text-accent">+{r.climber.xp}</b> 🚀</span></div>
-          )}
-          {r.closest && <div className="text-[16px] text-white/75">Closest game: <b className="tnum font-mono text-fg">{r.closest.score[0]}–{r.closest.score[1]}</b> in {r.closest.label} 😮‍💨</div>}
-        </div>
-      ),
-    });
-  }
-
-  if (s.seeding) {
-    slides.push({
-      key: "seeding", bg: "from-[#24300f] to-[#0c0e10]",
-      body: (
-        <div className="grid gap-6">
-          <div className="text-[13px] font-bold uppercase tracking-[.2em] text-accent">How the seeding works</div>
-          <p className="text-[19px] font-semibold leading-snug text-white/80">{s.seeding.rule}</p>
-          {s.seeding.from && (
-            <div className="grid justify-items-start gap-2">
-              <span className="rounded-2xl bg-white/8 px-4 py-3 text-[20px] font-black">{s.seeding.from}</span>
-              <span className="spk-crown pl-6 text-[28px] text-accent" aria-hidden="true">↓</span>
-              <span className="rounded-2xl px-4 py-3 text-[24px] font-black text-ink" style={{ background: finalTint(s.seeding.to) }}>{s.seeding.to}</span>
+  if (s.kind === "final") {
+    if (s.day) {
+      const d = s.day;
+      slides.push({
+        key: "day", bg: "from-[#2a2410] to-[#0c0e10]",
+        body: (
+          <div className="grid gap-6">
+            <div className="text-[13px] font-bold uppercase tracking-[.2em] text-gold">Your day</div>
+            <div>
+              <div className={`tnum text-[84px] font-black leading-none tracking-[-.03em] ${d.points >= 0 ? "text-win" : "text-white/70"}`}>{d.points >= 0 ? "+" : "−"}<CountUp to={Math.abs(d.points)} /></div>
+              <div className="mt-2 text-[17px] font-semibold text-white/60">points from both rounds</div>
             </div>
-          )}
-        </div>
-      ),
-    });
+            <div className="text-[30px] font-black leading-tight">{d.rank === 1 ? "Top of the day" : `${ordinal(d.rank)} of ${d.of}`}</div>
+            <p className="text-[15px] leading-snug text-white/55">The finals are seeded on points. Top four to Gold.</p>
+          </div>
+        ),
+      });
+    }
+    // Bronze first, Gold last.
+    for (const g of [...s.groups].reverse()) {
+      const gold = g.tier === 0;
+      slides.push({ key: `final-${g.tier}`, bg: gold ? "from-[#3a2e0c] to-[#0c0e10]" : "from-[#1c1f24] to-[#0c0e10]", party: gold, ms: 4800, body: <FinalReveal g={g} p={p} me={me.id} /> });
+    }
+  } else {
+    slides.push({ key: "shuffle", bg: "from-[#101a24] to-[#0c0e10]", ms: 4200, body: <Shuffle n={s.players} /> });
+    slides.push({ key: "deal", bg: "from-[#0f2420] to-[#0c0e10]", ms: 4200 + s.players * 160, body: <Deal groups={s.groups} p={p} me={me.id} final={false} /> });
   }
-
-  slides.push({ key: "shuffle", bg: "from-[#101a24] to-[#0c0e10]", ms: 4200, body: <Shuffle n={s.players} final={s.kind === "final"} /> });
-  slides.push({ key: "deal", bg: "from-[#0f2420] to-[#0c0e10]", ms: 4200 + s.players * 160, body: <Deal groups={s.groups} p={p} me={me.id} final={s.kind === "final"} /> });
 
   if (s.mine) {
     const m = s.mine;
     const tint = finalTint(m.label);
     slides.push({
-      key: "mine", bg: "from-[#24300f] to-[#0c0e10]", party: s.kind === "final" && m.label.startsWith("A "),
+      key: "mine", bg: "from-[#24300f] to-[#0c0e10]", party: false,
       body: (
         <div className="grid gap-6">
           <div className="text-[13px] font-bold uppercase tracking-[.2em] text-white/55">You&apos;re in</div>
@@ -196,7 +181,7 @@ export function drawSlides(d: DrawFeed): StorySlide[] {
   }
 
   const send = s.kind === "final"
-    ? (s.mine?.label.startsWith("A ") ? "The big one. Leave it all on the net 🔥" : "Your final, your trophy. Go get it 💪")
+    ? (s.mine?.label.startsWith("Gold") ? "The big one. Leave it all on the net 🔥" : "Your final, your trophy. Go get it 💪")
     : s.kind === "seeded" ? "Everyone in your group is at your level. Every point counts." : "New partners, new chances. Have fun out there 🍀";
   slides.push({
     key: "go", bg: "from-[#1b2410] to-[#0c0e10]",
@@ -209,30 +194,6 @@ export function drawSlides(d: DrawFeed): StorySlide[] {
     ),
   });
   return slides;
-}
-
-function ResultTable({ g, p, me, done }: { g: ResultGroup; p: (id: string) => PlayerLite | undefined; me: string; done: string }) {
-  return (
-    <div className="grid gap-4">
-      <div className="flex items-baseline justify-between">
-        <div className="text-[30px] font-black" style={{ color: finalTint(g.label) }}>{g.label}</div>
-        <div className="text-[12px] font-bold uppercase tracking-[.16em] text-white/45">{done}</div>
-      </div>
-      <div className="overflow-hidden rounded-2xl bg-white/5">
-        {g.rows.map((r, i) => (
-          <div key={r.id} className={`spk-up grid grid-cols-[20px_1fr_auto_auto] items-center gap-3 border-b border-white/5 px-3.5 py-2.5 last:border-0 ${r.id === me ? "bg-accent/10" : ""}`} style={{ animationDelay: `${i * 120}ms` }}>
-            <span className="text-center text-[13px] font-black text-white/45">{i === 0 && g.winner ? "👑" : i + 1}</span>
-            <span className="flex min-w-0 items-center gap-2"><Avatar p={p(r.id)} size={26} /><span className="truncate text-[15px] font-bold">{r.id === me ? "You" : p(r.id)?.name}</span></span>
-            <span className="tnum font-mono text-[14px] font-bold text-white/70">{r.w}–{r.l}</span>
-            {r.placing
-              ? <span className="w-14 text-right text-[13px] font-black text-white/45" title="Still placing">🐣</span>
-              : <span className={`tnum w-14 text-right font-mono text-[14px] font-black ${r.xp > 0 ? "text-accent" : "text-white/50"}`}>{signed(r.xp)}</span>}
-          </div>
-        ))}
-      </div>
-      <div className="text-[14px] text-white/55">{g.points} points scored</div>
-    </div>
-  );
 }
 
 /** The back of a card: the club's lime on near-black, a net in the middle. */
@@ -298,8 +259,9 @@ export function Shuffle({ n, final = false, compact = false }: { n: number; fina
  *  down, then flips over to show who it is. Yours lands last in its group and glows. */
 function Deal({ groups, p, me, final }: { groups: DrawGroup[]; p: (id: string) => PlayerLite | undefined; me: string; final: boolean }) {
   const reduce = useReducedMotion();
-  const many = groups.length > 2;
-  const w = many ? 40 : 54, h = many ? 56 : 74;
+  // One group per row, full width, so the cards can be a decent size (four across a phone).
+  const many = groups.length > 4;
+  const w = many ? 46 : 62, h = many ? 64 : 84;
   // Deal round-robin, a card to each group in turn, like a real deal.
   const order: string[] = [];
   const most = Math.max(...groups.map((g) => g.members.length));
@@ -309,13 +271,13 @@ function Deal({ groups, p, me, final }: { groups: DrawGroup[]; p: (id: string) =
   return (
     <div className="grid gap-4">
       <div className="text-[13px] font-bold uppercase tracking-[.2em] text-accent">{final ? "Dealing the finals" : "Dealing the groups"}</div>
-      <div className={`grid gap-3 ${many ? "grid-cols-2" : "grid-cols-1"}`}>
+      <div className="grid gap-3">
         {groups.map((g) => {
           const tint = finalTint(g.label);
           return (
             <div key={g.label} className="rounded-2xl border border-white/10 bg-white/5 p-3">
               <div className="mb-2.5 flex items-center justify-between text-[14px] font-black"><span style={{ color: tint }}>{g.label}</span><span className="text-[12px] font-bold text-white/45">Net {g.net}</span></div>
-              <div className="flex flex-wrap gap-1.5" style={{ perspective: 600 }}>
+              <div className="flex flex-wrap gap-2" style={{ perspective: 600 }}>
                 {g.members.map((id) => {
                   const d = 0.2 + at.get(id)! * step;
                   const mine = id === me;
@@ -329,8 +291,8 @@ function Deal({ groups, p, me, final }: { groups: DrawGroup[]; p: (id: string) =
                         transition={{ duration: 0.45, ease: "easeOut", delay: d + 0.35 + (mine ? 0.5 : 0) }}>
                         {/* face */}
                         <span className={`absolute inset-0 grid place-items-center content-center gap-1 rounded-[10px] border-[1.5px] px-0.5 text-center ${mine ? "border-accent bg-accent text-ink shadow-[0_0_24px_rgba(203,251,79,.55)]" : "border-white/15 bg-[#1b1f23]"}`} style={{ backfaceVisibility: "hidden" }}>
-                          <Avatar p={p(id)} size={many ? 22 : 28} />
-                          <span className="w-full truncate text-[10.5px] font-extrabold leading-tight">{mine ? "You" : p(id)?.name}</span>
+                          <Avatar p={p(id)} size={many ? 24 : 32} />
+                          <span className="w-full truncate text-[11.5px] font-extrabold leading-tight">{mine ? "You" : p(id)?.name}</span>
                         </span>
                         {/* back */}
                         <span className="absolute inset-0" style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}><CardBack w={w} h={h} /></span>
@@ -340,6 +302,40 @@ function Deal({ groups, p, me, final }: { groups: DrawGroup[]; p: (id: string) =
                 })}
               </div>
             </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** One final, revealed: its name in its colour, its net, and its players as big cards flipping in
+ *  one by one, best seed first. Yours glows. */
+function FinalReveal({ g, p, me }: { g: DrawGroup; p: (id: string) => PlayerLite | undefined; me: string }) {
+  const reduce = useReducedMotion();
+  const tint = finalTint(g.label);
+  const has = g.members.includes(me);
+  return (
+    <div className="grid gap-6">
+      <div>
+        <div className="text-[13px] font-bold uppercase tracking-[.2em] text-white/50">{has ? "You're in the" : "Net " + g.net}</div>
+        <div className="mt-1 text-[48px] font-black leading-none tracking-[-.02em]" style={{ color: tint }}>{g.label}</div>
+        {has && <div className="mt-2 text-[17px] font-bold text-white/60">Net {g.net}</div>}
+      </div>
+      <div className="grid grid-cols-2 gap-3" style={{ perspective: 800 }}>
+        {g.members.map((id, i) => {
+          const mine = id === me;
+          return (
+            <motion.div key={id} className="relative h-[132px]" style={{ transformStyle: "preserve-3d" }}
+              initial={reduce ? false : { rotateY: 180, y: 24, opacity: 0 }} animate={{ rotateY: 0, y: 0, opacity: 1 }}
+              transition={{ duration: 0.55, ease: "easeOut", delay: 0.3 + i * 0.32 }}>
+              <div className={`absolute inset-0 grid place-items-center content-center gap-2 rounded-2xl border-2 p-2 text-center ${mine ? "bg-accent text-ink shadow-[0_0_32px_rgba(203,251,79,.5)]" : "bg-[#1b1f23]"}`}
+                style={{ backfaceVisibility: "hidden", borderColor: mine ? "#CBFB4F" : `${tint}88` }}>
+                <Avatar p={p(id)} size={52} />
+                <span className="w-full truncate text-[15px] font-black">{mine ? "You" : p(id)?.name}</span>
+              </div>
+              <div className="absolute inset-0 grid place-items-center" style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}><CardBack w={92} h={128} /></div>
+            </motion.div>
           );
         })}
       </div>

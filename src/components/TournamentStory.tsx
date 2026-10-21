@@ -6,6 +6,7 @@ import { StoryReel, CountUp, type Slide } from "@/components/StoryReel";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import type { Story, Tale } from "@/lib/story";
 import type { PlayerLite, EventPhoto } from "@/lib/data";
+import { finalLabel } from "@/lib/cards";
 
 const ordinal = (n: number) => `${n}${["th", "st", "nd", "rd"][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`;
 const TALE_BG: Record<Tale["kind"], string> = {
@@ -81,7 +82,7 @@ export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: 
           <div className="flex items-end justify-between gap-3">
             <div>
               <div className="text-[12px] font-bold uppercase tracking-[.2em] text-white/45">{isFinal ? "Final table" : "Group table"}</div>
-              <div className="mt-1 text-[40px] font-black leading-none tracking-[-.02em]" style={{ color: c }}>{isFinal ? `${p.name} final` : p.name}</div>
+              <div className="mt-1 text-[40px] font-black leading-none tracking-[-.02em]" style={{ color: c }}>{isFinal ? `${finalLabel(p.name)} final` : p.name}</div>
             </div>
             <div className="flex gap-4 pb-1 text-[11px] font-bold uppercase tracking-[.12em] text-white/40"><span className="w-10 text-right">W–L</span><span className="w-9 text-right">+/−</span></div>
           </div>
@@ -197,7 +198,7 @@ export function TournamentStory({ story, names, photos, viewerPlayed, viewer }: 
       endNote={viewerPlayed ? "Now watch your own day: your games, your points, your rank." : "Save the card or send it to the group."}
       endVisual={story.podium[0]?.winner ? (
         <div className="grid gap-3">
-          <div className="text-center text-[12px] font-bold uppercase tracking-[.2em] text-gold">{ev.title} · A final</div>
+          <div className="text-center text-[12px] font-bold uppercase tracking-[.2em] text-gold">{ev.title} · Gold final</div>
           <PodiumStand first={names[story.podium[0].winner]} second={story.podium[0].runnerUp ? names[story.podium[0].runnerUp] : undefined} third={story.podium[0].third ? names[story.podium[0].third] : undefined} />
           {story.podium.length > 1 && <FinalWinners finals={story.podium.slice(1).map((p) => ({ name: p.name, winner: p.winner ? names[p.winner] : undefined, tied: p.tied.length ? `Tied: ${both(p.tied)}` : undefined }))} />}
         </div>
