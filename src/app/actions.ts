@@ -285,10 +285,11 @@ export async function drawStage(eventId: string, kind: Exclude<StageKind, "ladde
   const present = drawPool(v.entries, v.games);
   if (present.length < 4) return fail("Check in at least 4 players first.");
   const ratingOf = kind === "random" ? await ratingNow() : new Map<string, number>();
-  // A mixed stage spreads the levels across the groups by rating (mixedOrder). A by-level round or
+  // A mixed stage spreads the levels across the groups by rating, away from anyone you've already
+  // been grouped with today (mixedOrder). A by-level round or
   // the finals seed from the results (seedOrder: after two or more rounds, all of them together),
   // then keep earlier group-mates apart where they can (spreadRepeats).
-  const order = kind === "random" ? mixedOrder(present, (id) => (ratingOf.get(id) ?? 800)) : spreadRepeats(seedOrder(v.games, present, kind), v.games, kind);
+  const order = kind === "random" ? mixedOrder(present, (id) => (ratingOf.get(id) ?? 800), Math.random, v.games) : spreadRepeats(seedOrder(v.games, present, kind), v.games, kind);
   const carried = present.filter((id) => v.entries.find((e) => e.playerId === id)?.state !== "here");
   const plan = planStage(kind, order, v.event.nets);
   const stageNo = (v.stages.at(-1)?.no ?? 0) + 1;

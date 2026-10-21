@@ -50,9 +50,11 @@ Both feed the same ratings (`src/lib/standings.ts`).
    **Play decider** and the tied pair play two games to 11 on opposite sides, swapping partners;
    most points across both wins. Deciders count for nothing else.
    Late arrivals who haven't played start in the bottom final.
-7. **Another round before the finals** (mixed, or by level): a by-level round regroups on the
-   results so far and keeps earlier group-mates apart where it can (`spreadRepeats`), so partners
-   stay fresh. With two or more rounds played, **they all count together** for the finals: seeded on
+7. **Another round before the finals** (mixed, or by level). A second mixed round deals the
+   levels out the same way (two stronger, two weaker per net) and keeps people away from anyone
+   they've already been grouped with (`mixedOrder` with the day's games): with 12 on 3 nets one
+   familiar pair per group is unavoidable, with 16 on 4 nets nobody repeats. A by-level round
+   regroups on the results so far and keeps earlier group-mates apart where it can (`spreadRepeats`). With two or more rounds played, **they all count together** for the finals: seeded on
    the whole day's record (win %, then points difference per game), and a final never replays a
    group exactly. The event page shows a "Standings · both rounds" table with where each final starts.
    Finals are stored as A–D and shown as Gold, Silver, Bronze, Copper (`finalLabel`).

@@ -141,19 +141,58 @@ export function shuffle<T>(xs: T[], rnd: () => number = Math.random): T[] {
  * play with (and bring on) the newer ones, and no two draws are the same. Returns the players in
  * group order, the order planStage slices them in.
  */
-export function mixedOrder(ids: string[], rating: (id: string) => number, rnd: () => number = Math.random): string[] {
+export function mixedOrder(ids: string[], rating: (id: string) => number, rnd: () => number = Math.random, games: Game[] = []): string[] {
   const sizes = splitSizes(ids.length);
   if (!sizes.length) return shuffle(ids, rnd);
   const sorted = [...ids].sort((a, b) => rating(b) - rating(a) || a.localeCompare(b));
+  // A later mixed round (`games`: the day so far) also keeps people away from anyone they've
+  // already shared a group with: each band goes to the groups in whichever order meets the fewest
+  // old faces (ties stay random), then same-band swaps tidy up what's left. Levels never move.
+  const met = groupmates(games);
+  const seen = (id: string, group: string[]) => group.filter((x) => met.get(id)?.has(x)).length;
   const groups: string[][] = sizes.map(() => []);
   let at = 0;
   for (let k = 0; k < Math.max(...sizes); k++) {
     const open = sizes.map((n, g) => (n > k ? g : -1)).filter((g) => g >= 0);
     const band = shuffle(sorted.slice(at, at + open.length), rnd);
     at += open.length;
-    open.forEach((g, i) => groups[g].push(band[i]));
+    let best = band, bestCost = Infinity;
+    for (const perm of open.length <= 6 ? permutations(band) : [band]) {
+      const c = perm.reduce((n, id, i) => n + seen(id, groups[open[i]]), 0);
+      if (c < bestCost) { best = perm; bestCost = c; }
+    }
+    open.forEach((g, i) => groups[g].push(best[i]));
+  }
+  const total = () => groups.reduce((n, g) => n + g.reduce((m, x, i) => m + g.slice(i + 1).filter((y) => met.get(x)?.has(y)).length, 0), 0);
+  for (let improved = met.size > 0, guard = 0; improved && guard < 50; guard++) {
+    improved = false;
+    for (let k = 0; k < Math.max(...sizes) && !improved; k++) {
+      for (let g = 0; g < groups.length && !improved; g++) for (let h = g + 1; h < groups.length && !improved; h++) {
+        if (groups[g].length <= k || groups[h].length <= k) continue;
+        const before = total();
+        [groups[g][k], groups[h][k]] = [groups[h][k], groups[g][k]];
+        if (total() < before) improved = true;
+        else [groups[g][k], groups[h][k]] = [groups[h][k], groups[g][k]];
+      }
+    }
   }
   return groups.flat();
+}
+
+/** Who has already shared a group with whom (finals aside): in a group of 4 that means partnered. */
+function groupmates(games: Game[]): Map<string, Set<string>> {
+  const met = new Map<string, Set<string>>();
+  const keys = new Set(games.filter((g) => g.kind !== "final").map((g) => `${g.stageNo}:${g.groupNo}`));
+  for (const key of keys) {
+    const ms = groupMembers(games.filter((g) => `${g.stageNo}:${g.groupNo}` === key));
+    for (const x of ms) for (const y of ms) if (x !== y) (met.get(x) ?? met.set(x, new Set()).get(x)!).add(y);
+  }
+  return met;
+}
+
+function permutations<T>(xs: T[]): T[][] {
+  if (xs.length <= 1) return [xs];
+  return xs.flatMap((x, i) => permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((p) => [x, ...p]));
 }
 
 export function planStage(kind: StageKind, ordered: string[], nets: number, rnd: () => number = Math.random): PlannedGroup[] {

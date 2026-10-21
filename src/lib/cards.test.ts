@@ -411,3 +411,42 @@ describe("a day of three rounds: mixed, by level, then finals (12 players, 3 net
     expect(spreadRepeats(ids(5), r1, "seeded")).toEqual(ids(5));
   });
 });
+
+describe("a second mixed round: the same spread of levels, new faces", () => {
+  const skill = (id: string) => 100 - Number(id.slice(1));
+  const play = (gs: Game[]) => gs.map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 9 }));
+  const members = (gs: Game[]) => [...new Set(gs.map((g) => g.groupNo))].map((no) => groupMembers(gs.filter((g) => g.groupNo === no)));
+  const roundsOf = (n: number, seed: number) => {
+    let s = seed;
+    const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    const all = ids(n);
+    const r1 = play(asGames(planStage("random", mixedOrder(all, skill, rnd), 4), 1));
+    const r2 = asGames(planStage("random", mixedOrder(all, skill, rnd, r1), 4), 2);
+    const shared = (a: string, b: string) => members(r1).some((m) => m.includes(a) && m.includes(b));
+    const repeats = (m: string[]) => m.reduce((k, x, i) => k + m.slice(i + 1).filter((y) => shared(x, y)).length, 0);
+    return { r1, r2, repeats };
+  };
+
+  it("12 players on 3 nets: still two from the top half and two from the bottom, and only the one familiar pair a group of 4 can't avoid", () => {
+    for (const seed of [1, 7, 42, 99, 1234]) {
+      const { r2, repeats } = roundsOf(12, seed);
+      for (const m of members(r2)) {
+        expect(m.filter((id) => Number(id.slice(1)) < 6)).toHaveLength(2);
+        expect(repeats(m)).toBe(1);
+      }
+    }
+  });
+
+  it("16 players on 4 nets: nobody shares a group with anyone from round 1", () => {
+    for (const seed of [1, 7, 42, 99, 1234]) {
+      const { r2, repeats } = roundsOf(16, seed);
+      for (const m of members(r2)) expect(repeats(m)).toBe(0);
+    }
+  });
+
+  it("the finals after two mixed rounds are the best records across both", () => {
+    const { r1, r2 } = roundsOf(12, 5);
+    const day = [...r1, ...play(r2)];
+    expect(seedOrder(day, ids(12), "final")).toEqual(rank(tally(day).values()).map((r) => r.id));
+  });
+});
