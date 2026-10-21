@@ -26,6 +26,9 @@ Next.js on Vercel, Postgres (Neon), dark theme with the lime accent.
   (`mixedOrder`), and the organiser can add another round, mixed or by level, before the finals.
   Scoring: tap a net, score it in the sheet, and the result (each player's rating change) shows
   in a small sheet. The draw stories and the finals banners stay; nothing else pops up mid-day.
+  A round's draw story is the shuffle and the deal (one group per row, big cards), then your
+  group and net; the finals' is different: your points from the day and your place, then each
+  final revealed Bronze, Silver, Gold (confetti), then yours. No recap tables: everyone saw them.
   The **Tournament** tab goes net by net, a carousel with the next net peeking in and dots underneath
   (swipe, or tap a net in the switch that sticks to the top; it opens on your net): the game on the net now (tap to score it), then the
   table and fixtures of the group playing there. Live nets have a slow green light
