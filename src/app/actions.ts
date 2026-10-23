@@ -7,7 +7,7 @@ import { players, events, entries, stages, games, eventPhotos } from "@/db/schem
 import { hashPin, verifyPin, PIN_RE, organiserCodeMatches } from "@/lib/auth/pin";
 import { codeAttemptAllowed, clearAttempts, signupAllowed } from "@/lib/auth/rateLimit";
 import { getSession, setSession, clearSession, isOrganiser, ORGANISER_HOURS } from "@/lib/auth/session";
-import { planStage, shuffle, mixedOrder, validScore, withSub, drawPool, seedOrder, spreadRepeats, dayPoints, bracketOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
+import { planStage, shuffle, mixedOrder, validScore, withSub, drawPool, seedOrder, spreadRepeats, bracketOrder, decideTie, currentMembers, remainingGames, type Game, type StageKind } from "@/lib/cards";
 import { getEventView, groupsOf, myMoments, myDrawStory, gameStory, gameResult, ratingNow, type Moments, type DrawFeed } from "@/lib/data";
 import { nextRound, roundsFrom, roundDone } from "@/lib/netLadder";
 
@@ -286,14 +286,14 @@ export async function drawStage(eventId: string, kind: Exclude<StageKind, "ladde
   if (present.length < 4) return fail("Check in at least 4 players first.");
   const ratingOf = kind === "random" ? await ratingNow() : new Map<string, number>();
   // A mixed stage spreads the levels across the groups by rating, away from anyone you've already
-  // been grouped with today (mixedOrder). The finals seed on the day's points, everyone's rating ±
-  // across today's rounds (dayPoints); a by-level round splits the field into brackets on them,
+  // been grouped with today (mixedOrder). A by-level round splits the field into brackets on where
+  // people finished; after brackets the finals take the top two of each bracket group up,
   // then keep earlier group-mates apart where they can (spreadRepeats).
-  const points = dayPoints(v.games, v.delta);
   const order = kind === "random" ? mixedOrder(present, (id) => (ratingOf.get(id) ?? 800), Math.random, v.games)
-    // By level: brackets on the day's points (top half / bottom half, each split alternately).
-    : kind === "seeded" ? bracketOrder(v.games, present, points)
-    : spreadRepeats(seedOrder(v.games, present, "final", points), v.games, "final");
+    // By level: brackets on where people finished (top half / bottom half, each split alternately).
+    : kind === "seeded" ? bracketOrder(v.games, present)
+    // Finals: after brackets, the top two of each bracket group go up (seedOrder).
+    : spreadRepeats(seedOrder(v.games, present, "final"), v.games, "final");
   const carried = present.filter((id) => v.entries.find((e) => e.playerId === id)?.state !== "here");
   const plan = planStage(kind, order, v.event.nets);
   const stageNo = (v.stages.at(-1)?.no ?? 0) + 1;

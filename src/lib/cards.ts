@@ -400,17 +400,30 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
     played = [...lines.values()].filter((r) => r.gp > 0)
       .sort((x, y) => (points.get(y.id) ?? 0) - (points.get(x.id) ?? 0) || y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa))
       .map((r) => r.id);
-  } else if (kind === "final" && rounds > 1) {
+  } else if (kind === "final" && rounds > 1 && last[0]?.kind !== "seeded") {
     // Two or more rounds before the finals: they all count together. Best record across every
     // group game of the day (win %, then points difference per game), so a good first round still
     // matters after a tougher second one, and nobody's day hangs on one draw.
     played = rank(lines.values()).filter((r) => r.gp > 0).map((r) => r.id);
   } else if (last.length && last[0].kind === "seeded") {
+    // After brackets (bracketOrder: two groups per level): the top two of each group in a bracket
+    // go up together and the rest go down together. 16 on 4 nets: the top bracket's top twos are
+    // the Gold final, its 3rds and 4ths Silver; the bottom bracket's top twos Bronze, the rest
+    // Copper. Everyone's final comes from the same three games at their level, so nobody gains
+    // from a bigger group in round 1 or from arriving late. Places: wins, then points difference.
     const nos = [...new Set(last.map((g) => g.groupNo))].sort((a, b) => a - b);
-    played = nos.flatMap((no) => {
+    const table = (no: number) => {
       const gs = last.filter((g) => g.groupNo === no);
       return groupRank(tally(gs.filter((g) => g.status !== "void"), groupMembers(gs)).values(), gs).map((r) => r.id);
-    });
+    };
+    played = [];
+    for (let i = 0; i < nos.length; i += 2) {
+      const pair = nos.slice(i, i + 2).map(table);
+      if (pair.length === 1) { played.push(...pair[0]); continue; }
+      const up = (t: string[]) => t.slice(0, Math.floor(t.length / 2));
+      const down = (t: string[]) => t.slice(Math.floor(t.length / 2));
+      played.push(...up(pair[0]), ...up(pair[1]), ...down(pair[0]), ...down(pair[1]));
+    }
     // Anyone who played earlier stages but not the last one (rare): after them, by the table.
     const rest = rank(tally(groupStages).values()).filter((r) => r.gp > 0).map((r) => r.id);
     played = [...new Set([...played, ...rest])];
@@ -431,20 +444,17 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
 }
 
 /**
- * A by-level round ("brackets"): everyone ranked on the day's points so far, then the field taken
+ * A by-level round ("brackets"): everyone ranked on where they finished so far, then the field taken
  * eight at a time (the top half, the next half, …) and each eight dealt alternately into its two
  * groups: 1st, 3rd, 5th, 7th on one net, 2nd, 4th, 6th, 8th on the next. Every game is even, and
  * because the finals then take the top four together, no final is a round's group again: at most
  * two of any final shared a group here. Earlier group-mates are kept apart by swapping ranking
  * neighbours only. Anyone who hasn't played yet goes mid-table. Pure.
  */
-export function bracketOrder(games: Game[], pool: string[], points: Map<string, number>): string[] {
-  const lines = tally(games.filter((g) => g.kind !== "final" && g.status !== "void"));
-  const played = pool.filter((id) => (lines.get(id)?.gp ?? 0) > 0)
-    .sort((x, y) => (points.get(y) ?? 0) - (points.get(x) ?? 0) || lines.get(y)!.w - lines.get(x)!.w || (lines.get(y)!.pf - lines.get(y)!.pa) - (lines.get(x)!.pf - lines.get(x)!.pa));
-  const fresh = pool.filter((id) => !played.includes(id));
-  const mid = Math.floor(played.length / 2);
-  const ranked = [...played.slice(0, mid), ...fresh, ...played.slice(mid)];
+export function bracketOrder(games: Game[], pool: string[]): string[] {
+  // Ranked on where people finished (seedOrder: after a mixed round, group winners, then
+  // runners-up, …; anyone who hasn't played yet mid-table).
+  const ranked = seedOrder(games, pool, "seeded");
   const sizes = splitSizes(ranked.length);
   const groups: string[][] = sizes.map(() => []);
   let at = 0;

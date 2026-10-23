@@ -155,13 +155,14 @@ describe("seedOrder", () => {
     expect(seedOrder(g, pool, "seeded").indexOf("late")).toBe(4);
   });
 
-  it("after a seeded stage, ranks by group finish, so the weaker group's winner can't jump into the A final", () => {
-    // Stage 2, seeded: group A = p0..p3 (the strong four), group B = p4..p7.
+  it("after brackets, the top two of each bracket group go up together and the rest down together", () => {
+    // Stage 2, brackets: group A = p0..p3, group B = p4..p7, the same level.
     const stage2 = score(asGames(planStage("seeded", ids(8), 2), 2)).map((g) => ({ ...g, kind: "seeded" as const }));
-    // Group B's winner went unbeaten, so on win % alone they'd top the table.
     const order = seedOrder(stage2, ids(8), "final");
-    const groupA = new Set(stage2.filter((g) => g.groupNo === 0).flatMap((g) => [...g.a, ...g.b]));
-    expect(order.slice(0, 4).every((id) => groupA.has(id))).toBe(true);
+    const groupOf = (no: number) => new Set(stage2.filter((g) => g.groupNo === no).flatMap((g) => [...g.a, ...g.b]));
+    const top = order.slice(0, 4);
+    expect(top.filter((id) => groupOf(0).has(id))).toHaveLength(2);
+    expect(top.filter((id) => groupOf(1).has(id))).toHaveLength(2);
     expect(order).toHaveLength(8);
   });
 
@@ -389,9 +390,8 @@ describe("a day of three rounds: mixed, by level, then finals (12 players, 3 net
     for (const m of members(r2)) expect(repeats(m)).toBe(1);
   });
 
-  it("the finals seed on both rounds together, and never replay a round 2 group", () => {
+  it("after a by-level round the finals come from its places, and never replay a round 2 group", () => {
     const seeded = seedOrder(day, all, "final");
-    expect(seeded).toEqual(rank(tally(day).values()).map((r) => r.id));
     const finals = spreadRepeats(seeded, day, "final");
     const fs = [finals.slice(0, 4), finals.slice(4, 8), finals.slice(8)];
     for (const f of fs) expect(members(r2).some((m) => f.every((id) => m.includes(id)))).toBe(false);
@@ -480,45 +480,48 @@ describe("the day's points (rating ± today) decide the finals", () => {
   });
 });
 
-describe("brackets: mixed, then even brackets, then the finals (16 on 4 nets)", () => {
+describe("brackets: round 1 sorts you, round 2 decides your final (16 on 4 nets)", () => {
   const all = ids(16);
   const rank = (id: string) => Number(id.slice(1)); // p0 best
-  const r1 = asGames(planStage("random", mixedOrder(all, (id) => 100 - rank(id), () => 0.4), 4), 1).map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 11 }));
-  // Points that follow the ranking: p0 the most.
-  const deltaFor = (gs: Game[]) => Object.fromEntries(gs.map((g) => [g.id, Object.fromEntries([...g.a, ...g.b].map((id) => [id, (16 - rank(id)) / 4]))]));
+  // The stronger side wins every game, by more the bigger the gap.
+  const play = (gs: Game[]) => gs.map((g) => {
+    const s = (t: string[]) => t.reduce((n, id) => n + (16 - rank(id)), 0);
+    const d = s(g.a) - s(g.b);
+    return { ...g, status: "done" as const, scoreA: d >= 0 ? 15 : Math.max(0, 13 - Math.abs(d)), scoreB: d >= 0 ? Math.max(0, 13 - d) : 15 };
+  });
   const groupsOf4 = (order: string[]) => [0, 1, 2, 3].map((k) => order.slice(k * 4, k * 4 + 4));
+  const members = (gs: Game[]) => [...new Set(gs.map((g) => g.groupNo))].sort((a, b) => a - b).map((no) => groupMembers(gs.filter((g) => g.groupNo === no)));
+  const r1 = play(asGames(planStage("random", mixedOrder(all, (id) => 100 - rank(id), () => 0.4), 4), 1));
 
   it("splits the field into halves, each dealt alternately across two nets", () => {
-    const order = bracketOrder([], all, new Map());
-    expect(groupsOf4(order).map((g) => g.map(rank))).toEqual([[0, 2, 4, 6], [1, 3, 5, 7], [8, 10, 12, 14], [9, 11, 13, 15]]);
+    expect(groupsOf4(bracketOrder([], all)).map((g) => g.map(rank))).toEqual([[0, 2, 4, 6], [1, 3, 5, 7], [8, 10, 12, 14], [9, 11, 13, 15]]);
   });
 
-  it("keeps round 1 group-mates apart only by swapping ranking neighbours: nobody changes bracket, and each group keeps one of every pair", () => {
-    const order = bracketOrder(r1, all, dayPoints(r1, deltaFor(r1)));
-    const [a, b, c, d] = groupsOf4(order);
-    expect(new Set([...a, ...b])).toEqual(new Set(all.slice(0, 8)));
-    expect(new Set([...c, ...d])).toEqual(new Set(all.slice(8)));
-    for (const g of [a, b, c, d]) expect(new Set(g.map((id) => Math.floor(rank(id) / 2))).size).toBe(4);
-    const met = (x: string, y: string) => r1.some((g) => [...g.a, ...g.b].includes(x) && [...g.a, ...g.b].includes(y));
-    const clashes = [a, b, c, d].reduce((n, g) => n + g.reduce((m, x, i) => m + g.slice(i + 1).filter((y) => met(x, y)).length, 0), 0);
-    expect(clashes).toBeLessThanOrEqual(4);
+  it("round 1 only sorts: the top half by finishing place goes to the top bracket, swapping only ranking neighbours", () => {
+    const ranked = seedOrder(r1, all, "seeded");
+    const [a, b, c, d] = groupsOf4(bracketOrder(r1, all));
+    expect(new Set([...a, ...b])).toEqual(new Set(ranked.slice(0, 8)));
+    expect(new Set([...c, ...d])).toEqual(new Set(ranked.slice(8)));
   });
 
-  it("then no final repeats more than two of a bracket group, so every final is at least half new faces", () => {
-    const r2order = bracketOrder(r1, all, dayPoints(r1, deltaFor(r1)));
-    const r2 = asGames(planStage("seeded", r2order, 4), 2).map((g) => ({ ...g, kind: "seeded" as const, status: "done" as const, scoreA: 15, scoreB: 12 }));
+  it("the finals come from round 2 places: top two of each top-bracket group to Gold, 3rd and 4th to Silver, and so on", () => {
+    const r2 = play(asGames(planStage("seeded", bracketOrder(r1, all), 4), 2).map((g) => ({ ...g, kind: "seeded" as const })));
     const day = [...r1, ...r2];
-    const finals = groupsOf4(spreadRepeats(seedOrder(day, all, "final", dayPoints(day, deltaFor(day))), day, "final"));
-    const r2groups = groupsOf4(r2order);
-    for (const f of finals) for (const g of r2groups) expect(f.filter((id) => g.includes(id)).length).toBeLessThanOrEqual(2);
-    expect(finals[0].map(rank).sort((x, y) => x - y)).toEqual([0, 1, 2, 3]);
+    const [g0, g1, g2, g3] = members(r2).map((m) => groupRank(tally(r2.filter((g) => m.includes(g.a[0])), m).values(), r2).map((r) => r.id));
+    const finals = groupsOf4(spreadRepeats(seedOrder(day, all, "final"), day, "final"));
+    expect(new Set(finals[0])).toEqual(new Set([...g0.slice(0, 2), ...g1.slice(0, 2)]));
+    expect(new Set(finals[1])).toEqual(new Set([...g0.slice(2), ...g1.slice(2)]));
+    expect(new Set(finals[2])).toEqual(new Set([...g2.slice(0, 2), ...g3.slice(0, 2)]));
+    expect(new Set(finals[3])).toEqual(new Set([...g2.slice(2), ...g3.slice(2)]));
   });
 
-  it("puts someone who hasn't played yet mid-table, and handles 12 (two nets of the top eight, one of the rest)", () => {
-    const pool = [...all, "late"];
-    const order = bracketOrder(r1, pool.slice(0, 12).concat("late"), dayPoints(r1, deltaFor(r1)));
-    expect(order).toHaveLength(13);
-    const twelve = bracketOrder([], all.slice(0, 12), new Map());
-    expect(groupsOf4(twelve).slice(0, 3).map((g) => g.map(rank))).toEqual([[0, 2, 4, 6], [1, 3, 5, 7], [8, 9, 10, 11]]);
+  it("a late arrival goes mid-table into the brackets and has to earn their final there", () => {
+    const fourteen = all.slice(0, 14);
+    const r1of14 = play(asGames(planStage("random", fourteen, 4), 1));
+    const order = bracketOrder(r1of14, [...fourteen, "p14", "p15"]);
+    expect(order).toHaveLength(16);
+    const at = (id: string) => order.indexOf(id);
+    expect(at("p14")).toBeGreaterThan(0);
+    expect(at("p15")).toBeLessThan(15);
   });
 });

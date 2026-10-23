@@ -9,7 +9,7 @@ import type { DrawGroup } from "@/lib/drawStory";
 
 // The slides of a draw story (src/lib/drawStory.ts). A round is a draw, so it's the shuffle and the
 // deal: the groups dealt out like cards, then your group and net. The finals aren't random, so they
-// feel different: your points from the day, then each final revealed, Bronze up to Gold, then yours.
+// feel different: where you finished last round, then each final revealed, Bronze up to Gold, then yours.
 // No recap of the tables: everyone watched those happen.
 
 /** One slide: what's on it, its background, whether it throws confetti, and how long it stays. */
@@ -107,7 +107,7 @@ export function drawSlides(d: DrawFeed): StorySlide[] {
 
   const title = s.kind === "final" ? "Finals time" : s.kind === "seeded" ? `Round ${s.stageNo}` : "The draw is in";
   const sub = s.kind === "final" ? "Everyone plays a final at their level."
-    : s.kind === "seeded" ? "Brackets: top half and bottom half, on the points so far. Even games all round."
+    : s.kind === "seeded" ? "Brackets: top half and bottom half, on round 1 places. Even games all round."
     : "Random groups. New partner every game.";
   slides.push({
     key: "intro", bg: s.kind === "final" ? "from-[#2a2410] to-[#0c0e10]" : "from-[#1b2410] to-[#0c0e10]",
@@ -126,19 +126,19 @@ export function drawSlides(d: DrawFeed): StorySlide[] {
   });
 
   if (s.kind === "final") {
-    if (s.day) {
-      const d = s.day;
+    if (s.seeding?.from) {
+      const sd = s.seeding;
       slides.push({
-        key: "day", bg: "from-[#2a2410] to-[#0c0e10]",
+        key: "from", bg: "from-[#2a2410] to-[#0c0e10]",
         body: (
           <div className="grid gap-6">
-            <div className="text-[13px] font-bold uppercase tracking-[.2em] text-gold">Your day</div>
-            <div>
-              <div className={`tnum text-[84px] font-black leading-none tracking-[-.03em] ${d.points >= 0 ? "text-win" : "text-white/70"}`}>{d.points >= 0 ? "+" : "−"}<CountUp to={Math.abs(d.points)} /></div>
-              <div className="mt-2 text-[17px] font-semibold text-white/60">points from both rounds</div>
+            <div className="text-[13px] font-bold uppercase tracking-[.2em] text-gold">Last round</div>
+            <div className="text-[40px] font-black leading-[1.05] tracking-[-.02em]">{sd.from}</div>
+            <div className="grid justify-items-start gap-2">
+              <span className="pl-2 text-[28px] text-white/50" aria-hidden="true">↓</span>
+              <span className="rounded-2xl px-4 py-3 text-[26px] font-black text-ink" style={{ background: finalTint(sd.to) }}>{sd.to}</span>
             </div>
-            <div className="text-[30px] font-black leading-tight">{d.rank === 1 ? "Top of the day" : `${ordinal(d.rank)} of ${d.of}`}</div>
-            <p className="text-[15px] leading-snug text-white/55">The finals are seeded on points. Top four to Gold.</p>
+            <p className="text-[15px] leading-snug text-white/55">{sd.rule}</p>
           </div>
         ),
       });
