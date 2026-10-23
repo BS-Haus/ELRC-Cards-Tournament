@@ -417,12 +417,24 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
       return groupRank(tally(gs.filter((g) => g.status !== "void"), groupMembers(gs)).values(), gs).map((r) => r.id);
     };
     played = [];
+    // Below the top twos, each place across the pair in turn (the two 3rds, then the two 4ths, …),
+    // the better record first: so when a final has a spare place (groups of five), it goes to the
+    // best 3rd, not whoever was 3rd in the first group.
+    const recs = tally(last.filter((g) => g.status !== "void"));
+    const better = (x: string, y: string) => {
+      const a = recs.get(x), b = recs.get(y);
+      if (!a?.gp || !b?.gp) return (b?.gp ?? 0) - (a?.gp ?? 0);
+      return b.w / b.gp - a.w / a.gp || (b.pf - b.pa) / b.gp - (a.pf - a.pa) / a.gp;
+    };
     for (let i = 0; i < nos.length; i += 2) {
       const pair = nos.slice(i, i + 2).map(table);
       if (pair.length === 1) { played.push(...pair[0]); continue; }
       const up = (t: string[]) => t.slice(0, Math.floor(t.length / 2));
       const down = (t: string[]) => t.slice(Math.floor(t.length / 2));
-      played.push(...up(pair[0]), ...up(pair[1]), ...down(pair[0]), ...down(pair[1]));
+      const [d0, d1] = [down(pair[0]), down(pair[1])];
+      const rest: string[] = [];
+      for (let k = 0; k < Math.max(d0.length, d1.length); k++) rest.push(...[d0[k], d1[k]].filter(Boolean).sort(better));
+      played.push(...up(pair[0]), ...up(pair[1]), ...rest);
     }
     // Anyone who played earlier stages but not the last one (rare): after them, by the table.
     const rest = rank(tally(groupStages).values()).filter((r) => r.gp > 0).map((r) => r.id);
