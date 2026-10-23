@@ -58,8 +58,11 @@ Both feed the same ratings (`src/lib/standings.ts`).
 7. **Another round before the finals** (mixed, or by level). A second mixed round deals the
    levels out the same way (two stronger, two weaker per net) and keeps people away from anyone
    they've already been grouped with (`mixedOrder` with the day's games): with 12 on 3 nets one
-   familiar pair per group is unavoidable, with 16 on 4 nets nobody repeats. A by-level round
-   regroups on the results so far and keeps earlier group-mates apart where it can (`spreadRepeats`). **The finals are seeded on the day's points**: each player's rating ± across today's rounds
+   familiar pair per group is unavoidable, with 16 on 4 nets nobody repeats. A by-level round is
+   **brackets** (`bracketOrder`): everyone ranked on the day's points, the top half plays the top
+   half and the bottom half the bottom half, each half dealt alternately across two nets (1st, 3rd,
+   5th, 7th on one; 2nd, 4th, 6th, 8th on the next). Even games, and no final then repeats more than
+   two of a bracket group. Earlier group-mates are kept apart by swapping ranking neighbours only. **The finals are seeded on the day's points**: each player's rating ± across today's rounds
    (`dayPoints`, from the same ratings as the ladder, so they allow for who you played with and
    against; level on points: wins, then points difference). A round's group table shows W–L and
    that round's points, sorted by them ("Points decide the finals"); a final's table shows W–L and +/−

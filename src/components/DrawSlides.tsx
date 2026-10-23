@@ -107,7 +107,7 @@ export function drawSlides(d: DrawFeed): StorySlide[] {
 
   const title = s.kind === "final" ? "Finals time" : s.kind === "seeded" ? `Round ${s.stageNo}` : "The draw is in";
   const sub = s.kind === "final" ? "Everyone plays a final at their level."
-    : s.kind === "seeded" ? "Regrouped by level, so every game is a close one."
+    : s.kind === "seeded" ? "Brackets: top half and bottom half, on the points so far. Even games all round."
     : "Random groups. New partner every game.";
   slides.push({
     key: "intro", bg: s.kind === "final" ? "from-[#2a2410] to-[#0c0e10]" : "from-[#1b2410] to-[#0c0e10]",

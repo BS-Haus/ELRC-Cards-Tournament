@@ -126,7 +126,7 @@ export function buildDrawStory(
       const from = myOld ? `${ordinal(myOld.rows.findIndex((r) => r.id === me) + 1)} in ${myOld.label}` : null;
       const rule = stage.kind === "final"
         ? "Seeded on the day's points: everyone's rating ± from today's rounds. Top four go to the Gold final."
-        : "Regrouped by level: the best of the last round together, then the next, so every game is a close one.";
+        : "Brackets on the day's points: the top half plays the top half, the bottom half the bottom half, each split across two nets.";
       seeding = { rule, from, to: mine?.label ?? "the next stage" };
     }
   }

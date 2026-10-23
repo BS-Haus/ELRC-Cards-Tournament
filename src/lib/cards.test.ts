@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, spreadRepeats, dayPoints, decideTie, headToHead, finalName, finalLabel, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
+import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, spreadRepeats, dayPoints, bracketOrder, decideTie, headToHead, finalName, finalLabel, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -477,5 +477,48 @@ describe("the day's points (rating ± today) decide the finals", () => {
     const order = seedOrder(r1, ids(8), "final", flat);
     const t = tally(r1);
     for (let i = 1; i < order.length; i++) expect(t.get(order[i - 1])!.w).toBeGreaterThanOrEqual(t.get(order[i])!.w);
+  });
+});
+
+describe("brackets: mixed, then even brackets, then the finals (16 on 4 nets)", () => {
+  const all = ids(16);
+  const rank = (id: string) => Number(id.slice(1)); // p0 best
+  const r1 = asGames(planStage("random", mixedOrder(all, (id) => 100 - rank(id), () => 0.4), 4), 1).map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 11 }));
+  // Points that follow the ranking: p0 the most.
+  const deltaFor = (gs: Game[]) => Object.fromEntries(gs.map((g) => [g.id, Object.fromEntries([...g.a, ...g.b].map((id) => [id, (16 - rank(id)) / 4]))]));
+  const groupsOf4 = (order: string[]) => [0, 1, 2, 3].map((k) => order.slice(k * 4, k * 4 + 4));
+
+  it("splits the field into halves, each dealt alternately across two nets", () => {
+    const order = bracketOrder([], all, new Map());
+    expect(groupsOf4(order).map((g) => g.map(rank))).toEqual([[0, 2, 4, 6], [1, 3, 5, 7], [8, 10, 12, 14], [9, 11, 13, 15]]);
+  });
+
+  it("keeps round 1 group-mates apart only by swapping ranking neighbours: nobody changes bracket, and each group keeps one of every pair", () => {
+    const order = bracketOrder(r1, all, dayPoints(r1, deltaFor(r1)));
+    const [a, b, c, d] = groupsOf4(order);
+    expect(new Set([...a, ...b])).toEqual(new Set(all.slice(0, 8)));
+    expect(new Set([...c, ...d])).toEqual(new Set(all.slice(8)));
+    for (const g of [a, b, c, d]) expect(new Set(g.map((id) => Math.floor(rank(id) / 2))).size).toBe(4);
+    const met = (x: string, y: string) => r1.some((g) => [...g.a, ...g.b].includes(x) && [...g.a, ...g.b].includes(y));
+    const clashes = [a, b, c, d].reduce((n, g) => n + g.reduce((m, x, i) => m + g.slice(i + 1).filter((y) => met(x, y)).length, 0), 0);
+    expect(clashes).toBeLessThanOrEqual(4);
+  });
+
+  it("then no final repeats more than two of a bracket group, so every final is at least half new faces", () => {
+    const r2order = bracketOrder(r1, all, dayPoints(r1, deltaFor(r1)));
+    const r2 = asGames(planStage("seeded", r2order, 4), 2).map((g) => ({ ...g, kind: "seeded" as const, status: "done" as const, scoreA: 15, scoreB: 12 }));
+    const day = [...r1, ...r2];
+    const finals = groupsOf4(spreadRepeats(seedOrder(day, all, "final", dayPoints(day, deltaFor(day))), day, "final"));
+    const r2groups = groupsOf4(r2order);
+    for (const f of finals) for (const g of r2groups) expect(f.filter((id) => g.includes(id)).length).toBeLessThanOrEqual(2);
+    expect(finals[0].map(rank).sort((x, y) => x - y)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("puts someone who hasn't played yet mid-table, and handles 12 (two nets of the top eight, one of the rest)", () => {
+    const pool = [...all, "late"];
+    const order = bracketOrder(r1, pool.slice(0, 12).concat("late"), dayPoints(r1, deltaFor(r1)));
+    expect(order).toHaveLength(13);
+    const twelve = bracketOrder([], all.slice(0, 12), new Map());
+    expect(groupsOf4(twelve).slice(0, 3).map((g) => g.map(rank))).toEqual([[0, 2, 4, 6], [1, 3, 5, 7], [8, 9, 10, 11]]);
   });
 });
