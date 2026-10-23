@@ -430,6 +430,56 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
   return [...played.slice(0, mid), ...fresh, ...played.slice(mid)];
 }
 
+/**
+ * A by-level round ("brackets"): everyone ranked on the day's points so far, then the field taken
+ * eight at a time (the top half, the next half, …) and each eight dealt alternately into its two
+ * groups: 1st, 3rd, 5th, 7th on one net, 2nd, 4th, 6th, 8th on the next. Every game is even, and
+ * because the finals then take the top four together, no final is a round's group again: at most
+ * two of any final shared a group here. Earlier group-mates are kept apart by swapping ranking
+ * neighbours only. Anyone who hasn't played yet goes mid-table. Pure.
+ */
+export function bracketOrder(games: Game[], pool: string[], points: Map<string, number>): string[] {
+  const lines = tally(games.filter((g) => g.kind !== "final" && g.status !== "void"));
+  const played = pool.filter((id) => (lines.get(id)?.gp ?? 0) > 0)
+    .sort((x, y) => (points.get(y) ?? 0) - (points.get(x) ?? 0) || lines.get(y)!.w - lines.get(x)!.w || (lines.get(y)!.pf - lines.get(y)!.pa) - (lines.get(x)!.pf - lines.get(x)!.pa));
+  const fresh = pool.filter((id) => !played.includes(id));
+  const mid = Math.floor(played.length / 2);
+  const ranked = [...played.slice(0, mid), ...fresh, ...played.slice(mid)];
+  const sizes = splitSizes(ranked.length);
+  const groups: string[][] = sizes.map(() => []);
+  let at = 0;
+  for (let g = 0; g < sizes.length; g += 2) {
+    const pair = g + 1 < sizes.length ? [g, g + 1] : [g];
+    const chunk = ranked.slice(at, (at += pair.reduce((n, i) => n + sizes[i], 0)));
+    chunk.forEach((id, i) => {
+      const want = pair[i % pair.length];
+      const to = groups[want].length < sizes[want] ? want : pair.find((p) => groups[p].length < sizes[p])!;
+      groups[to].push(id);
+    });
+    // Keep earlier group-mates apart by swapping neighbours in the ranking (1st with 2nd, 3rd with
+    // 4th…) between the two groups: each group still has one of every neighbouring pair, so the
+    // levels hold and the finals still bring new faces.
+    if (pair.length === 2) {
+      const met = groupmates(games);
+      const clash = (g: string[]) => g.reduce((n, x, i) => n + g.slice(i + 1).filter((y) => met.get(x)?.has(y)).length, 0);
+      const [A, B] = [groups[pair[0]], groups[pair[1]]];
+      for (let improved = true, guard = 0; improved && guard < 20; guard++) {
+        improved = false;
+        for (let k = 0; k + 1 < chunk.length; k += 2) {
+          const [x, y] = [chunk[k], chunk[k + 1]];
+          const ia = A.indexOf(x) >= 0 ? A.indexOf(x) : A.indexOf(y), ib = B.indexOf(y) >= 0 ? B.indexOf(y) : B.indexOf(x);
+          if (ia < 0 || ib < 0) continue;
+          const before = clash(A) + clash(B);
+          [A[ia], B[ib]] = [B[ib], A[ia]];
+          if (clash(A) + clash(B) < before) improved = true;
+          else [A[ia], B[ib]] = [B[ib], A[ia]];
+        }
+      }
+    }
+  }
+  return groups.flat();
+}
+
 /** The day's points: each player's rating ± summed over the scored games of today's rounds
  *  (finals and skipped games aside), optionally one round only. `delta` is game id → player id → ±,
  *  as the ratings worked it out (EventView.delta). */
@@ -449,7 +499,7 @@ export function dayPoints(games: Game[], delta: Record<string, Record<string, nu
  * (between neighbouring groups only, the closest-ranked swap first, so levels hold), and the
  * finals only ever avoid replaying an earlier group exactly (the same three games again). Pure.
  */
-export function spreadRepeats(order: string[], games: Game[], kind: "seeded" | "final"): string[] {
+export function spreadRepeats(order: string[], games: Game[], kind: "seeded" | "final", inPairs = false): string[] {
   const sizes = splitSizes(order.length);
   if (sizes.length < 2) return order;
   const before = new Map<string, Set<string>>();
@@ -468,7 +518,8 @@ export function spreadRepeats(order: string[], games: Game[], kind: "seeded" | "
   const groups = sizes.map((k) => order.slice(at, (at += k)));
   for (let guard = 0; guard < 100; guard++) {
     let best: { g: number; i: number; j: number; gain: number; gap: number } | null = null;
-    for (let g = 0; g + 1 < groups.length; g++) {
+    // `inPairs`: brackets swap only between the two groups of the same half, so nobody changes level.
+    for (let g = 0; g + 1 < groups.length; g += inPairs ? 2 : 1) {
       const [A, B] = [groups[g], groups[g + 1]];
       const now = cost(A) + cost(B);
       if (!now) continue;
