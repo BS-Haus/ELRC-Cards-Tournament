@@ -326,7 +326,7 @@ function projectNext(view: EventView, pool: string[], kind: StageKind): { order:
   }
   const order = spreadRepeats(seedOrder(view.games, pool, "final"), view.games, "final");
   const sizes = splitSizes(order.length);
-  if (sizes.length >= 2) cut(order, sizes, 1, (i) => { const t = TIERS[i] ?? String(i + 1); return { label: `${finalLabel(t)} final`, color: tierColor(t) }; });
+  if (sizes.length >= 2) cut(order, sizes, 1, (i) => { const t = TIERS[i] ?? String(i + 1); return { label: finalLabel(t), color: tierColor(t) }; });
   return { order, to };
 }
 
