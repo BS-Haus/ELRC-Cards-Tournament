@@ -71,7 +71,7 @@ Both feed the same ratings (`src/lib/standings.ts`).
    of a bracket group, or replays one exactly. The rating ± from every game still updates the ladder
    in the background but decides nothing on the day. Every table shows W–L and +/−. The event page's
    Standings show this round's record in the order the next draw takes it, in sections for where it
-   puts people (round 1: top and bottom bracket; round 2: each final), updating as scores come in;
+   puts people, as thin labelled cut-off lines (round 1: top and bottom bracket; round 2: each final), best record first within each, updating as scores come in;
    the group tables have a thin bar in the same colour (`projectNext`).
    Finals are stored as A–D and shown as Gold, Silver, Bronze, Copper (`finalLabel`).
 8. **Nobody re-checks in between stages.** Everyone who played stays in unless marked Out.

@@ -338,6 +338,11 @@ function Standings({ view, pool, me, kind }: { view: EventView; pool: string[]; 
   // This round's record: it alone decides the next draw (round 1 the brackets, round 2 the finals).
   const round = Math.max(0, ...games.filter((g) => g.kind !== "final").map((g) => g.stageNo));
   const lines = tally(games.filter((g) => g.stageNo === round && g.status !== "void"), order);
+  // Within each section (a bracket, a final) best record first: the section is what the draw
+  // decides; the order inside it is only for reading.
+  const sections = [...new Set(order.map((id) => to.get(id)?.label ?? ""))];
+  const rows = sections.flatMap((label) => order.filter((id) => (to.get(id)?.label ?? "") === label)
+    .sort((x, y) => lines.get(y)!.w - lines.get(x)!.w || (lines.get(y)!.pf - lines.get(y)!.pa) - (lines.get(x)!.pf - lines.get(x)!.pa)));
   const brackets = kind === "random";
   return (
     <Section title={brackets ? "Standings · round 1" : "Standings · round 2"} aside={brackets ? "Top half → top bracket" : "If the finals were drawn now"}>
@@ -346,18 +351,18 @@ function Standings({ view, pool, me, kind }: { view: EventView; pool: string[]; 
           <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">+/−</span>
         </div>
         <LayoutGroup id="standings">
-          {order.map((id, i) => {
+          {rows.map((id, i) => {
             const r = lines.get(id)!;
             const pd = r.pf - r.pa;
             const l = to.get(id);
-            // A heading where each section starts: the bracket or the final these rows go to.
-            const starts = l && to.get(order[i - 1]) !== l;
+            // A thin line where each cut-off falls, labelled with the bracket or final below it.
+            const starts = l && to.get(rows[i - 1]) !== l;
             return (
               <div key={id}>
               {starts && (
-                <div className="flex items-center gap-2 border-t border-white/[.06] bg-white/[.02] px-4 py-2">
-                  <span className="h-2 w-2 rounded-full" style={{ background: l.color }} aria-hidden="true" />
-                  <span className="spk-label" style={{ color: l.color }}>{l.label}</span>
+                <div className="flex items-center gap-2 px-4 pt-1.5 pb-0.5" aria-label={l.label}>
+                  <span className="text-[10px] font-bold uppercase tracking-[.1em]" style={{ color: l.color }}>{l.label}</span>
+                  <span className="h-px flex-1" style={{ background: `${l.color}80` }} />
                 </div>
               )}
               <motion.div layout="position" transition={SOFT}
