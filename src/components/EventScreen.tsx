@@ -323,44 +323,41 @@ function Standings({ view, pool, me }: { view: EventView; pool: string[]; me: st
   const { games, people } = view;
   const groupGames = games.filter((g) => g.kind !== "final" && g.status !== "void");
   const rounds = new Set(groupGames.map((g) => g.stageNo)).size;
-  const points = dayPoints(games, view.delta);
   const avg = dayAverages(games, view.delta);
   const order = spreadRepeats(seedOrder(games, pool, "final", avg), games, "final");
   const to = projectFinals(view, pool);
   const lines = tally(groupGames, order);
   const tiers = [...new Set(order.map((id) => to.get(id)).filter(Boolean))] as string[];
   return (
-    <Section title={rounds > 2 ? "Standings · all rounds" : rounds === 2 ? "Standings · both rounds" : "Standings"} aside="Ranked on average points">
+    <Section title={rounds > 2 ? "Standings · all rounds" : rounds === 2 ? "Standings · both rounds" : "Standings"} aside="If the finals were drawn now">
       <div className={`${card} overflow-hidden tnum text-[14px]`}>
         {tiers.length > 0 && (
           <div className="flex items-center gap-3 px-4 pt-3 pb-1">
             {tiers.map((t) => <span key={t} className="flex items-center gap-1.5 text-[12px] font-bold text-muted"><span className="h-2.5 w-0.5 rounded-full" style={{ background: tierColor(t) }} />{finalLabel(t)}</span>)}
-            <span className="ml-auto text-[11.5px] text-dim">if drawn now</span>
           </div>
         )}
-        <div className="grid grid-cols-[24px_1fr_40px_46px_44px] items-center px-4 pt-2 pb-1 spk-label">
-          <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">Pts</span><span className="text-right">Avg</span>
+        <div className="grid grid-cols-[28px_1fr_44px_56px] items-center px-4 pt-2 pb-1 spk-label">
+          <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">Avg</span>
         </div>
         <LayoutGroup id="standings">
           {order.map((id, i) => {
             const r = lines.get(id)!;
-            const p = Math.round(points.get(id) ?? 0);
             const a = avg.get(id) ?? 0;
             const t = to.get(id);
             return (
               <motion.div key={id} layout="position" transition={SOFT}
-                className={`grid grid-cols-[24px_1fr_40px_46px_44px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}
+                className={`grid grid-cols-[28px_1fr_44px_56px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}
                 style={t ? { boxShadow: `inset 1px 0 0 ${tierColor(t)}` } : undefined}>
                 <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
                 <span className="flex min-w-0 items-center gap-2"><Avatar p={people[id]} size={22} /><PlayerLink p={people[id]} className="truncate font-semibold" /></span>
                 <span className="text-right text-num">{r.w}–{r.l}</span>
-                <span className={`text-right font-mono text-[13px] ${p > 0 ? "text-win" : p < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (p > 0 ? "+" : p < 0 ? "−" : "") + Math.abs(p) : "–"}</span>
                 <span className={`text-right font-mono font-black ${a > 0 ? "text-win" : a < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (a > 0 ? "+" : a < 0 ? "−" : "") + Math.abs(a).toFixed(1) : "–"}</span>
               </motion.div>
             );
           })}
         </LayoutGroup>
       </div>
+      <p className="mt-2 px-1 text-[12px] text-dim">Avg: points (rating ± from each game) per game played, plus two, so one short round can&apos;t beat a full day.</p>
     </Section>
   );
 }

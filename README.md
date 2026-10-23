@@ -67,7 +67,9 @@ Both feed the same ratings (`src/lib/standings.ts`).
    you played with and against) over the games they played plus a two-game cushion
    (`dayAverages`, `POINTS_CUSHION`). Groups of five (four games), groups of four (three) and late
    arrivals are judged on how they played, not how often, and one short good round can't outrank a
-   whole day of steady play. Level: win %, then points difference per game. A round's group table shows W–L and
+   whole day of steady play. Level: win %, then points difference per game.
+   The Standings table shows just that one number (Avg), so its order always matches what's shown;
+   a round's group table shows that round's points. A round's group table shows W–L and
    that round's points, sorted by them ("Points decide the finals"); a final's table shows W–L and +/−
    (score difference) only ("Decided on wins": most wins, then +/−, points scored, head to head, decider).
    A final never replays a group exactly. The event page shows a Standings table from round 1 (everyone across the day's rounds, updating as
