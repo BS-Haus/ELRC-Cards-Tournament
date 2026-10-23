@@ -59,17 +59,20 @@ Both feed the same ratings (`src/lib/standings.ts`).
    levels out the same way (two stronger, two weaker per net) and keeps people away from anyone
    they've already been grouped with (`mixedOrder` with the day's games): with 12 on 3 nets one
    familiar pair per group is unavoidable, with 16 on 4 nets nobody repeats. A by-level round is
-   **brackets** (`bracketOrder`): everyone ranked on the day's points, the top half plays the top
-   half and the bottom half the bottom half, each half dealt alternately across two nets (1st, 3rd,
-   5th, 7th on one; 2nd, 4th, 6th, 8th on the next). Even games, and no final then repeats more than
-   two of a bracket group. Earlier group-mates are kept apart by swapping ranking neighbours only. **The finals are seeded on the day's points**: each player's rating ± across today's rounds
-   (`dayPoints`, from the same ratings as the ladder, so they allow for who you played with and
-   against; level on points: wins, then points difference). A round's group table shows W–L and
-   that round's points, sorted by them ("Points decide the finals"); a final's table shows W–L and +/−
-   (score difference) only ("Decided on wins": most wins, then +/−, points scored, head to head, decider).
-   A final never replays a group exactly. The event page shows a Standings table from round 1 (everyone across the day's rounds, updating as
-   scores come in), and every row there and in the group tables has a gold, silver or bronze bar for
-   the final it would be in if the finals were drawn now (`projectFinals`, the draw's own rule).
+   **brackets** (`bracketOrder`): everyone ranked on where they finished in round 1 (group winners,
+   then runners-up, …; anyone who hasn't played yet mid-table), the top half plays the top half and
+   the bottom half the bottom half, each half dealt alternately across two nets (1st, 3rd, 5th, 7th
+   on one; 2nd, 4th, 6th, 8th on the next). Earlier group-mates are kept apart by swapping ranking
+   neighbours only. **After brackets, round 2 decides the finals** (`seedOrder`): the top two of each
+   group in the top bracket go to Gold and the rest to Silver; the bottom bracket's top twos to
+   Bronze and the rest to Copper. Round 1 only sorts people into brackets, so a bigger round 1 group
+   or arriving late (and joining at round 2) changes nothing: everyone's final comes from the same
+   three games at their level. Places: wins, then points difference. No final repeats more than two
+   of a bracket group, or replays one exactly. The rating ± from every game still updates the ladder
+   in the background but decides nothing on the day. Every table shows W–L and +/−. The event page's
+   Standings show this round's record in the order the next draw takes it, in sections for where it
+   puts people, as thin labelled cut-off lines (round 1: top and bottom bracket; round 2: each final), best record first within each, updating as scores come in;
+   the group tables have a thin bar in the same colour (`projectNext`).
    Finals are stored as A–D and shown as Gold, Silver, Bronze, Copper (`finalLabel`).
 8. **Nobody re-checks in between stages.** Everyone who played stays in unless marked Out.
 

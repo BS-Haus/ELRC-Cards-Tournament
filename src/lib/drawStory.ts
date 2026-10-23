@@ -1,7 +1,7 @@
 // "Draw stories": when the organiser draws a stage (random groups, a seeded round, or the finals),
 // everyone in it gets a short story next time they're in the app. A round: the shuffle, the groups
-// dealt out, your group, net and first game. The finals: your points from the day, then each final
-// revealed from Bronze up to Gold, then yours. (`results` and `seeding`, the last stage's tables
+// dealt out, your group, net and first game. The finals: where you finished in the last round, then
+// each final revealed from Bronze up to Gold, then yours. (`results` and `seeding`, the last stage's tables
 // and the rule, are still worked out but no longer shown: everyone watched them happen.) Pure.
 import { finalLabel, tally, groupRank, stageMembers, isDone, finalName, gameLabel, netQueues, type Game, type StageKind } from "@/lib/cards";
 import { PROV_N, type Ratings } from "@/lib/standings";
@@ -27,9 +27,6 @@ export type DrawStory = {
   seeding: { rule: string; from: string | null; to: string } | null;
   groups: DrawGroup[];
   mine: MyDraw | null;
-  /** Finals only: your points from today's rounds (rating ±, what seeds the finals) and where they
-   *  put you among everyone in the finals. */
-  day: { points: number; rank: number; of: number } | null;
 };
 
 const labelFor = (kind: StageKind, name: string) => (kind === "final" ? `${finalLabel(name)} final` : `Group ${name}`);
@@ -125,28 +122,17 @@ export function buildDrawStory(
       const myOld = rg.find((g) => g.rows.some((r) => r.id === me));
       const from = myOld ? `${ordinal(myOld.rows.findIndex((r) => r.id === me) + 1)} in ${myOld.label}` : null;
       const rule = stage.kind === "final"
-        ? "Seeded on the day's points: everyone's rating ± from today's rounds. Top four go to the Gold final."
-        : "Brackets on the day's points: the top half plays the top half, the bottom half the bottom half, each split across two nets.";
+        ? prevStage.kind === "seeded"
+          ? "The top two of each round 2 group go up: the top bracket's to Gold, the rest to Silver; the bottom bracket's to Bronze, the rest to Copper."
+          : "Group winners go top, then runners-up, then the rest, by wins and points difference."
+        : "Brackets on where you finished: the top half plays the top half, the bottom half the bottom half, each split across two nets.";
       seeding = { rule, from, to: mine?.label ?? "the next stage" };
-    }
-  }
-
-  // Finals: your points across today's rounds, and your place on them among the finalists.
-  let day: DrawStory["day"] = null;
-  if (stage.kind === "final") {
-    const rounds = event.games.filter((g) => g.kind !== "final" && g.stageNo < stageNo && isDone(g) && !g.decider);
-    const moved = ratingFrom(r, new Set(rounds.map((g) => g.id)));
-    const everyone = groups.flatMap((g) => g.members);
-    const pts = (id: string) => moved.get(id)?.delta ?? 0;
-    if (rounds.length && everyone.includes(me)) {
-      const sorted = [...everyone].sort((a, b) => pts(b) - pts(a));
-      day = { points: Math.round(pts(me)), rank: sorted.indexOf(me) + 1, of: everyone.length };
     }
   }
 
   return {
     eventId: event.id, eventTitle: event.title, kind: stage.kind, stageNo, createdAt: stage.createdAt,
     players: groups.reduce((n, g) => n + g.members.length, 0), nets: new Set(groups.map((g) => g.net)).size,
-    results, seeding, groups, mine, day,
+    results, seeding, groups, mine,
   };
 }

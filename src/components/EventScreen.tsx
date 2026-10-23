@@ -12,7 +12,7 @@ import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { netQueues, needsSub, splitSizes, seedOrder, spreadRepeats, dayPoints, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
+import { netQueues, needsSub, splitSizes, seedOrder, spreadRepeats, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 import { Disclosure, SOFT } from "@/components/kit";
@@ -60,7 +60,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
   const subAlerts = games.filter((g) => needsSub(g, out).length);
   const finals = finalsOf(view);
   // Where everyone would land if the finals were drawn now: the bars on every table.
-  const bound = current && current.kind !== "final" && !drawPending ? projectFinals(view, here) : null;
+  const bound = current && current.kind !== "final" && !drawPending ? projectNext(view, here, current.kind).to : null;
 
   // Crown each final's winner the moment it's decided, on every phone that's watching. Winners
   // already decided when the page opened don't pop up; only ones that arrive while you watch.
@@ -180,7 +180,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
           {/* Net by net, one slide each (swipe, or tap a net's pill): the game on it now (tap to
               score), then the table and fixtures of each group playing there. Opens on your net. */}
           {current && !drawPending && (
-            <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`} aside={current.kind === "final" ? "Decided on wins" : "Points decide the finals"}>
+            <Section title={`${current.kind === "final" ? "Finals" : `Stage ${current.no}`} · ${current.kind === "final" ? `to ${ev.finalTo}` : STAGE_TITLE[current.kind]}`} aside={current.kind === "final" ? "Decided on wins" : current.kind === "seeded" ? "Top two of each group go up" : "Your place sets your bracket"}>
               <NetCarousel
                 start={mine?.next[0]?.net ?? curGroups.find((g) => !!me && g.table.some((r) => r.id === me))?.net ?? 0}
                 slides={netNumbers(queues, curGroups).map((n) => {
@@ -200,7 +200,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
                           onTap={() => setOpen(q[0].id)}
                         />
                       )}
-                      {onNet.map((g) => <GroupCard key={g.groupNo} g={g} people={people} delta={view.delta} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} bound={bound} />)}
+                      {onNet.map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} bound={bound} />)}
                     </div>
                     ),
                   };
@@ -211,7 +211,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
 
           {/* Where everyone stands across the day's rounds (they all count for the finals), with
               the final each would be in now. Updates as scores come in. */}
-          {bound && <Standings view={view} pool={here} me={me} />}
+          {bound && current && <Standings view={view} pool={here} me={me} kind={current.kind} />}
 
           {live && waiting.length > 0 && (
             <Section title="Joining next stage">
@@ -235,7 +235,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
                       <span className="text-muted transition group-open:rotate-90">›</span>
                     </summary>
                     <div className="grid gap-3 px-3 pb-3">
-                      {groupsOf(view, s.no).map((g) => <GroupCard key={g.groupNo} g={g} people={people} delta={view.delta} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
+                      {groupsOf(view, s.no).map((g) => <GroupCard key={g.groupNo} g={g} people={people} me={me} out={out} onOpen={setOpen} org={org && live} run={run} pending={pending} eventId={ev.id} />)}
                     </div>
                   </details>
                 ))}
@@ -297,67 +297,87 @@ function teamLine(ids: string[], people: Record<string, PlayerLite>, subs: strin
   )).reduce<React.ReactNode[]>((acc, x, i) => (i ? [...acc, " & ", x] : [x]), []);
 }
 
-/** `bound`: which final each player would be in if the finals were drawn now (projectFinals),
+/** `bound`: where each player would land in the next draw (projectNext): a bracket, or a final,
  *  shown as a gold / silver / bronze bar down the row's left edge. (Before: `cut`, the A final's line; the top `sure` are
  *  in, and with `extra` places left over, the next one might be. */
 /** The nets to show, in order: every net with a game waiting or a group of this stage on it. */
 const netNumbers = (queues: Game[][], groups: GroupView[]) =>
   [...new Set([...queues.flatMap((q, i) => (q.length ? [i + 1] : [])), ...groups.map((g) => g.net)])].sort((a, b) => a - b);
 
-/** Which final each player is heading for if the finals were drawn now: exactly the draw's own
- *  rule (seedOrder, then spreadRepeats), cut into finals by splitSizes. Empty with one final. */
-function projectFinals(view: EventView, pool: string[]): Map<string, string> {
-  const order = spreadRepeats(seedOrder(view.games, pool, "final", dayPoints(view.games, view.delta)), view.games, "final");
+/** Where everyone would land in the next draw, for the bars down every table and the Standings.
+ *  In round 1 that's a bracket (top half, bottom half: seedOrder's places, as bracketOrder draws);
+ *  in a brackets round it's a final (the top two of each group go up: seedOrder, spreadRepeats). */
+type Landing = { label: string; color: string };
+function projectNext(view: EventView, pool: string[], kind: StageKind): { order: string[]; to: Map<string, Landing> } {
+  const to = new Map<string, Landing>();
+  const cut = (order: string[], sizes: number[], step: number, land: (i: number) => Landing) => {
+    let at = 0;
+    for (let i = 0; i * step < sizes.length; i++) {
+      const n = sizes.slice(i * step, i * step + step).reduce((x, y) => x + y, 0);
+      const l = land(i);
+      order.slice(at, (at += n)).forEach((id) => to.set(id, l));
+    }
+  };
+  if (kind === "random") {
+    const order = seedOrder(view.games, pool, "seeded");
+    const sizes = splitSizes(order.length);
+    if (sizes.length >= 3) cut(order, sizes, 2, (i) => ({ label: sizes.length <= 4 ? (i === 0 ? "Top bracket" : "Bottom bracket") : `Bracket ${i + 1}`, color: i === 0 ? "#CBFB4F" : "#8A9196" }));
+    return { order, to };
+  }
+  const order = spreadRepeats(seedOrder(view.games, pool, "final"), view.games, "final");
   const sizes = splitSizes(order.length);
-  const to = new Map<string, string>();
-  if (sizes.length < 2) return to;
-  let at = 0;
-  sizes.forEach((k, i) => order.slice(at, (at += k)).forEach((id) => to.set(id, TIERS[i] ?? String(i + 1))));
-  return to;
+  if (sizes.length >= 2) cut(order, sizes, 1, (i) => { const t = TIERS[i] ?? String(i + 1); return { label: finalLabel(t), color: tierColor(t) }; });
+  return { order, to };
 }
 
-/** The day so far across every round (they all count for the finals), in the order the finals
- *  would be drawn now, each row with a bar for the final that puts them in. Rows slide as scores
- *  come in. */
-function Standings({ view, pool, me }: { view: EventView; pool: string[]; me: string | null }) {
+/** Everyone, in the order the next draw would take them, each row with a bar for where it puts
+ *  them: round 1, the bracket; round 2, the final. Rows slide as scores come in. */
+function Standings({ view, pool, me, kind }: { view: EventView; pool: string[]; me: string | null; kind: StageKind }) {
   const { games, people } = view;
-  const groupGames = games.filter((g) => g.kind !== "final" && g.status !== "void");
-  const rounds = new Set(groupGames.map((g) => g.stageNo)).size;
-  const points = dayPoints(games, view.delta);
-  const order = spreadRepeats(seedOrder(games, pool, "final", points), games, "final");
-  const to = projectFinals(view, pool);
-  const lines = tally(groupGames, order);
-  const tiers = [...new Set(order.map((id) => to.get(id)).filter(Boolean))] as string[];
+  const { order, to } = projectNext(view, pool, kind);
+  // This round's record: it alone decides the next draw (round 1 the brackets, round 2 the finals).
+  const round = Math.max(0, ...games.filter((g) => g.kind !== "final").map((g) => g.stageNo));
+  const lines = tally(games.filter((g) => g.stageNo === round && g.status !== "void"), order);
+  // Within each section (a bracket, a final) best record first: the section is what the draw
+  // decides; the order inside it is only for reading.
+  const sections = [...new Set(order.map((id) => to.get(id)?.label ?? ""))];
+  const rows = sections.flatMap((label) => order.filter((id) => (to.get(id)?.label ?? "") === label)
+    .sort((x, y) => lines.get(y)!.w - lines.get(x)!.w || (lines.get(y)!.pf - lines.get(y)!.pa) - (lines.get(x)!.pf - lines.get(x)!.pa)));
+  const brackets = kind === "random";
   return (
-    <Section title={rounds > 2 ? "Standings · all rounds" : rounds === 2 ? "Standings · both rounds" : "Standings"} aside="Points = rating ± today">
+    <Section title={brackets ? "Standings · round 1" : "Standings · round 2"} aside={brackets ? "Top half → top bracket" : "If the finals were drawn now"}>
       <div className={`${card} overflow-hidden tnum text-[14px]`}>
-        {tiers.length > 0 && (
-          <div className="flex items-center gap-3 px-4 pt-3 pb-1">
-            {tiers.map((t) => <span key={t} className="flex items-center gap-1.5 text-[12px] font-bold text-muted"><span className="h-2.5 w-0.5 rounded-full" style={{ background: tierColor(t) }} />{finalLabel(t)}</span>)}
-            <span className="ml-auto text-[11.5px] text-dim">if drawn now</span>
-          </div>
-        )}
-        <div className="grid grid-cols-[28px_1fr_44px_52px] items-center px-4 pt-2 pb-1 spk-label">
-          <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">Pts</span>
+        <div className="grid grid-cols-[28px_1fr_44px_44px] items-center px-4 pt-2 pb-1 spk-label">
+          <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">+/−</span>
         </div>
         <LayoutGroup id="standings">
-          {order.map((id, i) => {
+          {rows.map((id, i) => {
             const r = lines.get(id)!;
-            const p = Math.round(points.get(id) ?? 0);
-            const t = to.get(id);
+            const pd = r.pf - r.pa;
+            const l = to.get(id);
+            // A thin line where each cut-off falls, labelled with the bracket or final below it.
+            const starts = l && to.get(rows[i - 1]) !== l;
             return (
-              <motion.div key={id} layout="position" transition={SOFT}
-                className={`grid grid-cols-[28px_1fr_44px_52px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}
-                style={t ? { boxShadow: `inset 1px 0 0 ${tierColor(t)}` } : undefined}>
+              <div key={id}>
+              {starts && (
+                <div className="flex items-center gap-2 px-4 pt-1.5 pb-0.5" aria-label={`Advancing to ${l.label}`}>
+                  <span className="text-[10px] font-bold uppercase tracking-[.1em]" style={{ color: l.color }}>Advancing to {l.label.replace(/^(Top|Bottom)/, (w) => w.toLowerCase())}</span>
+                  <span className="h-px flex-1" style={{ background: `${l.color}80` }} />
+                </div>
+              )}
+              <motion.div layout="position" transition={SOFT}
+                className={`grid grid-cols-[28px_1fr_44px_44px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}>
                 <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
                 <span className="flex min-w-0 items-center gap-2"><Avatar p={people[id]} size={22} /><PlayerLink p={people[id]} className="truncate font-semibold" /></span>
                 <span className="text-right text-num">{r.w}–{r.l}</span>
-                <span className={`text-right font-mono font-black ${p > 0 ? "text-win" : p < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (p > 0 ? "+" : p < 0 ? "−" : "") + Math.abs(p) : "–"}</span>
+                <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
               </motion.div>
+              </div>
             );
           })}
         </LayoutGroup>
       </div>
+      <p className="mt-2 px-1 text-[12px] text-dim">{brackets ? "Group winners first, then runners-up, and so on: wins, then points difference." : "The top two of each group go up. Places: wins, then points difference."}</p>
     </Section>
   );
 }
@@ -426,18 +446,15 @@ function NetCarousel({ slides, start }: { slides: NetSlide[]; start: number }) {
   );
 }
 
-function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bound = null, delta }: { g: GroupView; delta?: Record<string, Record<string, number>>; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string; bound?: Map<string, string> | null }) {
+function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bound = null }: { g: GroupView; people: Record<string, PlayerLite>; me: string | null; out: Set<string>; onOpen: (id: string) => void; org: boolean; run: Run; pending: boolean; eventId: string; bound?: Map<string, Landing> | null }) {
   const final = g.kind === "final";
   const tint = final ? tierColor(g.name) : "#CBFB4F";
   const name = (id: string) => people[id]?.name ?? "Someone";
   const deciders = g.games.filter((x) => x.decider && x.status !== "void");
   const pts = deciderPoints(deciders, g.tied);
   const tiedNames = g.tied.map(name).join(" and ");
-  // A round's table is the points race: each player's rating ± from this group's games, best first.
-  // A final is won on wins, so its table stays wins first.
-  const roundPts = !final && delta ? dayPoints(g.games, delta) : null;
-  const table = roundPts ? [...g.table].sort((x, y) => (roundPts.get(y.id) ?? 0) - (roundPts.get(x.id) ?? 0) || y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa)) : g.table;
-  const cols = roundPts ? "grid-cols-[28px_1fr_44px_52px]" : "grid-cols-[28px_1fr_44px_44px]";
+  const table = g.table;
+  const cols = "grid-cols-[28px_1fr_44px_44px]";
   return (
     <div className={`${card} spk-up overflow-hidden`}>
       <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
@@ -447,11 +464,11 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bou
         </div>
         <span className="text-[12px] font-bold text-dim">Net {g.net}{g.complete ? " · done" : ""}</span>
       </div>
-      {/* The rule for this table, in a line: a round ranks on points, a final on wins. */}
+      {/* The rule for this table, in a line. */}
       <p className="-mt-1 px-4 pb-2 text-[12px] text-dim">
-        {final ? "Most wins takes it · level on wins: +/− (score difference)" : roundPts ? "Ranked on points (Elo ±)" : "Ranked on wins, then points difference"}
+        {final ? "Most wins takes it · level on wins: +/− (score difference)" : g.kind === "seeded" ? "Top two go up to the higher final" : "Your place here sets your bracket for round 2"}
       </p>
-      {!roundPts && (g.winner || g.tied.length > 0) && (
+      {(g.winner || g.tied.length > 0) && (
         <div className="mx-3 mb-2 rounded-xl px-3 py-2 text-[13.5px] font-bold" style={{ background: `${tint}22`, color: tint }}>
           {g.winner
             ? `★ ${name(g.winner)} ${final ? `wins the ${finalLabel(g.name)} final` : "tops the group"}${g.decider === "decided" ? ` on the decider, ${Math.max(...pts)}–${Math.min(...pts)}` : ""}`
@@ -469,33 +486,23 @@ function GroupCard({ g, people, me, out, onOpen, org, run, pending, eventId, bou
       )}
       <div className="tnum text-[14px]">
         <div className={`grid ${cols} items-center px-4 py-1 spk-label text-dim`}>
-          {roundPts
-            ? <><span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">Pts</span></>
-            : <><span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">+/−</span></>}
+          <><span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">+/−</span></>
         </div>
         <LayoutGroup id={`group-${g.stageNo}-${g.groupNo}`}>
           {table.map((r, i) => {
             const pd = r.pf - r.pa;
             const to = bound?.get(r.id);
-            const p = roundPts ? Math.round(roundPts.get(r.id) ?? 0) : 0;
             return (
               <motion.div key={r.id} layout="position" transition={SOFT}
                 className={`grid ${cols} items-center border-t border-white/[.04] px-4 py-2 ${r.id === me ? "bg-accent/[.06]" : ""}`}
-                style={to ? { boxShadow: `inset 1px 0 0 ${tierColor(to)}` } : undefined}
-                title={to ? `${finalLabel(to)} final if drawn now` : undefined}>
+                style={to ? { boxShadow: `inset 1px 0 0 ${to.color}` } : undefined}
+                title={to ? `${to.label} if drawn now` : undefined}>
                 <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
                 <span className="flex min-w-0 items-center gap-2"><Avatar p={people[r.id]} size={22} dim={out.has(r.id)} /><PlayerLink p={people[r.id]} className={`truncate font-semibold ${out.has(r.id) ? "text-dim" : ""}`} />{out.has(r.id) && <span className="text-[11px] text-dim">left</span>}</span>
-                {roundPts ? (
-                  <>
-                    <span className="text-right text-num">{r.w}–{r.l}</span>
-                    <span className={`text-right font-mono font-black ${p > 0 ? "text-win" : p < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (p > 0 ? "+" : p < 0 ? "−" : "") + Math.abs(p) : "–"}</span>
-                  </>
-                ) : (
-                  <>
+                <>
                     <span className="text-right font-black">{r.w}–{r.l}</span>
                     <span className={`text-right font-mono text-[12.5px] ${pd > 0 ? "text-win" : pd < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (pd > 0 ? "+" : "") + pd : "–"}</span>
                   </>
-                )}
               </motion.div>
             );
           })}
