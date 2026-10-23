@@ -3,7 +3,7 @@
 // dealt out, your group, net and first game. The finals: your points from the day, then each final
 // revealed from Bronze up to Gold, then yours. (`results` and `seeding`, the last stage's tables
 // and the rule, are still worked out but no longer shown: everyone watched them happen.) Pure.
-import { finalLabel, tally, groupRank, stageMembers, isDone, finalName, gameLabel, netQueues, type Game, type StageKind } from "@/lib/cards";
+import { finalLabel, POINTS_CUSHION, tally, groupRank, stageMembers, isDone, finalName, gameLabel, netQueues, type Game, type StageKind } from "@/lib/cards";
 import { PROV_N, type Ratings } from "@/lib/standings";
 
 /** `xp` is the rating the stage won or lost them; `placing` when they're still placing after it
@@ -125,7 +125,7 @@ export function buildDrawStory(
       const myOld = rg.find((g) => g.rows.some((r) => r.id === me));
       const from = myOld ? `${ordinal(myOld.rows.findIndex((r) => r.id === me) + 1)} in ${myOld.label}` : null;
       const rule = stage.kind === "final"
-        ? "Seeded on the day's points: everyone's rating ± from today's rounds. Top four go to the Gold final."
+        ? "Seeded on the day's points per game: everyone's rating ± from today's rounds over the games they played (plus two, so one short round can't beat a full day). Top four go to the Gold final."
         : "Brackets on the day's points: the top half plays the top half, the bottom half the bottom half, each split across two nets.";
       seeding = { rule, from, to: mine?.label ?? "the next stage" };
     }
@@ -138,8 +138,10 @@ export function buildDrawStory(
     const moved = ratingFrom(r, new Set(rounds.map((g) => g.id)));
     const everyone = groups.flatMap((g) => g.members);
     const pts = (id: string) => moved.get(id)?.delta ?? 0;
+    // Ranked as the finals were drawn: points per game, cushioned (dayAverages).
+    const played = (id: string) => rounds.filter((g) => [...g.a, ...g.b].includes(id)).length + POINTS_CUSHION;
     if (rounds.length && everyone.includes(me)) {
-      const sorted = [...everyone].sort((a, b) => pts(b) - pts(a));
+      const sorted = [...everyone].sort((a, b) => pts(b) / played(b) - pts(a) / played(a));
       day = { points: Math.round(pts(me)), rank: sorted.indexOf(me) + 1, of: everyone.length };
     }
   }

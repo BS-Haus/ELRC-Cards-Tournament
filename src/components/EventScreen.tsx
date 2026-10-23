@@ -12,7 +12,7 @@ import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { netQueues, needsSub, splitSizes, seedOrder, spreadRepeats, dayPoints, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
+import { netQueues, needsSub, splitSizes, seedOrder, spreadRepeats, dayPoints, dayAverages, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
 import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 import { Disclosure, SOFT } from "@/components/kit";
@@ -307,7 +307,7 @@ const netNumbers = (queues: Game[][], groups: GroupView[]) =>
 /** Which final each player is heading for if the finals were drawn now: exactly the draw's own
  *  rule (seedOrder, then spreadRepeats), cut into finals by splitSizes. Empty with one final. */
 function projectFinals(view: EventView, pool: string[]): Map<string, string> {
-  const order = spreadRepeats(seedOrder(view.games, pool, "final", dayPoints(view.games, view.delta)), view.games, "final");
+  const order = spreadRepeats(seedOrder(view.games, pool, "final", dayAverages(view.games, view.delta)), view.games, "final");
   const sizes = splitSizes(order.length);
   const to = new Map<string, string>();
   if (sizes.length < 2) return to;
@@ -324,12 +324,13 @@ function Standings({ view, pool, me }: { view: EventView; pool: string[]; me: st
   const groupGames = games.filter((g) => g.kind !== "final" && g.status !== "void");
   const rounds = new Set(groupGames.map((g) => g.stageNo)).size;
   const points = dayPoints(games, view.delta);
-  const order = spreadRepeats(seedOrder(games, pool, "final", points), games, "final");
+  const avg = dayAverages(games, view.delta);
+  const order = spreadRepeats(seedOrder(games, pool, "final", avg), games, "final");
   const to = projectFinals(view, pool);
   const lines = tally(groupGames, order);
   const tiers = [...new Set(order.map((id) => to.get(id)).filter(Boolean))] as string[];
   return (
-    <Section title={rounds > 2 ? "Standings · all rounds" : rounds === 2 ? "Standings · both rounds" : "Standings"} aside="Points = rating ± today">
+    <Section title={rounds > 2 ? "Standings · all rounds" : rounds === 2 ? "Standings · both rounds" : "Standings"} aside="Ranked on average points">
       <div className={`${card} overflow-hidden tnum text-[14px]`}>
         {tiers.length > 0 && (
           <div className="flex items-center gap-3 px-4 pt-3 pb-1">
@@ -337,22 +338,24 @@ function Standings({ view, pool, me }: { view: EventView; pool: string[]; me: st
             <span className="ml-auto text-[11.5px] text-dim">if drawn now</span>
           </div>
         )}
-        <div className="grid grid-cols-[28px_1fr_44px_52px] items-center px-4 pt-2 pb-1 spk-label">
-          <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">Pts</span>
+        <div className="grid grid-cols-[24px_1fr_40px_46px_44px] items-center px-4 pt-2 pb-1 spk-label">
+          <span>#</span><span>Player</span><span className="text-right">W–L</span><span className="text-right">Pts</span><span className="text-right">Avg</span>
         </div>
         <LayoutGroup id="standings">
           {order.map((id, i) => {
             const r = lines.get(id)!;
             const p = Math.round(points.get(id) ?? 0);
+            const a = avg.get(id) ?? 0;
             const t = to.get(id);
             return (
               <motion.div key={id} layout="position" transition={SOFT}
-                className={`grid grid-cols-[28px_1fr_44px_52px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}
+                className={`grid grid-cols-[24px_1fr_40px_46px_44px] items-center border-t border-white/[.04] px-4 py-2 ${id === me ? "bg-white/[.05]" : ""}`}
                 style={t ? { boxShadow: `inset 1px 0 0 ${tierColor(t)}` } : undefined}>
                 <span className="font-mono text-[12.5px] text-dim">{i + 1}</span>
                 <span className="flex min-w-0 items-center gap-2"><Avatar p={people[id]} size={22} /><PlayerLink p={people[id]} className="truncate font-semibold" /></span>
                 <span className="text-right text-num">{r.w}–{r.l}</span>
-                <span className={`text-right font-mono font-black ${p > 0 ? "text-win" : p < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (p > 0 ? "+" : p < 0 ? "−" : "") + Math.abs(p) : "–"}</span>
+                <span className={`text-right font-mono text-[13px] ${p > 0 ? "text-win" : p < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (p > 0 ? "+" : p < 0 ? "−" : "") + Math.abs(p) : "–"}</span>
+                <span className={`text-right font-mono font-black ${a > 0 ? "text-win" : a < 0 ? "text-loss" : "text-dim"}`}>{r.gp ? (a > 0 ? "+" : a < 0 ? "−" : "") + Math.abs(a).toFixed(1) : "–"}</span>
               </motion.div>
             );
           })}

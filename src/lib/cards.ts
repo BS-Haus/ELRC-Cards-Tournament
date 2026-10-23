@@ -393,12 +393,13 @@ export function seedOrder(games: Game[], pool: string[], kind: "seeded" | "final
   const rounds = new Set(groupStages.map((g) => g.stageNo)).size;
   const lines = tally(groupStages.filter((g) => g.status !== "void"));
   if (kind === "final" && points) {
-    // The day's points decide the finals: everyone's rating ± across today's rounds (dayPoints).
+    // The day's points decide the finals: everyone's rating ± per game across today's rounds
+    // (dayAverages, so missing a round or sitting out in a group of five doesn't count against you).
     // The ratings already allow for who you played with and against, so a strong pair beating a
     // weak one earns little and a win alongside a weaker partner earns more. Level on points:
-    // wins, then points difference.
+    // win %, then points difference per game.
     played = [...lines.values()].filter((r) => r.gp > 0)
-      .sort((x, y) => (points.get(y.id) ?? 0) - (points.get(x.id) ?? 0) || y.w - x.w || (y.pf - y.pa) - (x.pf - x.pa))
+      .sort((x, y) => (points.get(y.id) ?? 0) - (points.get(x.id) ?? 0) || y.w / y.gp - x.w / x.gp || (y.pf - y.pa) / y.gp - (x.pf - x.pa) / x.gp)
       .map((r) => r.id);
   } else if (kind === "final" && rounds > 1) {
     // Two or more rounds before the finals: they all count together. Best record across every
@@ -490,6 +491,24 @@ export function dayPoints(games: Game[], delta: Record<string, Record<string, nu
     for (const [id, d] of Object.entries(delta[g.id] ?? {})) pts.set(id, (pts.get(id) ?? 0) + d);
   }
   return pts;
+}
+
+/** Two games' worth of nothing added to everyone's average (dayAverages): it barely moves a full
+ *  day, but pulls a short one (a late arrival's single round) towards the middle, so one lucky
+ *  round can't outrank a whole day of steady play. Only a clearly better round still does. */
+export const POINTS_CUSHION = 2;
+
+/** The day's points per game: each player's points (dayPoints) over the games they got them from,
+ *  plus POINTS_CUSHION. What seeds the brackets and the finals, so someone in a group of five (four
+ *  games), a group of four (three) or who arrived a round late is judged on how they played, not
+ *  how often, without a short day being luckier than a long one. */
+export function dayAverages(games: Game[], delta: Record<string, Record<string, number>>): Map<string, number> {
+  const total = dayPoints(games, delta), n = new Map<string, number>();
+  for (const g of games) {
+    if (g.kind === "final" || !isDone(g)) continue;
+    for (const id of Object.keys(delta[g.id] ?? {})) n.set(id, (n.get(id) ?? 0) + 1);
+  }
+  return new Map([...total].map(([id, p]) => [id, p / ((n.get(id) ?? 0) + POINTS_CUSHION)]));
 }
 
 /**

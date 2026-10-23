@@ -62,9 +62,12 @@ Both feed the same ratings (`src/lib/standings.ts`).
    **brackets** (`bracketOrder`): everyone ranked on the day's points, the top half plays the top
    half and the bottom half the bottom half, each half dealt alternately across two nets (1st, 3rd,
    5th, 7th on one; 2nd, 4th, 6th, 8th on the next). Even games, and no final then repeats more than
-   two of a bracket group. Earlier group-mates are kept apart by swapping ranking neighbours only. **The finals are seeded on the day's points**: each player's rating ± across today's rounds
-   (`dayPoints`, from the same ratings as the ladder, so they allow for who you played with and
-   against; level on points: wins, then points difference). A round's group table shows W–L and
+   two of a bracket group. Earlier group-mates are kept apart by swapping ranking neighbours only. **The finals (and brackets) are seeded on the day's points per game**: each player's rating ±
+   across today's rounds (`dayPoints`, from the same ratings as the ladder, so they allow for who
+   you played with and against) over the games they played plus a two-game cushion
+   (`dayAverages`, `POINTS_CUSHION`). Groups of five (four games), groups of four (three) and late
+   arrivals are judged on how they played, not how often, and one short good round can't outrank a
+   whole day of steady play. Level: win %, then points difference per game. A round's group table shows W–L and
    that round's points, sorted by them ("Points decide the finals"); a final's table shows W–L and +/−
    (score difference) only ("Decided on wins": most wins, then +/−, points scored, head to head, decider).
    A final never replays a group exactly. The event page shows a Standings table from round 1 (everyone across the day's rounds, updating as

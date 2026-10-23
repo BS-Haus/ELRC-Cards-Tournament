@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, spreadRepeats, dayPoints, bracketOrder, decideTie, headToHead, finalName, finalLabel, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
+import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, spreadRepeats, dayPoints, dayAverages, POINTS_CUSHION, bracketOrder, decideTie, headToHead, finalName, finalLabel, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -520,5 +520,32 @@ describe("brackets: mixed, then even brackets, then the finals (16 on 4 nets)", 
     expect(order).toHaveLength(13);
     const twelve = bracketOrder([], all.slice(0, 12), new Map());
     expect(groupsOf4(twelve).slice(0, 3).map((g) => g.map(rank))).toEqual([[0, 2, 4, 6], [1, 3, 5, 7], [8, 9, 10, 11]]);
+  });
+});
+
+describe("points per game, cushioned: uneven groups and late arrivals are judged on how they played, not how often", () => {
+  // Round 1: 14 players, groups of 5, 5 and 4. Then two (p14, p15) arrive for round 2.
+  const r1 = asGames(planStage("random", ids(14), 4), 1).map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 10 }));
+  const r2 = asGames(planStage("random", ids(16), 4), 2).map((g) => ({ ...g, status: "done" as const, scoreA: 15, scoreB: 10 }));
+  const day = [...r1, ...r2];
+  const played = (id: string) => day.filter((g) => [...g.a, ...g.b].includes(id)).length;
+  const deltaWith = (late: number) => Object.fromEntries(day.map((g) => [g.id, Object.fromEntries([...g.a, ...g.b].map((id) => [id, id === "p15" ? late : 2]))]));
+
+  it("averages over the games played plus a two-game cushion", () => {
+    const avg = dayAverages(day, deltaWith(2));
+    expect(played("p0")).toBe(7);
+    expect(played("p15")).toBe(3);
+    expect(avg.get("p0")).toBeCloseTo((2 * 7) / (7 + POINTS_CUSHION));
+    expect(avg.get("p15")).toBeCloseTo((2 * 3) / (3 + POINTS_CUSHION));
+  });
+
+  it("a late arrival with a slightly better short round doesn't outrank a full steady day", () => {
+    // +2.5 a game over 3 games beats +2 a game on a plain average, but not once cushioned.
+    const order = seedOrder(day, ids(16), "final", dayAverages(day, deltaWith(2.5)));
+    expect(order.indexOf("p15")).toBeGreaterThan(order.indexOf("p0"));
+  });
+
+  it("a clearly better round still goes to the top", () => {
+    expect(seedOrder(day, ids(16), "final", dayAverages(day, deltaWith(5)))[0]).toBe("p15");
   });
 });

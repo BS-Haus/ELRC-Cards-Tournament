@@ -138,7 +138,7 @@ export function drawSlides(d: DrawFeed): StorySlide[] {
               <div className="mt-2 text-[17px] font-semibold text-white/60">points from both rounds</div>
             </div>
             <div className="text-[30px] font-black leading-tight">{d.rank === 1 ? "Top of the day" : `${ordinal(d.rank)} of ${d.of}`}</div>
-            <p className="text-[15px] leading-snug text-white/55">The finals are seeded on points. Top four to Gold.</p>
+            <p className="text-[15px] leading-snug text-white/55">The finals are seeded on points per game. Top four to Gold.</p>
           </div>
         ),
       });
