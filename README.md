@@ -65,7 +65,8 @@ Both feed the same ratings (`src/lib/standings.ts`).
    on one; 2nd, 4th, 6th, 8th on the next). Earlier group-mates are kept apart by swapping ranking
    neighbours only. **After brackets, round 2 decides the finals** (`seedOrder`): the top two of each
    group in the top bracket go to Gold and the rest to Silver; the bottom bracket's top twos to
-   Bronze and the rest to Copper. Round 1 only sorts people into brackets, so a bigger round 1 group
+   Bronze and the rest to Copper (with groups of five, a final's spare place goes to the better
+   3rd of the two groups). Round 1 only sorts people into brackets, so a bigger round 1 group
    or arriving late (and joining at round 2) changes nothing: everyone's final comes from the same
    three games at their level. Places: wins, then points difference. No final repeats more than two
    of a bracket group, or replays one exactly. The rating ± from every game still updates the ladder

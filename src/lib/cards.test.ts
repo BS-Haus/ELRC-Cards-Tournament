@@ -525,3 +525,33 @@ describe("brackets: round 1 sorts you, round 2 decides your final (16 on 4 nets)
     expect(at("p15")).toBeLessThan(15);
   });
 });
+
+describe("brackets with groups of five (19 in round 2)", () => {
+  const ids19 = ids(19);
+  const r = (id: string) => Number(id.slice(1));
+  // Lower number is stronger; the stronger side wins, the bigger the gap the bigger the margin.
+  const play = (gs: Game[]) => gs.map((g) => {
+    const d = g.b.reduce((n, x) => n + r(x), 0) - g.a.reduce((n, x) => n + r(x), 0);
+    return { ...g, status: "done" as const, scoreA: d >= 0 ? 15 : Math.max(0, 15 - Math.abs(d)), scoreB: d >= 0 ? Math.max(0, 15 - d) : 15 };
+  });
+  const r1 = play(asGames(planStage("random", mixedOrder(ids19.slice(0, 16), (id) => 100 - r(id), () => 0.3), 4), 1));
+  const r2plan = planStage("seeded", bracketOrder(r1, ids19), 4);
+  const r2 = play(asGames(r2plan, 2).map((g) => ({ ...g, kind: "seeded" as const })));
+  const day = [...r1, ...r2];
+
+  it("splits 19 into groups of 5, 5, 5 and 4, and the finals likewise", () => {
+    expect(r2plan.map((g) => g.ids.length)).toEqual([5, 5, 5, 4]);
+    expect(splitSizes(19)).toEqual([5, 5, 5, 4]);
+  });
+
+  it("the Gold final's spare place goes to the better of the two top-bracket 3rds", () => {
+    const place = (no: number) => groupRank(tally(r2.filter((g) => g.groupNo === no)).values(), r2).map((x) => x.id);
+    const [g0, g1] = [place(0), place(1)];
+    const gold = seedOrder(day, ids19, "final").slice(0, 5);
+    expect(new Set(gold.slice(0, 4))).toEqual(new Set([...g0.slice(0, 2), ...g1.slice(0, 2)]));
+    const t = tally(r2);
+    const [a, b] = [g0[2], g1[2]].map((id) => t.get(id)!);
+    const best = a.w / a.gp > b.w / b.gp || (a.w / a.gp === b.w / b.gp && (a.pf - a.pa) / a.gp >= (b.pf - b.pa) / b.gp) ? g0[2] : g1[2];
+    expect(gold[4]).toBe(best);
+  });
+});
