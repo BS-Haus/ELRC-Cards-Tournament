@@ -360,8 +360,8 @@ function Standings({ view, pool, me, kind }: { view: EventView; pool: string[]; 
             return (
               <div key={id}>
               {starts && (
-                <div className="flex items-center gap-2 px-4 pt-1.5 pb-0.5" aria-label={l.label}>
-                  <span className="text-[10px] font-bold uppercase tracking-[.1em]" style={{ color: l.color }}>{l.label}</span>
+                <div className="flex items-center gap-2 px-4 pt-1.5 pb-0.5" aria-label={`Advancing to ${l.label}`}>
+                  <span className="text-[10px] font-bold uppercase tracking-[.1em]" style={{ color: l.color }}>Advancing to {l.label.replace(/^(Top|Bottom)/, (w) => w.toLowerCase())}</span>
                   <span className="h-px flex-1" style={{ background: `${l.color}80` }} />
                 </div>
               )}
