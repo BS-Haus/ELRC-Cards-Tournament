@@ -437,6 +437,14 @@ describe("a second mixed round: the same spread of levels, new faces", () => {
     }
   });
 
+  it("14 players (5 + 5 + 4): nobody is in the group of 4 in both rounds", () => {
+    for (const seed of [1, 7, 42, 99, 1234, 2026, 31337]) {
+      const { r1, r2 } = roundsOf(14, seed);
+      const four = (gs: Game[]) => members(gs).find((m) => m.length === 4)!;
+      expect(four(r2).filter((id) => four(r1).includes(id))).toEqual([]);
+    }
+  });
+
   it("16 players on 4 nets: nobody shares a group with anyone from round 1", () => {
     for (const seed of [1, 7, 42, 99, 1234]) {
       const { r2, repeats } = roundsOf(16, seed);
