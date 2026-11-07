@@ -11,7 +11,7 @@ import { Shuffle } from "@/components/DrawSlides";
 import { ScoreSheet } from "@/components/ScoreSheet";
 import { EventPhotos } from "@/components/EventPhotos";
 import { card } from "@/components/ui";
-import { drawPool, DECIDER_TO, finalLabel, type Game, type StageKind } from "@/lib/cards";
+import { drawPool, DECIDER_TO, finalLabel, type Game, type StageKind, gameTarget } from "@/lib/cards";
 import { groupsOf, myDay, myCheckIn, type MyGame } from "@/lib/views";
 import type { EventView } from "@/lib/data";
 import { PROV_N } from "@/lib/standings";
@@ -52,7 +52,7 @@ export function MyDay({ view, me, org, xp, veiled }: {
   const stage = view.stages.at(-1);
   const groups = stage ? groupsOf(view, stage.no) : [];
   const name = (id: string) => people[id]?.name ?? "Someone";
-  const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
+  const toFor = (g: Game) => gameTarget(g, ev, games);
   const myGroup = groups.find((g) => g.table.some((r) => r.id === me));
   const place = myGroup ? myGroup.table.findIndex((r) => r.id === me) + 1 : 0;
   const moved = xp ? xp.after - xp.before : 0;

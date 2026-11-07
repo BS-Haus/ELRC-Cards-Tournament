@@ -151,8 +151,8 @@ export type PlayerStats = PlayerLite & Line & { events: number; tierWins: Record
 // in memory, so a new score only fits what changed; a cold start refits the lot (fine at a club's
 // size: a season of weekends is a few hundred games).
 let lastLedger: Ledger | undefined;
-function ratingsOf(evs: { id: string; startsAt: Date; groupTo: number; finalTo: number }[], gs: (Game & { eventId: string })[]): Ratings {
-  const r = rate(evs.map((e) => ({ id: e.id, startsAt: e.startsAt.getTime(), groupTo: e.groupTo, finalTo: e.finalTo, games: gs.filter((g) => g.eventId === e.id) })), { ledger: lastLedger });
+function ratingsOf(evs: { id: string; startsAt: Date; groupTo: number; finalTo: number; bigGroupTo: number | null }[], gs: (Game & { eventId: string })[]): Ratings {
+  const r = rate(evs.map((e) => ({ id: e.id, startsAt: e.startsAt.getTime(), groupTo: e.groupTo, finalTo: e.finalTo, bigGroupTo: e.bigGroupTo, games: gs.filter((g) => g.eventId === e.id) })), { ledger: lastLedger });
   lastLedger = r.ledger;
   return r;
 }

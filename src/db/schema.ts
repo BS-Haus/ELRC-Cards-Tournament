@@ -29,6 +29,9 @@ export const events = pgTable("events", {
   nets: integer("nets").notNull().default(2),
   groupTo: integer("group_to").notNull().default(15),
   finalTo: integer("final_to").notNull().default(15),
+  // Groups of 5 play 5 games to a group of 4's 3, so they can play shorter games to keep pace.
+  // Null: the same as groupTo.
+  bigGroupTo: integer("big_group_to"),
   status: text("status").notNull().default("upcoming"), // upcoming | live | done
   // How the day is played: "ladder" (nets top to bottom, win and go up; src/lib/netLadder.ts) or
   // "cards" (groups, then finals; src/lib/cards.ts).

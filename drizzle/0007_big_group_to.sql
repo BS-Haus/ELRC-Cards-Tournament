@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "big_group_to" integer;

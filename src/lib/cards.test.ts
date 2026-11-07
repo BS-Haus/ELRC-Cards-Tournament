@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, spreadRepeats, dayPoints, bracketOrder, decideTie, headToHead, finalName, finalLabel, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
+import { gameTarget, stageMinutes, finalsCut, mixedOrder, splitSizes, groupGames, planStage, tally, rank, groupWinner, netQueues, needsSub, withSub, validScore, winnerScore, groupMembers, groupRank, drawPool, seedOrder, spreadRepeats, dayPoints, bracketOrder, decideTie, headToHead, finalName, finalLabel, finalWinTitle, isFinalScore, placementOrder, currentMembers, remainingGames, type Game } from "./cards";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`);
 const pairKey = (x: string, y: string) => [x, y].sort().join("+");
@@ -561,5 +561,22 @@ describe("brackets with groups of five (19 in round 2)", () => {
     const [a, b] = [g0[2], g1[2]].map((id) => t.get(id)!);
     const best = a.w / a.gp > b.w / b.gp || (a.w / a.gp === b.w / b.gp && (a.pf - a.pa) / a.gp >= (b.pf - b.pa) / b.gp) ? g0[2] : g1[2];
     expect(gold[4]).toBe(best);
+  });
+});
+
+describe("groups of 5 can play shorter games", () => {
+  const g5 = asGames(planStage("random", ids(10), 2), 1); // two groups of 5
+  const g4 = asGames(planStage("random", ids(9), 2), 1); // 5 + 4
+  const ev = { groupTo: 15, finalTo: 15, bigGroupTo: 9 };
+  it("a group of 5 plays to bigGroupTo, a group of 4 to groupTo, finals and deciders unchanged", () => {
+    const five = g4.find((g) => g.groupNo === 0)!, four = g4.find((g) => g.groupNo === 1)!;
+    expect(gameTarget(five, ev, g4)).toBe(9);
+    expect(gameTarget(four, ev, g4)).toBe(15);
+    expect(gameTarget({ ...five, decider: true }, ev, g4)).toBe(11);
+    expect(gameTarget({ ...four, kind: "final" }, ev, g4)).toBe(15);
+    expect(gameTarget(g5[0], { groupTo: 15, finalTo: 15 }, g5)).toBe(15); // not set: same length
+  });
+  it("the round's time estimate uses the shorter games", () => {
+    expect(stageMinutes([5, 4], 2, 15, 9)).toBeLessThan(stageMinutes([5, 4], 2, 15));
   });
 });

@@ -130,7 +130,8 @@ export async function lockOrganiser(): Promise<Result> {
 // ---------------------------------------------------------------------------------------------
 // Events
 
-type EventInput = { title: string; startsAt: string; location: string; notes: string; nets: number; groupTo: number; finalTo: number; format?: "ladder" | "cards" };
+/** `bigGroupTo`: what groups of 5 play to (null: the same as groupTo); left out, it isn't changed. */
+type EventInput = { title: string; startsAt: string; location: string; notes: string; nets: number; groupTo: number; finalTo: number; bigGroupTo?: number | null; format?: "ladder" | "cards" };
 
 function parseEvent(x: EventInput): { ok: true; v: Omit<typeof events.$inferInsert, "id"> } | { ok: false; error: string } {
   const title = cleanName(x?.title);
@@ -145,6 +146,7 @@ function parseEvent(x: EventInput): { ok: true; v: Omit<typeof events.$inferInse
       location: cleanName(x.location).slice(0, 80), notes: typeof x.notes === "string" ? x.notes.trim().slice(0, 500) : "",
       nets: int(x.nets, 1, 8, 2), groupTo: int(x.groupTo, 5, 25, 15), finalTo: int(x.finalTo, 5, 25, 15),
       ...(x.format === "ladder" || x.format === "cards" ? { format: x.format } : {}),
+      ...(x.bigGroupTo === null ? { bigGroupTo: null } : Number.isInteger(x.bigGroupTo) && x.bigGroupTo! >= 5 && x.bigGroupTo! <= 25 ? { bigGroupTo: x.bigGroupTo } : {}),
     },
   };
 }

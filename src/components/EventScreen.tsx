@@ -12,7 +12,7 @@ import { CheckIn, LiveBadge } from "@/components/CheckIn";
 import { Court } from "@/components/Nets";
 import { PodiumStand, FinalWinners } from "@/components/Podium";
 import { Avatar, PlayerLink, Section, card, btnPrimary, btnGhost, btnQuiet, input, tierColor, fmtDate } from "@/components/ui";
-import { netQueues, needsSub, splitSizes, seedOrder, spreadRepeats, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle } from "@/lib/cards";
+import { netQueues, needsSub, splitSizes, seedOrder, spreadRepeats, tally, TIERS, stageMinutes, gamesEachForSize, isDone, drawPool, gameLabel, deciderPoints, DECIDER_TO, currentMembers, finalName, finalLabel, type Game, type StageKind, finalWinTitle, gameTarget } from "@/lib/cards";
 import { groupsOf, finalsOf, myDay, myCheckIn, type GroupView } from "@/lib/views";
 import type { EventView, PlayerLite, EntryState } from "@/lib/data";
 import { Disclosure, SOFT } from "@/components/kit";
@@ -83,7 +83,7 @@ export function EventScreen({ view, me, org, myXp = null, drawPending = false }:
   }, [winnersKey]);
   const iPlayed = !!me && games.some((g) => g.status === "done" && [...g.a, ...g.b].includes(me) && !g.subs.includes(me));
   const openGame = games.find((g) => g.id === open) ?? null;
-  const toFor = (g: Game) => (g.decider ? DECIDER_TO : g.kind === "final" ? ev.finalTo : ev.groupTo);
+  const toFor = (g: Game) => gameTarget(g, ev, games);
   const live = ev.status === "live";
   const done = ev.status === "done";
   // Once groups are drawn this page is the shared screen: every net, its table and fixtures. Your
@@ -608,7 +608,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
   const stageDone = current && left === 0;
   const twice = (key: string, fn: () => void) => { if (confirm === key) { setConfirm(null); fn(); } else { setConfirm(key); setTimeout(() => setConfirm((c) => (c === key ? null : c)), 3500); } };
   const plan = sizes.length
-    ? `${here} playing → groups of ${sizes.join(" + ")}. Everyone plays ${[...new Set(sizes.map(gamesEachForSize))].join(" or ")} games, about ${stageMinutes(sizes, ev.nets, ev.groupTo)} min.`
+    ? `${here} playing → groups of ${sizes.join(" + ")}. Everyone plays ${[...new Set(sizes.map(gamesEachForSize))].join(" or ")} games, about ${stageMinutes(sizes, ev.nets, ev.groupTo, ev.bigGroupTo)} min.`
     : "Check in at least 4 players to draw groups.";
   // A–Z and nothing else: re-sorting by state moved rows under the organiser's finger (and on every
   // 5-second refresh), so a tap meant for one player could land on another's buttons.
@@ -649,7 +649,7 @@ function OrganiserPanel({ view, roster, run, pending, waiting, pool }: { view: E
 
       {/* The rest of the toolbox, folded: each line says where things stand without opening it. */}
       <div className="mt-2 grid gap-2">
-        <Disclosure title="Game length" teaser={`to ${ev.groupTo} · finals ${ev.finalTo}`}>
+        <Disclosure title="Game length" teaser={`to ${ev.groupTo}${ev.bigGroupTo ? ` · 5s ${ev.bigGroupTo}` : ""} · finals ${ev.finalTo}`}>
           <GameLength view={view} run={run} pending={pending} />
         </Disclosure>
         <Disclosure title="Check-in" teaser={`${here} here`} defaultOpen={!current}>
@@ -796,6 +796,8 @@ function GameLength({ view, run, pending }: { view: EventView; run: Run; pending
   const e = view.event;
   const set = (k: "groupTo" | "finalTo", to: number) =>
     run(() => updateEvent(e.id, { title: e.title, startsAt: new Date(e.startsAt).toISOString(), location: e.location, notes: e.notes, nets: e.nets, groupTo: k === "groupTo" ? to : e.groupTo, finalTo: k === "finalTo" ? to : e.finalTo }), `${k === "groupTo" ? "Group" : "Finals"} games now to ${to}`);
+  const setBig = (to: number | null) =>
+    run(() => updateEvent(e.id, { title: e.title, startsAt: new Date(e.startsAt).toISOString(), location: e.location, notes: e.notes, nets: e.nets, groupTo: e.groupTo, finalTo: e.finalTo, bigGroupTo: to }), to ? `Groups of 5 now play to ${to}` : "Groups of 5 play the same length");
   const row = (k: "groupTo" | "finalTo", label: string) => (
     <div className="flex items-center justify-between gap-3">
       <span className="text-[13.5px] font-semibold text-muted">{label}</span>
@@ -810,6 +812,16 @@ function GameLength({ view, run, pending }: { view: EventView; run: Run; pending
     <div className="grid gap-2">
       {row("groupTo", "Groups to")}
       {row("finalTo", "Finals to")}
+      {/* Groups of 5 play 5 games to a group of 4's 3: shorter games keep their net in step. */}
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13.5px] font-semibold text-muted">Groups of 5 to</span>
+        <div className="flex rounded-lg border border-white/[.06] bg-panel p-0.5 text-[13px] font-bold">
+          {([null, 7, 9, 11, 15] as const).map((n) => {
+            const on = (e.bigGroupTo ?? null) === n;
+            return <button key={n ?? "same"} disabled={pending || on} onClick={() => setBig(n)} aria-pressed={on} className={`tnum min-w-9 rounded-md px-2 py-1.5 ${on ? "bg-fg text-ink" : "text-muted"}`}>{n ?? "Same"}</button>;
+          })}
+        </div>
+      </div>
       <p className="text-[12.5px] text-dim">Win by 2. Changes apply to games from now on, on every phone. Scores already entered stay as they are.</p>
     </div>
   );

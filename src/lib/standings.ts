@@ -5,7 +5,7 @@
 // pays at least a little (winFloor). Everyone starts on 800 behind the scenes; for their first
 // PROV_N games they're placing (🐣 Fresh Meat, no number shown), then their rating is revealed in
 // whatever tier it lands. Pure: games in, ratings out.
-import { isDone, type Game } from "@/lib/cards";
+import { isDone, type Game, gameTarget } from "@/lib/cards";
 import { MODEL, disp, fitSkills, snapshotOf, priorOf, foundersFor, expectedShare, gameWinProb, type Snapshot, type Fit, type FitGame } from "@/lib/rating";
 export { START, disp } from "@/lib/rating";
 
@@ -17,7 +17,7 @@ export const WIN_MIN = 2;
 export const WIN_PER = 3;
 export const winFloor = (gf: number, ga: number) => WIN_MIN + Math.max(0, Math.round((gf - ga - 2) / WIN_PER));
 
-export type RatedEvent = { id: string; startsAt: number; groupTo: number; finalTo: number; games: Game[] };
+export type RatedEvent = { id: string; startsAt: number; groupTo: number; finalTo: number; bigGroupTo?: number | null; games: Game[] };
 
 /** One player's view of one game, and what it did to them. */
 export type GameEntry = {
@@ -56,7 +56,7 @@ export function playOrder(events: RatedEvent[]): (Game & { eventId: string; orde
   return [...events].sort((a, b) => a.startsAt - b.startsAt || a.id.localeCompare(b.id)).flatMap((ev) =>
     ev.games.filter(counted)
       .sort((a, b) => a.stageNo - b.stageNo || a.ord - b.ord || a.id.localeCompare(b.id))
-      .map((g, i) => ({ ...g, eventId: ev.id, order: ev.startsAt + (i + 1) * 1000, to: g.decider ? 11 : g.kind === "final" ? ev.finalTo : ev.groupTo })),
+      .map((g, i) => ({ ...g, eventId: ev.id, order: ev.startsAt + (i + 1) * 1000, to: gameTarget(g, ev, ev.games) })),
   );
 }
 

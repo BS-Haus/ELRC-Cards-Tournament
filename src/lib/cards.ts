@@ -253,11 +253,13 @@ export function tally(games: Game[], ids?: Iterable<string>): Map<string, Line> 
   return t;
 }
 
-/** Best first: win %, then point difference per game, then wins. Players yet to play go last. */
+/** Best first: win %, then share of points won, then wins. Players yet to play go last. */
 export function rank(lines: Iterable<Line>): Line[] {
   const pct = (r: Line) => (r.gp ? r.w / r.gp : 0);
-  const pdg = (r: Line) => (r.gp ? (r.pf - r.pa) / r.gp : 0);
-  return [...lines].sort((x, y) => Number(!x.gp) - Number(!y.gp) || pct(y) - pct(x) || pdg(y) - pdg(x) || y.w - x.w);
+  // Level on win % goes to the share of points won: it doesn't care how many games anyone played
+  // or what they were played to (groups of 5 can play shorter games), as points per game would.
+  const share = (r: Line) => (r.pf + r.pa ? r.pf / (r.pf + r.pa) : 0.5);
+  return [...lines].sort((x, y) => Number(!x.gp) - Number(!y.gp) || pct(y) - pct(x) || share(y) - share(x) || y.w - x.w);
 }
 
 /** Inside one group, points (= wins) decide, then point difference. */
@@ -621,6 +623,17 @@ export function decideTie(table: Line[], tied: [string, string], rnd: () => numb
 export const gameLabel = (g: Pick<Game, "kind" | "groupName" | "decider">) =>
   `${g.kind === "final" ? `${finalLabel(g.groupName)} final` : g.kind === "ladder" ? g.groupName : `Group ${g.groupName}`}${g.decider ? " decider" : ""}`;
 
+/** What a game is played to: deciders to 11, finals to `finalTo`, and a group game to `groupTo`,
+ *  unless its group has 5 or more and the event sets `bigGroupTo` (5 games to a group of 4's 3, so
+ *  shorter games keep that net in step with the others). `games` is the event's games, for the
+ *  group's size. */
+export function gameTarget(g: Game, ev: { groupTo: number; finalTo: number; bigGroupTo?: number | null }, games: Game[]): number {
+  if (g.decider) return DECIDER_TO;
+  if (g.kind === "final") return ev.finalTo;
+  if (ev.bigGroupTo && groupMembers(games.filter((x) => x.stageNo === g.stageNo && x.groupNo === g.groupNo)).length >= 5) return ev.bigGroupTo;
+  return ev.groupTo;
+}
+
 /** Deciders are short: to 11, win by two. */
 export const DECIDER_TO = 11;
 
@@ -657,8 +670,8 @@ export function isFinalScore(a: number, b: number, to: number): boolean {
 }
 
 /** Rough minutes for a stage: the busiest net's games, at ~(to/1.6 + 3) min each. */
-export function stageMinutes(sizes: number[], nets: number, to: number): number {
+export function stageMinutes(sizes: number[], nets: number, to: number, bigTo?: number | null): number {
   const per = new Array(Math.max(1, nets)).fill(0);
-  sizes.forEach((k, i) => (per[i % per.length] += gamesForSize(k)));
-  return Math.round(Math.max(0, ...per) * (to / 1.6 + 3));
+  sizes.forEach((k, i) => (per[i % per.length] += gamesForSize(k) * ((k >= 5 && bigTo ? bigTo : to) / 1.6 + 3)));
+  return Math.round(Math.max(0, ...per));
 }
