@@ -163,7 +163,14 @@ export function mixedOrder(ids: string[], rating: (id: string) => number, rnd: (
     }
     open.forEach((g, i) => groups[g].push(best[i]));
   }
-  const total = () => groups.reduce((n, g) => n + g.reduce((m, x, i) => m + g.slice(i + 1).filter((y) => met.get(x)?.has(y)).length, 0), 0);
+  // With uneven groups (14 is 5 + 5 + 4) the smaller group plays fewer games each. Nobody who has
+  // already been in a smaller group today goes in one again while someone else can: that weighs
+  // more than an old face, so over two rounds the games even out as far as the numbers allow.
+  const wasShort = shortBefore(games);
+  const big = Math.max(...sizes);
+  const total = () => groups.reduce((n, g) => n
+    + g.reduce((m, x, i) => m + g.slice(i + 1).filter((y) => met.get(x)?.has(y)).length, 0)
+    + (g.length < big ? 10 * g.filter((x) => wasShort.has(x)).length : 0), 0);
   for (let improved = met.size > 0, guard = 0; improved && guard < 50; guard++) {
     improved = false;
     for (let k = 0; k < Math.max(...sizes) && !improved; k++) {
@@ -177,6 +184,19 @@ export function mixedOrder(ids: string[], rating: (id: string) => number, rnd: (
     }
   }
   return groups.flat();
+}
+
+/** Everyone who has played in a group smaller than the biggest of its round (finals aside), and so
+ *  had fewer games that round. */
+function shortBefore(games: Game[]): Set<string> {
+  const out = new Set<string>();
+  for (const st of new Set(games.filter((g) => g.kind !== "final").map((g) => g.stageNo))) {
+    const inStage = games.filter((g) => g.stageNo === st && g.kind !== "final");
+    const gs = [...new Set(inStage.map((g) => g.groupNo))].map((no) => groupMembers(inStage.filter((g) => g.groupNo === no)));
+    const big = Math.max(...gs.map((m) => m.length));
+    for (const m of gs) if (m.length < big) m.forEach((id) => out.add(id));
+  }
+  return out;
 }
 
 /** Who has already shared a group with whom (finals aside): in a group of 4 that means partnered. */
